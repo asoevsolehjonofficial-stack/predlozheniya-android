@@ -28,39 +28,32 @@ The token does not need repository write access. Do not use an account-wide clas
 
 ## 3. Create storage resources
 
-From the `backend` folder, install Wrangler and sign in:
+In Cloudflare, create:
+- A KV namespace named `JOBS`.
+- A KV namespace named `RATE_LIMITS`.
+- A **private** R2 bucket named `as-app-builder-builds`. Do not enable public access.
 
-```sh
-npm install
-npx wrangler login
-npx wrangler kv namespace create JOBS
-npx wrangler kv namespace create RATE_LIMITS
-npx wrangler r2 bucket create as-app-builder-builds
-```
+Copy both KV namespace IDs. The deployment workflow injects them from GitHub Actions variables, so you do not need to edit the repository file directly.
 
-Copy each returned KV namespace ID into `backend/wrangler.toml`, replacing:
-- `REPLACE_WITH_JOBS_KV_NAMESPACE_ID`
-- `REPLACE_WITH_RATE_LIMITS_KV_NAMESPACE_ID`
+## 4. Configure GitHub Actions and deploy
 
-The R2 bucket must remain private; do not enable public access or create a public bucket domain for it.
+In repository **Settings → Secrets and variables → Actions**, add these repository secrets:
 
-Set `SITE_ORIGIN` to the exact browser origin (default: `https://asoevsolehjonofficial-stack.github.io`). Replace `TURNSTILE_SITE_KEY` with the public Turnstile site key.
+- `CLOUDFLARE_API_TOKEN` — scoped to the correct Cloudflare account with permission to deploy Workers and manage the configured KV/R2 bindings and Worker secrets.
+- `CLOUDFLARE_ACCOUNT_ID` — your Cloudflare account ID.
+- `AS_BUILDER_GITHUB_TOKEN` — a fine-grained GitHub token restricted to this repository, with Contents: Read-only and Actions: Read/Write.
+- `TURNSTILE_SECRET` — the Turnstile secret key.
+- `AS_BUILDER_BUILD_SOURCE_SECRET` — a long random value of at least 32 characters. The same value is used by the Worker and GitHub-hosted build runner.
 
-## 4. Configure Worker secrets and deploy
+Add these repository **variables**:
 
-Create a long random secret with at least 32 characters. Use the **same value** for the Worker and GitHub Actions secret. From the `backend` folder:
+- `AS_BUILDER_JOBS_KV_ID` — the ID of the `JOBS` namespace.
+- `AS_BUILDER_RATE_LIMITS_KV_ID` — the ID of the `RATE_LIMITS` namespace.
+- `AS_BUILDER_TURNSTILE_SITE_KEY` — the public Turnstile site key.
 
-```sh
-npx wrangler secret put GITHUB_TOKEN
-npx wrangler secret put TURNSTILE_SECRET
-npx wrangler secret put BUILD_SOURCE_SECRET
-npm install
-npx wrangler deploy
-```
+Then open GitHub **Actions → Deploy secure APK backend → Run workflow**. The workflow installs Wrangler, updates Worker secrets from protected GitHub secrets, injects the namespace/site-key settings at deploy time, and deploys the Worker. It does not commit secret values into the repository.
 
-Enter values interactively. `GITHUB_TOKEN` is the fine-grained GitHub token; `TURNSTILE_SECRET` is the Turnstile secret; `BUILD_SOURCE_SECRET` is a long random shared secret. Never paste secrets into chat or source files.
-
-The deployment prints a Worker URL similar to `https://as-app-builder-api.<account>.workers.dev`.
+Copy the Worker URL printed in the deployment log, such as `https://as-app-builder-api.<account>.workers.dev`, and add a repository Actions variable named `AS_BUILDER_BUILD_API_URL` with that URL (no trailing slash). The Worker URL used on the website and in this variable must match.
 
 ## 5. Configure GitHub Actions
 
