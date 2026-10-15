@@ -1,12 +1,15 @@
 # Secure Android APK builds for user projects
 
-## Current safe build path
-1. Export a single-file HTML app from A.S. APP BUILDER.
-2. Add it to this repository as `projects/<slug>/index.html`; slug must use 1–40 lowercase letters, digits or hyphens.
-3. Open Actions → **Build APK for a user project** → Run workflow and enter the slug.
-4. Download artifact `project-<slug>-apk`; it contains the test APK and SHA-256 checksum.
+## Website-to-APK build path
+1. Generate and preview a project on the public website.
+2. Configure the Cloudflare Worker backend by following [backend/README.md](../backend/README.md).
+3. In the website section **05 / Сборка APK проекта**, enter the deployed Worker URL and public Turnstile site key, verify the service, complete Turnstile, and submit the project.
+4. The backend creates a unique temporary branch, dispatches the build workflow, checks the artifact checksum, and returns the APK bytes to the browser.
+5. The Worker deletes the temporary branch when the build finishes; a daily cleanup removes stale branches.
 
-A push to `projects/*/index.html` also starts a build. The workflow has read-only repository permissions, uses an isolated GitHub-hosted runner, limits HTML to 1 MiB, checks for common credential patterns, rejects remote scripts/iframes and `javascript:` URLs, injects a restrictive Content Security Policy into the APK copy (including blocking `eval` and all network connections), verifies the APK signature and keeps artifacts for 30 days.
+User HTML is not committed to `main` or served from the GitHub Pages origin. The Worker source is present in this repository, but the service is not deployed until an owner completes the one-time Cloudflare setup.
+
+The workflow validates branch/slug/request IDs, limits HTML to 1 MiB, checks for common credential patterns, rejects remote scripts/iframes and `javascript:` URLs, injects a restrictive Content Security Policy into the APK copy (including blocking `eval` and all network connections), verifies the APK signature and publishes a temporary Actions artifact for 30 days.
 
 ## Automated quality and release controls
 - The `Quality and security checks` workflow compares the website HTML with the Android asset, parses the web manifest, checks inline JavaScript syntax, scans for common accidentally committed credentials, and asserts key WebView/CSP protections.
@@ -24,7 +27,9 @@ A push to `projects/*/index.html` also starts a build. The workflow has read-onl
 
 ## Honest limits and next step
 - The public static GitHub Pages site cannot safely dispatch GitHub Actions or upload arbitrary projects without a server. Never put a GitHub token in website JavaScript.
-- The current workflow builds only HTML projects already committed under `projects/<slug>/index.html`. It does **not** yet provide one-click upload-and-build directly from the public website.
+- One-click upload-and-build is implemented in the website UI and Worker source, but it will not work publicly until the Cloudflare Worker is deployed and configured with KV namespaces, Turnstile secrets, and a least-privilege GitHub token. The Worker cannot be deployed from this environment because Cloudflare account access and secrets are not available here.
 - APKs are test/debug-signed builds, not production Play Store releases. Stable upgrades require a persistent signing key stored as protected GitHub Actions secrets.
 - AI providers linked from the site open their own services. Direct API generation is implemented for Gemini and OpenAI-compatible endpoints; a provider may require billing, a valid key, and may reject browser requests due to CORS. The UI asks for confirmation before sending a key to a custom endpoint.
-- A full one-click service still requires an authenticated backend with rate limits, per-job isolation, upload validation, retention controls and server-side GitHub credentials stored as secrets. No GitHub token is embedded in the website. The attempt to provision a separate Replit backend was blocked by the connected Replit account requiring an active subscription, so no backend was falsely presented as deployed.
+- The Worker provides CORS allowlisting, Turnstile verification, per-IP request limits, HTML validation, temporary branch isolation, artifact checksum validation, and scheduled branch cleanup. KV rate limiting is best-effort rather than atomic, and the service still needs real-world load/security testing before opening to the public.
+- AI provider API calls from the builder are still direct browser-to-provider calls; provider keys entered by an individual user are not stored by the site, but are used in the browser and sent to the provider. A separate server-side AI proxy is not configured.
+- No GitHub token or signing secret is embedded in the website.
