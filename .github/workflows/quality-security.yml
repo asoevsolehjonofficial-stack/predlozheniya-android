@@ -62,6 +62,8 @@ jobs:
           assert "setAllowFileAccessFromFileURLs(false)" in activity, "Local file URL access must be disabled"
           assert "setAllowUniversalAccessFromFileURLs(false)" in activity, "Universal local file access must be disabled"
           assert "MIXED_CONTENT_NEVER_ALLOW" in activity, "Mixed content must be blocked"
+          assert 'url.startsWith("file:///android_asset/")' in activity, "WebView should restrict file navigation to bundled assets"
+          assert '"about:blank".equalsIgnoreCase(url)' in activity, "Only about:blank should be permitted for about: URLs"
           assert "javascript:" in build_workflow.lower(), "Build validation should explicitly check javascript: URLs"
           assert "'unsafe-eval'" not in build_workflow, "Generated APK CSP must not permit unsafe-eval"
           assert "connect-src 'none'" in build_workflow, "Generated APK CSP should block network calls by default"
