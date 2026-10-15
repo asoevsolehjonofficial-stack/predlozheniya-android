@@ -22,10 +22,19 @@
 
 Отдельный APK можно собрать для HTML-проекта, добавленного в репозиторий: откройте **Actions → Build APK for a user project → Run workflow** и укажите slug папки проекта. Сайт пока не может запускать сборку APK для произвольных посетителей напрямую: для этого необходим защищённый серверный компонент с аутентификацией, ограничениями и очередью сборок. Не помещайте GitHub-токены, пароли или API-ключи в HTML/JavaScript сайта.
 
-## Как опубликовать сайт
+## Бесплатный адрес сайта и публикация
+Планируемый бесплатный адрес GitHub Pages (без покупки домена):
+**https://asoevsolehjonofficial-stack.github.io/predlozheniya-android/**
+
+Этот адрес начнёт открываться только после включения GitHub Pages в настройках репозитория и успешной публикации. Сам коммит или файл в репозитории не может включить Pages, если GitHub не разрешает интеграции создать сайт.
+
 1. Откройте [настройки GitHub Pages](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/settings/pages).
-2. В разделе **Build and deployment** выберите **Source: GitHub Actions** и сохраните настройку, если она ещё не включена.
-3. Дождитесь успешного workflow **Publish website**. Пока GitHub Pages не включён в настройках репозитория, workflow публикации завершается ошибкой.
+2. В **Build and deployment** выберите **Source: GitHub Actions**.
+3. Сохраните настройку, если появится кнопка Save.
+4. Откройте [журнал публикации сайта](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/workflows/deploy-pages.yml) и запустите **Publish website** через **Run workflow** либо дождитесь автоматического запуска после следующего коммита.
+5. Убедитесь, что запуск завершился со статусом **Success**, затем откройте адрес выше.
+
+В репозитории есть файл `.nojekyll`, чтобы GitHub Pages публиковал статические файлы без обработки Jekyll. Если публикация падает с `Resource not accessible by integration` или `Pages site not found`, проблема находится в настройке Pages/правах GitHub, а не в HTML-коде; её нельзя исправить новым коммитом без включения Pages в настройках.
 
 ## Как получить APK конструктора
 Workflow **Build and publish A.S. APP BUILDER APK** собирает APK конструктора и публикует его в GitHub Release с тегом `latest-apk`. После успешной сборки ссылка на APK:
