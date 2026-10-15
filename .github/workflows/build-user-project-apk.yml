@@ -2,10 +2,6 @@ name: Build APK for a user project
 run-name: "Free APK queue worker"
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/build-user-project-apk.yml"
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
