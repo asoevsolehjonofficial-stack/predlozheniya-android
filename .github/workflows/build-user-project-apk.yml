@@ -1,37 +1,62 @@
 name: Build APK for a user project
-run-name: "User APK: ${{ inputs.request_id || 'unknown' }}"
+run-name: "Free APK queue worker"
 
 on:
+  schedule:
+    - cron: "*/5 * * * *"
   workflow_dispatch:
-    inputs:
-      project_slug:
-        description: "Temporary project folder slug"
-        required: true
-        type: string
-      request_id:
-        description: "Unique build request ID"
-        required: true
-        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: user-apk-${{ inputs.request_id || github.run_id }}
+  group: as-app-builder-free-apk-queue
   cancel-in-progress: false
 
+env:
+  BUILD_API_URL: https://as-app-builder-api.asoev-solehjon-official.workers.dev
+
 jobs:
+  claim:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      found: ${{ steps.claim.outputs.found }}
+      request_id: ${{ steps.claim.outputs.request_id }}
+      project_slug: ${{ steps.claim.outputs.project_slug }}
+    steps:
+      - name: Claim one queued build using short-lived GitHub OIDC
+        id: claim
+        shell: bash
+        run: |
+          set -euo pipefail
+          OIDC_TOKEN="$(curl --fail --silent --show-error -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-worker" | jq -r '.value')"
+          test -n "$OIDC_TOKEN" && test "$OIDC_TOKEN" != "null"
+          RESPONSE="$(curl --fail --silent --show-error --max-time 30 -X POST "$BUILD_API_URL/api/internal/claim" -H "Authorization: Bearer $OIDC_TOKEN" -H "Accept: application/json")"
+          FOUND="$(jq -r '.found // false' <<< "$RESPONSE")"
+          echo "found=$FOUND" >> "$GITHUB_OUTPUT"
+          echo "request_id=$(jq -r '.requestId // empty' <<< "$RESPONSE")" >> "$GITHUB_OUTPUT"
+          echo "project_slug=$(jq -r '.slug // empty' <<< "$RESPONSE")" >> "$GITHUB_OUTPUT"
+          echo "Queue claim result: $FOUND"
+
   build:
+    needs: claim
+    if: needs.claim.outputs.found == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
       contents: read
+      id-token: write
+    env:
+      PROJECT_SLUG: ${{ needs.claim.outputs.project_slug }}
+      REQUEST_ID: ${{ needs.claim.outputs.request_id }}
     steps:
-      - name: Validate request identifiers
-        env:
-          PROJECT_SLUG: ${{ inputs.project_slug }}
-          REQUEST_ID: ${{ inputs.request_id }}
+      - name: Validate claimed request identifiers
         run: |
+          set -euo pipefail
           [[ "$PROJECT_SLUG" =~ ^[a-z0-9][a-z0-9-]{0,39}$ ]] || { echo "Invalid project slug"; exit 1; }
           [[ "$REQUEST_ID" =~ ^[a-f0-9]{32}$ ]] || { echo "Invalid request ID"; exit 1; }
 
@@ -41,54 +66,34 @@ jobs:
           ref: main
           persist-credentials: false
 
-      - name: Fetch private project source from the backend
-        env:
-          BUILD_API_URL: ${{ vars.AS_BUILDER_BUILD_API_URL }}
-          BUILD_SOURCE_SECRET: ${{ secrets.AS_BUILDER_BUILD_SOURCE_SECRET }}
-          PROJECT_SLUG: ${{ inputs.project_slug }}
-          REQUEST_ID: ${{ inputs.request_id }}
+      - name: Fetch private project source using short-lived GitHub OIDC
         run: |
           set -euo pipefail
-          test -n "$BUILD_API_URL" || { echo "Missing Actions variable AS_BUILDER_BUILD_API_URL"; exit 1; }
-          test -n "$BUILD_SOURCE_SECRET" || { echo "Missing Actions secret AS_BUILDER_BUILD_SOURCE_SECRET"; exit 1; }
-          BUILD_API_URL="${BUILD_API_URL%/}"
+          OIDC_TOKEN="$(curl --fail --silent --show-error -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-worker" | jq -r '.value')"
+          test -n "$OIDC_TOKEN" && test "$OIDC_TOKEN" != "null"
           mkdir -p "projects/$PROJECT_SLUG"
           curl --fail --silent --show-error --max-time 60 \
-            -H "Authorization: Bearer $BUILD_SOURCE_SECRET" \
+            -H "Authorization: Bearer $OIDC_TOKEN" \
             "$BUILD_API_URL/api/internal/source?requestId=$REQUEST_ID" \
             -o "projects/$PROJECT_SLUG/index.html"
           test -s "projects/$PROJECT_SLUG/index.html"
 
       - name: Validate project HTML
-        env:
-          PROJECT_SLUG: ${{ inputs.project_slug }}
         run: |
+          set -euo pipefail
           FILE="projects/$PROJECT_SLUG/index.html"
           SIZE=$(wc -c < "$FILE")
-          if [ "$SIZE" -gt 1048576 ]; then
-            echo "HTML exceeds 1 MiB limit; refusing to build."
-            exit 1
-          fi
-          if ! grep -Eiq '<!doctype html|<html[[:space:]>]' "$FILE"; then
-            echo "Input is not an HTML document."
-            exit 1
-          fi
-          if ! grep -Eiq '<head[[:space:]>]' "$FILE" || ! grep -Eiq '<body[[:space:]>]' "$FILE"; then
-            echo "HTML must contain head and body elements."
-            exit 1
-          fi
+          if [ "$SIZE" -gt 1048576 ]; then echo "HTML exceeds 1 MiB limit."; exit 1; fi
+          grep -Eiq '<!doctype html|<html[[:space:]>]' "$FILE" || { echo "Input is not an HTML document."; exit 1; }
+          grep -Eiq '<head[[:space:]>]' "$FILE" && grep -Eiq '<body[[:space:]>]' "$FILE" || { echo "HTML must contain head and body elements."; exit 1; }
           if grep -Eiq '(github_pat_[A-Za-z0-9_]+|gh[pousr]_[A-Za-z0-9]{20,}|BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9_-]{20,})' "$FILE"; then
-            echo "Possible secret detected in project HTML; refusing to build."
-            exit 1
+            echo "Possible secret detected in project HTML; refusing to build."; exit 1
           fi
           if grep -Eiq '<script[^>]+src[[:space:]]*=|<iframe[^>]+src[[:space:]]*=|javascript[[:space:]]*:' "$FILE"; then
-            echo "Remote script/iframe or javascript: URL detected; refusing to build."
-            exit 1
+            echo "Remote script/iframe or javascript: URL detected; refusing to build."; exit 1
           fi
 
       - name: Apply restrictive WebView content policy
-        env:
-          PROJECT_SLUG: ${{ inputs.project_slug }}
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -104,9 +109,7 @@ jobs:
               print("HTML must contain a head element.")
               sys.exit(1)
           meta = '<meta http-equiv="Content-Security-Policy" content="' + policy + '">'
-          html = html[:match.end()] + chr(10) + meta + html[match.end():]
-          path.write_text(html, encoding="utf-8")
-          print("Applied restrictive CSP: no remote network requests, frames, objects, or form posts.")
+          path.write_text(html[:match.end()] + chr(10) + meta + html[match.end():], encoding="utf-8")
           PY
 
       - name: Set up Java 17
@@ -122,14 +125,14 @@ jobs:
 
       - name: Install Gradle
         run: |
+          set -euo pipefail
           wget -q https://services.gradle.org/distributions/gradle-8.9-bin.zip -O /tmp/gradle.zip
           unzip -q /tmp/gradle.zip -d /tmp
           echo "/tmp/gradle-8.9/bin" >> "$GITHUB_PATH"
 
       - name: Prepare isolated project assets and identity
-        env:
-          PROJECT_SLUG: ${{ inputs.project_slug }}
         run: |
+          set -euo pipefail
           cp "projects/$PROJECT_SLUG/index.html" app/src/main/assets/index.html
           PACKAGE_SUFFIX="p_$(echo "$PROJECT_SLUG" | tr '-' '_')"
           sed -i "s/applicationId 'tj.as.predlozheniya'/applicationId 'tj.as.generated.$PACKAGE_SUFFIX'/" app/build.gradle
@@ -138,33 +141,40 @@ jobs:
       - name: Build project APK
         run: gradle --no-daemon clean assembleDebug
 
-      - name: Verify APK signature and checksum
-        id: verify
+      - name: Verify APK signature, package, and checksum
         run: |
+          set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
           unzip -t "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -q "package: name='tj.as.generated."
+          HASH="$(sha256sum "$APK" | cut -d ' ' -f1)"
+          echo "Verified APK SHA-256: $HASH"
           sha256sum "$APK" > "$APK.sha256"
           sha256sum -c "$APK.sha256"
-          echo "APK verified; checksum calculated."
 
-      - name: Upload APK to private backend storage
-        env:
-          BUILD_API_URL: ${{ vars.AS_BUILDER_BUILD_API_URL }}
-          BUILD_SOURCE_SECRET: ${{ secrets.AS_BUILDER_BUILD_SOURCE_SECRET }}
-          REQUEST_ID: ${{ inputs.request_id }}
+      - name: Upload APK using short-lived GitHub OIDC
         run: |
           set -euo pipefail
-          BUILD_API_URL="${BUILD_API_URL%/}"
+          OIDC_TOKEN="$(curl --fail --silent --show-error -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-worker" | jq -r '.value')"
+          test -n "$OIDC_TOKEN" && test "$OIDC_TOKEN" != "null"
           APK="app/build/outputs/apk/debug/app-debug.apk"
           HASH="$(sha256sum "$APK" | cut -d ' ' -f1)"
           curl --fail --silent --show-error --max-time 120 \
             -X PUT "$BUILD_API_URL/api/internal/upload?requestId=$REQUEST_ID" \
-            -H "Authorization: Bearer $BUILD_SOURCE_SECRET" \
+            -H "Authorization: Bearer $OIDC_TOKEN" \
             -H "Content-Type: application/octet-stream" \
             -H "X-APK-SHA256: $HASH" \
             --data-binary @"$APK" > /tmp/upload-result.json
           grep -q '"ok":true' /tmp/upload-result.json
-          echo "Verified APK uploaded to private storage."
+          echo "Verified APK stored in free Cloudflare KV for 24 hours."
+
+      - name: Mark failed build in the queue
+        if: failure()
+        continue-on-error: true
+        run: |
+          OIDC_TOKEN="$(curl --fail --silent --show-error -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-worker" | jq -r '.value')"
+          curl --silent --show-error --max-time 20 -X POST \
+            "$BUILD_API_URL/api/internal/fail?requestId=$REQUEST_ID" \
+            -H "Authorization: Bearer $OIDC_TOKEN" || true
