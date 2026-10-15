@@ -70,7 +70,7 @@ async function verifyTurnstile(token, ip, env) {
   });
   if (!result.ok) return false;
   const data = await result.json();
-  return data.success === true && (!env.SITE_ORIGIN || (data.hostname && new URL(env.SITE_ORIGIN).hostname === data.hostname));
+  return data.success === true && data.action === "build_apk" && (!env.SITE_ORIGIN || (data.hostname && new URL(env.SITE_ORIGIN).hostname === data.hostname));
 }
 
 async function deleteBranch(env, branch) {
@@ -96,7 +96,12 @@ async function handleBuild(request, env, cors) {
   const limitKey = "ip:" + await sha256(ip);
   const current = Number(await env.RATE_LIMITS.get(limitKey) || "0");
   if (current >= 2) return response({ error: "Build limit reached for this network. Try again later." }, 429, cors.origin);
-  const payload = await request.json().catch(() => null);
+  const declaredLength = Number(request.headers.get("Content-Length") || "0");
+  if (declaredLength > 6 * 1024 * 1024) return response({ error: "Request body is too large." }, 413, cors.origin);
+  const rawBody = await request.text();
+  if (new TextEncoder().encode(rawBody).byteLength > 6 * 1024 * 1024) return response({ error: "Request body is too large." }, 413, cors.origin);
+  let payload;
+  try { payload = JSON.parse(rawBody); } catch { payload = null; }
   if (!payload) return response({ error: "Invalid JSON request." }, 400, cors.origin);
   if (!(await verifyTurnstile(payload.turnstileToken, ip, env))) return response({ error: "Security check failed. Complete the anti-bot check and retry." }, 403, cors.origin);
   const problem = validHtml(payload.html);
