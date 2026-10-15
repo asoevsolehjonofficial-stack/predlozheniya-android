@@ -19,6 +19,8 @@ on:
       - "service-worker.js"
       - "icon.svg"
       - ".github/workflows/validate-web.yml"
+      - ".github/workflows/deploy-backend.yml"
+      - "backend/**"
   workflow_dispatch:
 
 permissions:
