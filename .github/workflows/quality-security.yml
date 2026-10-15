@@ -1,0 +1,95 @@
+name: Quality and security checks
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "index.html"
+      - "app/src/main/assets/index.html"
+      - "app/src/main/AndroidManifest.xml"
+      - "app/src/main/java/**"
+      - "app/build.gradle"
+      - ".github/workflows/build-user-project-apk.yml"
+      - ".github/workflows/quality-security.yml"
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check website and Android asset stay synchronized
+        run: |
+          cmp --silent index.html app/src/main/assets/index.html || {
+            echo "::error::Website HTML and Android WebView asset differ."
+            diff -u index.html app/src/main/assets/index.html || true
+            exit 1
+          }
+
+      - name: Validate HTML, manifest, and security settings
+        run: |
+          python3 - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+
+          html = Path("index.html").read_text(encoding="utf-8")
+          manifest = json.loads(Path("manifest.webmanifest").read_text(encoding="utf-8"))
+          activity = Path("app/src/main/java/tj/as/predlozheniya/MainActivity.java").read_text(encoding="utf-8")
+          android_manifest = Path("app/src/main/AndroidManifest.xml").read_text(encoding="utf-8")
+          build_workflow = Path(".github/workflows/build-user-project-apk.yml").read_text(encoding="utf-8")
+
+          assert re.search(r"<!doctype html", html, re.I), "Missing HTML doctype"
+          assert re.search(r"<html\b", html, re.I), "Missing html element"
+          assert re.search(r"<head\b", html, re.I) and re.search(r"<body\b", html, re.I), "Missing head/body"
+          assert "<script" not in html.lower() or not re.search(r"<script\b[^>]*\bsrc\s*=", html, re.I), "External script tags are not allowed in the static builder"
+          assert isinstance(manifest.get("name"), str) and manifest["name"], "Web app manifest needs a name"
+          assert "android:allowBackup=\"false\"" in android_manifest, "Android backup must be disabled for privacy"
+          assert "setAllowFileAccessFromFileURLs(false)" in activity, "Local file URL access must be disabled"
+          assert "setAllowUniversalAccessFromFileURLs(false)" in activity, "Universal local file access must be disabled"
+          assert "MIXED_CONTENT_NEVER_ALLOW" in activity, "Mixed content must be blocked"
+          assert "javascript:" in build_workflow.lower(), "Build validation should explicitly check javascript: URLs"
+          assert "'unsafe-eval'" not in build_workflow, "Generated APK CSP must not permit unsafe-eval"
+          assert "connect-src 'none'" in build_workflow, "Generated APK CSP should block network calls by default"
+          assert "permissions:" in build_workflow and "contents: read" in build_workflow, "User-project build should use read-only repository permissions"
+          print("HTML, manifest, Android WebView protections, and generated-app CSP checks passed.")
+          PY
+
+      - name: Check inline JavaScript syntax
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          html = Path("index.html").read_text(encoding="utf-8")
+          scripts = re.findall(r"<script\b[^>]*>(.*?)</script\s*>", html, re.I | re.S)
+          if not scripts:
+              raise SystemExit("No inline JavaScript blocks found")
+          out = Path("/tmp/as-app-builder-js")
+          out.mkdir(parents=True, exist_ok=True)
+          for index, script in enumerate(scripts, 1):
+              (out / f"script-{index}.js").write_text(script, encoding="utf-8")
+          print(f"Extracted {len(scripts)} inline JavaScript blocks for syntax checking.")
+          PY
+          for script in /tmp/as-app-builder-js/*.js; do
+            node --check "$script"
+          done
+
+      - name: Check for accidentally committed credentials
+        run: |
+          if grep -RInE --exclude-dir=.git --exclude='*.md' '(github_pat_[A-Za-z0-9_]+|gh[pousr]_[A-Za-z0-9]{20,}|BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|AKIA[0-9A-Z]{16})' index.html app .github/workflows; then
+            echo "::error::Possible credential or private key detected."
+            exit 1
+          fi
+          echo "No common credential patterns found."
