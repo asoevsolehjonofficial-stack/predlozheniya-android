@@ -13,6 +13,7 @@ on:
       - ".github/workflows/build-apk.yml"
       - "backend/**"
       - ".github/workflows/quality-security.yml"
+      - ".github/workflows/deploy-backend.yml"
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -102,6 +103,10 @@ jobs:
           for script in /tmp/as-app-builder-js/*.js; do
             node --check "$script"
           done
+
+      - name: Parse workflow YAML files
+        run: |
+          ruby -e 'require "yaml"; ARGV.each { |f| YAML.load_file(f, aliases: true); puts "YAML OK: #{f}" }' .github/workflows/*.yml
 
       - name: Check backend dependencies and JavaScript syntax
         run: |
