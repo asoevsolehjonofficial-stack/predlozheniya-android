@@ -50,7 +50,7 @@ Add these repository **variables**:
 - `AS_BUILDER_RATE_LIMITS_KV_ID` — the ID of the `RATE_LIMITS` namespace.
 - `AS_BUILDER_TURNSTILE_SITE_KEY` — the public Turnstile site key.
 
-Then open GitHub **Actions → Deploy secure APK backend → Run workflow**. The workflow installs Wrangler, updates Worker secrets from protected GitHub secrets, injects the namespace/site-key settings at deploy time, and deploys the Worker. It does not commit secret values into the repository.
+Then open GitHub **Actions → Deploy secure APK backend → Run workflow**. The workflow installs Wrangler, deploys a bootstrap Worker, updates Worker secrets from protected repository secrets, injects the namespace/site-key settings at deploy time, and redeploys the Worker with the complete configuration. It does not commit secret values into the repository.
 
 Copy the Worker URL printed in the deployment log, such as `https://as-app-builder-api.<account>.workers.dev`, and add a repository Actions variable named `AS_BUILDER_BUILD_API_URL` with that URL (no trailing slash). The Worker URL used on the website and in this variable must match.
 
@@ -69,7 +69,7 @@ The website keeps only the Worker URL and public site key in browser storage. Th
 
 - CORS allows only the configured website origin.
 - Turnstile verification checks the expected action and hostname.
-- KV-based rate limit: at most 2 build requests per IP per hour; simultaneous requests can briefly race.
+- KV-based rate limits: at most 2 build requests per IP per hour and 10 builds globally per UTC day; simultaneous requests can briefly race.
 - HTML is limited to 1 MiB and checked for common leaked credentials, external script/iframe sources, `javascript:` URLs, and custom CSP overrides.
 - Project HTML is not committed to any repository branch. The runner fetches it through an authenticated internal endpoint, then the Worker removes the source from the KV job record.
 - The build workflow has read-only repository permissions and disables checkout credential persistence.
