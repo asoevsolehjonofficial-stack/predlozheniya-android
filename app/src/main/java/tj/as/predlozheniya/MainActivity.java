@@ -54,8 +54,15 @@ public class MainActivity extends Activity {
                 if (url == null) return true;
                 Uri uri = Uri.parse(url);
                 String scheme = uri.getScheme();
-                if ("file".equalsIgnoreCase(scheme) || "about".equalsIgnoreCase(scheme)) {
-                    return false;
+                if ("file".equalsIgnoreCase(scheme)) {
+                    String path = uri.getPath();
+                    // Only allow the bundled app assets; do not navigate to arbitrary local files.
+                    return !(url.startsWith("file:///android_asset/")
+                        && path != null
+                        && !path.contains(".."));
+                }
+                if ("about".equalsIgnoreCase(scheme)) {
+                    return !"about:blank".equalsIgnoreCase(url);
                 }
                 if ("https".equalsIgnoreCase(scheme) || "http".equalsIgnoreCase(scheme)) {
                     String host = uri.getHost();
