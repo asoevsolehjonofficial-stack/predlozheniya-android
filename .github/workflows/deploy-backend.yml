@@ -45,8 +45,6 @@ jobs:
           test -n "$AS_BUILDER_GITHUB_TOKEN" || { echo "Missing AS_BUILDER_GITHUB_TOKEN secret"; exit 1; }
           test -n "$TURNSTILE_SECRET" || { echo "Missing TURNSTILE_SECRET secret"; exit 1; }
           test "${#BUILD_SOURCE_SECRET}" -ge 32 || { echo "AS_BUILDER_BUILD_SOURCE_SECRET must be at least 32 characters"; exit 1; }
-        env:
-          BUILD_SOURCE_SECRET: ${{ secrets.AS_BUILDER_BUILD_SOURCE_SECRET }}
 
       - name: Prepare deployment configuration
         working-directory: backend
