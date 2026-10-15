@@ -1,0 +1,19 @@
+name = "as-app-builder-api"
+main = "src/index.js"
+compatibility_date = "2026-10-15"
+workers_dev = true
+
+[vars]
+SITE_ORIGIN = "https://asoevsolehjonofficial-stack.github.io"
+TURNSTILE_SITE_KEY = "REPLACE_WITH_CLOUDFLARE_TURNSTILE_SITE_KEY"
+
+[[kv_namespaces]]
+binding = "JOBS"
+id = "REPLACE_WITH_JOBS_KV_NAMESPACE_ID"
+
+[[kv_namespaces]]
+binding = "RATE_LIMITS"
+id = "REPLACE_WITH_RATE_LIMITS_KV_NAMESPACE_ID"
+
+[triggers]
+crons = ["17 3 * * *"]
