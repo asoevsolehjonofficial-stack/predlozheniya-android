@@ -67,7 +67,7 @@ jobs:
           PROJECT_SLUG: ${{ inputs.project_slug || 'demo' }}
         run: |
           cp "projects/$PROJECT_SLUG/index.html" app/src/main/assets/index.html
-          PACKAGE_SUFFIX="$(echo "$PROJECT_SLUG" | tr '-' '_')"
+          PACKAGE_SUFFIX="p_$(echo "$PROJECT_SLUG" | tr '-' '_')"
           sed -i "s/applicationId 'tj.as.predlozheniya'/applicationId 'tj.as.generated.$PACKAGE_SUFFIX'/" app/build.gradle
           sed -i "s/android:label=\"A.S. APP BUILDER\"/android:label=\"$PROJECT_SLUG\"/" app/src/main/AndroidManifest.xml
 
@@ -77,7 +77,7 @@ jobs:
       - name: Upload project APK
         uses: actions/upload-artifact@v4
         with:
-          name: project-${{ inputs.project_slug }}-apk
+          name: project-${{ inputs.project_slug || 'demo' }}-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
