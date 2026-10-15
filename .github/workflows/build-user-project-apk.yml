@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "projects/demo/**"
+      - "projects/*/index.html"
       - ".github/workflows/build-user-project-apk.yml"
   workflow_dispatch:
     inputs:
@@ -40,8 +40,22 @@ jobs:
             echo "Missing projects/$PROJECT_SLUG/index.html"
             exit 1
           }
-          if grep -Eiq '(github_pat_[A-Za-z0-9_]+|gh[pousr]_[A-Za-z0-9]{20,}|BEGIN (RSA|OPENSSH|EC) PRIVATE KEY)' "projects/$PROJECT_SLUG/index.html"; then
+          FILE="projects/$PROJECT_SLUG/index.html"
+          SIZE=$(wc -c < "$FILE")
+          if [ "$SIZE" -gt 1048576 ]; then
+            echo "HTML exceeds 1 MiB limit; refusing to build."
+            exit 1
+          fi
+          if ! grep -Eiq '<!doctype html|<html[[:space:]>]' "$FILE"; then
+            echo "Input is not an HTML document."
+            exit 1
+          fi
+          if grep -Eiq '(github_pat_[A-Za-z0-9_]+|gh[pousr]_[A-Za-z0-9]{20,}|BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9_-]{20,})' "$FILE"; then
             echo "Possible secret detected in project HTML; refusing to build."
+            exit 1
+          fi
+          if grep -Eiq '<script[^>]+src[[:space:]]*=|<iframe[^>]+src[[:space:]]*=|javascript[[:space:]]*:' "$FILE"; then
+            echo "Remote script/iframe or javascript: URL detected; refusing to build."
             exit 1
           fi
 
@@ -74,10 +88,19 @@ jobs:
       - name: Build project APK
         run: gradle --no-daemon assembleDebug
 
+      - name: Verify APK signature and generate checksum
+        run: |
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          sha256sum "$APK" > "$APK.sha256"
+
       - name: Upload project APK
         uses: actions/upload-artifact@v4
         with:
           name: project-${{ inputs.project_slug || 'demo' }}-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/debug/app-debug.apk.sha256
           if-no-files-found: error
           retention-days: 30
