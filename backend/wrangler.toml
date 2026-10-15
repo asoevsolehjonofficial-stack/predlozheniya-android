@@ -17,3 +17,7 @@ id = "REPLACE_WITH_RATE_LIMITS_KV_NAMESPACE_ID"
 
 [triggers]
 crons = ["17 3 * * *"]
+
+[[r2_buckets]]
+binding = "BUILDS"
+bucket_name = "as-app-builder-builds"
