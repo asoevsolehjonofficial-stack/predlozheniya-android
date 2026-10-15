@@ -1,6 +1,7 @@
 package tj.as.predlozheniya;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.net.Uri;
@@ -40,16 +41,41 @@ public class MainActivity extends Activity {
         webView.addJavascriptInterface(new DownloadsBridge(), "AndroidDownloads");
         webView.setWebViewClient(new WebViewClient() {
             @Override
+            public boolean shouldOverrideUrlLoading(WebView view, android.webkit.WebResourceRequest request) {
+                return handleNavigation(request.getUrl().toString());
+            }
+
+            @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                if (url != null && (url.startsWith("https://") || url.startsWith("http://"))) {
-                    try {
-                        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
-                        return true;
-                    } catch (Exception ignored) {
-                        return false;
-                    }
+                return handleNavigation(url);
+            }
+
+            private boolean handleNavigation(String url) {
+                if (url == null) return true;
+                Uri uri = Uri.parse(url);
+                String scheme = uri.getScheme();
+                if ("file".equalsIgnoreCase(scheme) || "about".equalsIgnoreCase(scheme)) {
+                    return false;
                 }
-                return false;
+                if ("https".equalsIgnoreCase(scheme) || "http".equalsIgnoreCase(scheme)) {
+                    String host = uri.getHost();
+                    if (host == null) return true;
+                    new AlertDialog.Builder(MainActivity.this)
+                        .setTitle("Открыть внешнюю ссылку?")
+                        .setMessage("Перейти во внешний браузер: " + host + "?")
+                        .setNegativeButton("Отмена", (dialog, which) -> dialog.dismiss())
+                        .setPositiveButton("Открыть", (dialog, which) -> {
+                            try {
+                                startActivity(new Intent(Intent.ACTION_VIEW, uri));
+                            } catch (Exception ignored) {
+                                Toast.makeText(MainActivity.this, "Не удалось открыть ссылку", Toast.LENGTH_SHORT).show();
+                            }
+                        })
+                        .show();
+                    return true;
+                }
+                // Block intent:, content:, data:, javascript:, and other non-app schemes.
+                return true;
             }
         });
         webView.setWebChromeClient(new WebChromeClient());
