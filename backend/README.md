@@ -1,14 +1,14 @@
-# A.S. APP BUILDER — secure APK build backend
+# A.S. APP BUILDER — private APK build backend
 
-This Worker is an optional backend for the public GitHub Pages UI. It keeps GitHub credentials server-side and builds a user project on an isolated temporary branch. User HTML is **not** committed to `main` or served from the GitHub Pages origin.
+This Cloudflare Worker connects the public GitHub Pages UI to GitHub Actions while keeping the GitHub token, project source, and generated APK private. User HTML is stored temporarily in KV, fetched by a runner using a server-to-server secret, and removed from the job record. APK bytes are stored in a private R2 bucket, not in public repository branches or public Actions artifacts.
 
 ## Required accounts and services
 
-- A Cloudflare account with Workers, KV, and Turnstile.
-- A GitHub fine-grained personal access token restricted to the single repository `asoevsolehjonofficial-stack/predlozheniya-android`.
-- The existing GitHub Actions workflow `.github/workflows/build-user-project-apk.yml`.
+- Cloudflare Workers, KV, R2, and Turnstile.
+- A GitHub fine-grained token restricted to the single repository `asoevsolehjonofficial-stack/predlozheniya-android`.
+- GitHub Actions enabled for the repository.
 
-No token, signing key, or Turnstile secret belongs in `index.html`, browser storage, or a public GitHub file.
+Never put any secret in `index.html`, browser storage, a public repository file, or a workflow input.
 
 ## 1. Create Turnstile
 
@@ -21,42 +21,56 @@ The site key is public. The secret key must be stored as a Worker secret.
 ## 2. Create a least-privilege GitHub token
 
 Create a fine-grained token restricted to this one repository. Grant only:
-- **Contents: Read and write** — create and delete temporary branches and commit the HTML on those branches.
-- **Actions: Read and write** — dispatch the build workflow and read its run/artifact status.
+- **Contents: Read-only** — the build workflow checks out the trusted builder source.
+- **Actions: Read and write** — the Worker dispatches the workflow and reads its run status.
 
-Do not use an account-wide classic token. Set an expiration date and rotate it if exposed.
+The token does not need repository write access. Do not use an account-wide classic token. Set an expiration date and rotate it if exposed.
 
-## 3. Create KV namespaces
+## 3. Create storage resources
 
-From the `backend` folder, install Wrangler:
+From the `backend` folder, install Wrangler and sign in:
 
 ```sh
 npm install
 npx wrangler login
 npx wrangler kv namespace create JOBS
 npx wrangler kv namespace create RATE_LIMITS
+npx wrangler r2 bucket create as-app-builder-builds
 ```
 
-Copy each returned namespace ID into `backend/wrangler.toml`, replacing:
+Copy each returned KV namespace ID into `backend/wrangler.toml`, replacing:
 - `REPLACE_WITH_JOBS_KV_NAMESPACE_ID`
 - `REPLACE_WITH_RATE_LIMITS_KV_NAMESPACE_ID`
 
-Set `SITE_ORIGIN` to the exact browser origin (not a path). The default is `https://asoevsolehjonofficial-stack.github.io`. Set `TURNSTILE_SITE_KEY` to the public Turnstile site key.
+The R2 bucket must remain private; do not enable public access or create a public bucket domain for it.
 
-## 4. Add secrets and deploy
+Set `SITE_ORIGIN` to the exact browser origin (default: `https://asoevsolehjonofficial-stack.github.io`). Replace `TURNSTILE_SITE_KEY` with the public Turnstile site key.
 
-Run these commands from the `backend` folder:
+## 4. Configure Worker secrets and deploy
+
+Create a long random secret with at least 32 characters. Use the **same value** for the Worker and GitHub Actions secret. From the `backend` folder:
 
 ```sh
 npx wrangler secret put GITHUB_TOKEN
 npx wrangler secret put TURNSTILE_SECRET
+npx wrangler secret put BUILD_SOURCE_SECRET
 npm install
 npx wrangler deploy
 ```
 
-Enter the values interactively when prompted. Do not paste secrets into chat, source files, or the website. The deployment will print a Worker URL similar to `https://as-app-builder-api.<account>.workers.dev`.
+Enter values interactively. `GITHUB_TOKEN` is the fine-grained GitHub token; `TURNSTILE_SECRET` is the Turnstile secret; `BUILD_SOURCE_SECRET` is a long random shared secret. Never paste secrets into chat or source files.
 
-## 5. Connect the website
+The deployment prints a Worker URL similar to `https://as-app-builder-api.<account>.workers.dev`.
+
+## 5. Configure GitHub Actions
+
+In the repository settings:
+1. Add an Actions **variable** named `AS_BUILDER_BUILD_API_URL` with the Worker base URL, e.g. `https://as-app-builder-api.<account>.workers.dev` (no trailing slash).
+2. Add an Actions **secret** named `AS_BUILDER_BUILD_SOURCE_SECRET` with the exact same long random secret configured as the Worker `BUILD_SOURCE_SECRET`.
+
+This secret lets the GitHub-hosted runner fetch one pending HTML source and upload a verified APK to the Worker. It is never passed as a workflow input and is not printed in logs.
+
+## 6. Connect the website
 
 Open the public A.S. APP BUILDER site. In **05 / Сборка APK проекта**:
 1. Enter the Worker URL.
@@ -65,26 +79,28 @@ Open the public A.S. APP BUILDER site. In **05 / Сборка APK проекта
 4. Complete the Turnstile check.
 5. Generate/preview a project and press **Собрать APK проекта**.
 
-The website stores only the Worker URL and public site key in local browser storage. The GitHub token and Turnstile secret stay on the server.
+The website keeps only the Worker URL and public site key in browser storage. The per-build download token stays in page memory; reloading the page loses that token and the build result cannot be retrieved from that page session.
 
 ## Security behavior and limits
 
 - CORS allows only the configured website origin.
-- Turnstile verification is required for every build request.
-- Rate limit: at most 2 build requests per IP per hour (KV-based; simultaneous requests can briefly race).
+- Turnstile verification checks the expected action and hostname.
+- KV-based rate limit: at most 2 build requests per IP per hour; simultaneous requests can briefly race.
 - HTML is limited to 1 MiB and checked for common leaked credentials, external script/iframe sources, `javascript:` URLs, and custom CSP overrides.
-- Each build uses a unique temporary branch. The Android build workflow has read-only repository permissions and disables checkout credential persistence.
-- The APK's checksum is verified again by the Worker before returning the APK bytes to the browser.
-- A daily Worker cron removes stale temporary branches older than 24 hours.
-- Generated APKs have a restrictive CSP: external network calls, frames, objects, and form submissions are blocked by default. Apps that need remote APIs need a separately reviewed, explicit networking design.
-- The build currently returns a **debug/test APK**. Production distribution requires a stable private signing key configured as protected Actions secrets and a separate release-signing review.
+- Project HTML is not committed to any repository branch. The runner fetches it through an authenticated internal endpoint, then the Worker removes the source from the KV job record.
+- The build workflow has read-only repository permissions and disables checkout credential persistence.
+- APKs are stored in a private R2 bucket. The Worker returns them only when a per-job access token is supplied, and checks SHA-256 both on upload and download.
+- Job records and APK objects are cleaned up after 24 hours by KV TTL and the daily Worker cron.
+- Generated APKs use a restrictive CSP: external network calls, frames, objects, and form submissions are blocked by default. Apps that need remote APIs require a separately reviewed, explicit networking design.
+- The result is a **debug/test APK**. Production distribution requires a stable private signing key configured as protected Actions secrets and a separate release-signing review.
 - GitHub Actions usage quotas, Cloudflare limits, and provider policies still apply.
 - The Worker is not deployed merely because its source is in GitHub. A Cloudflare owner must complete the one-time setup above.
 
 ## Troubleshooting
 
-- `503 Backend is not configured`: check both KV IDs, `SITE_ORIGIN`, `TURNSTILE_SITE_KEY`, and both Worker secrets.
+- `503 Backend is not configured`: check both KV IDs, R2 binding, `SITE_ORIGIN`, `TURNSTILE_SITE_KEY`, and all Worker secrets.
 - `403 Origin is not allowed`: the browser origin must exactly match `SITE_ORIGIN`.
 - Turnstile fails: check the allowed hostname, site key, and matching secret.
 - GitHub API `403`: confirm the token's repository selection and Contents/Actions permissions.
+- Runner says missing variable/secret: configure `AS_BUILDER_BUILD_API_URL` and `AS_BUILDER_BUILD_SOURCE_SECRET` in repository Actions settings.
 - Build failure: open the GitHub Actions run linked in the UI. The workflow rejects unsafe or oversized input and may reject features that require external network access.
