@@ -64,7 +64,7 @@ jobs:
           echo "/tmp/gradle-8.9/bin" >> "$GITHUB_PATH"
 
       - name: Build debug APK
-        run: gradle --no-daemon clean assembleDebug
+        run: gradle --no-daemon clean assembleDebug -PappVersionCode="$APP_VERSION_CODE"
 
       - name: Verify APK package and signature
         run: |
