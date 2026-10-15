@@ -1,6 +1,11 @@
 name: Build APK for a user project
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "projects/demo/**"
+      - ".github/workflows/build-user-project-apk.yml"
   workflow_dispatch:
     inputs:
       project_slug:
@@ -12,7 +17,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: user-apk-${{ inputs.project_slug }}
+  group: user-apk-${{ inputs.project_slug || 'demo' }}
   cancel-in-progress: false
 
 jobs:
@@ -25,7 +30,7 @@ jobs:
 
       - name: Validate project slug
         env:
-          PROJECT_SLUG: ${{ inputs.project_slug }}
+          PROJECT_SLUG: ${{ inputs.project_slug || 'demo' }}
         run: |
           if ! [[ "$PROJECT_SLUG" =~ ^[a-z0-9][a-z0-9-]{0,39}$ ]]; then
             echo "Invalid project slug. Use 1-40 lowercase letters, numbers, or hyphens."
