@@ -117,6 +117,9 @@ async function handleBuild(request, env, cors) {
   const limitKey = "ip:" + await sha256(ip);
   const current = Number(await env.RATE_LIMITS.get(limitKey) || "0");
   if (current >= 2) return json({ error: "Build limit reached for this network. Try again later." }, 429, cors.origin);
+  const dayKey = "daily:" + new Date().toISOString().slice(0, 10);
+  const dailyCount = Number(await env.RATE_LIMITS.get(dayKey) || "0");
+  if (dailyCount >= 10) return json({ error: "The free daily build capacity has been reached. Please try again tomorrow." }, 429, cors.origin);
   const declaredLength = Number(request.headers.get("Content-Length") || "0");
   if (declaredLength > 6 * 1024 * 1024) return json({ error: "Request body is too large." }, 413, cors.origin);
   const rawBody = await request.text();
@@ -129,6 +132,7 @@ async function handleBuild(request, env, cors) {
   if (problem) return json({ error: problem }, 400, cors.origin);
 
   await env.RATE_LIMITS.put(limitKey, String(current + 1), { expirationTtl: 3600 });
+  await env.RATE_LIMITS.put(dayKey, String(dailyCount + 1), { expirationTtl: 48 * 60 * 60 });
   const requestId = crypto.randomUUID().replace(/-/g, "");
   const slug = "build-" + requestId.slice(0, 12);
   const downloadToken = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
