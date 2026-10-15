@@ -68,11 +68,11 @@ jobs:
           import os, re, sys
           path = Path("projects") / os.environ["PROJECT_SLUG"] / "index.html"
           html = path.read_text(encoding="utf-8")
-          if re.search(r'<meta[^>]+http-equiv=["\\']Content-Security-Policy', html, re.I):
+          if "http-equiv" in html.lower() and "content-security-policy" in html.lower():
               print("Project already declares CSP; refusing ambiguous policy override.")
               sys.exit(1)
           policy = "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' data:; style-src 'self' 'unsafe-inline' data:; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data: blob:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; worker-src 'none'"
-          match = re.search(r'<head(?:\\s[^>]*)?>', html, re.I)
+          match = re.search(r'<head[^>]*>', html, re.I)
           if not match:
               print("HTML must contain a head element.")
               sys.exit(1)
