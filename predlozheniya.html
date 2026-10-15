@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#2457d6">
+<meta name="description" content="Бесплатный тренажёр: учись составлять русские предложения, выбирать глаголы и ставить знаки препинания.">
+<title>Предложения — тренажёр русского языка</title>
+<style>
+:root{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#172033;background:#f3f6fc}
+*{box-sizing:border-box}body{margin:0}header{background:linear-gradient(135deg,#2149b9,#587ff0);color:white;padding:28px 18px 34px;text-align:center}header h1{margin:0 0 8px;font-size:clamp(28px,6vw,42px)}header p{margin:0;opacity:.94}.wrap{max-width:900px;margin:22px auto;padding:0 14px}.card{background:white;border-radius:18px;padding:20px;margin-bottom:16px;box-shadow:0 5px 22px #182e5a12}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}label{display:block;font-weight:650;margin-bottom:7px}select{width:100%;padding:12px;border:1px solid #cbd5e6;border-radius:10px;background:#fff;color:#172033;font:inherit}button{border:0;border-radius:11px;padding:12px 16px;font:inherit;font-weight:700;cursor:pointer}.primary{background:#2457d6;color:#fff}.secondary{background:#e9efff;color:#2149b9}.actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:16px}.result{font-size:clamp(21px,4vw,29px);line-height:1.45;font-weight:750;min-height:45px;color:#2149b9;overflow-wrap:anywhere}.hint{color:#5e6b80;font-size:14px}.examples{display:flex;flex-wrap:wrap;gap:8px}.examples button{font-weight:500;text-align:left}.status{min-height:22px;color:#267044;font-size:14px}.rule{border-left:4px solid #587ff0;padding-left:12px}footer{text-align:center;padding:16px;color:#64748b;font-size:13px}
+</style>
+</head>
+<body>
+<header><h1>Предложения</h1><p>Тренажёр для составления русских предложений</p></header>
+<main class="wrap">
+<section class="card">
+<h2>Составь предложение</h2>
+<p class="hint">Выбери, кто выполняет действие, глагол и дополнительные части. Глагол изменится в соответствии с подлежащим.</p>
+<div class="grid">
+<div><label for="who">Кто? Что?</label><select id="who">
+<option value="я">Я</option><option value="ты">Ты</option><option value="он">Он</option><option value="она">Она</option><option value="student">Студент</option><option value="studentka">Студентка</option><option value="teacher">Учитель</option><option value="family">Моя семья</option><option value="children">Дети</option><option value="we">Мы</option><option value="friend">Мой друг</option>
+</select></div>
+<div><label for="act">Что делает / делают?</label><select id="act">
+<option value="read">читать</option><option value="study">изучать</option><option value="learn">учиться</option><option value="explain">объяснять</option><option value="help">помогать</option><option value="play">играть</option><option value="write">писать</option><option value="love">любить</option><option value="work">работать</option><option value="speak">говорить</option><option value="listen">слушать</option>
+</select></div>
+<div><label for="what">Кого? Что?</label><select id="what"><option>интересную книгу</option><option>русский язык</option><option>новые слова</option><option>домашнее задание</option><option>стихи Пушкина</option><option>своим друзьям</option><option>—</option></select></div>
+<div><label for="where">Где?</label><select id="where"><option>в университете</option><option>дома</option><option>в библиотеке</option><option>в школе</option><option>во дворе</option><option>—</option></select></div>
+<div><label for="when">Когда?</label><select id="when"><option>каждый день</option><option>утром</option><option>после занятий</option><option>вечером</option><option>сегодня</option><option>—</option></select></div>
+<div><label for="endmark">Знак в конце</label><select id="endmark"><option value=".">Точка (.)</option><option value="?">Вопросительный знак (?)</option><option value="!">Восклицательный знак (!)</option></select></div>
+</div>
+<div class="actions"><button class="primary" id="build">Составить предложение</button><button class="secondary" id="random">Случайный пример</button><button class="secondary" id="copy">Скопировать</button><button class="secondary" id="reset">Сбросить выбор</button></div>
+<div class="card" style="margin-top:18px;margin-bottom:0;background:#f6f8ff"><div class="hint">Твоё предложение:</div><div class="result" id="result" aria-live="polite">Я читаю интересную книгу в университете каждый день.</div><div class="status" id="status" aria-live="polite"></div></div>
+</section>
+<section class="card"><h2>Примеры предложений</h2><p class="hint">Нажми на пример, чтобы показать его в поле результата.</p><div class="examples" id="examples"></div></section>
+<section class="card"><h2>Полезные правила</h2>
+<p class="rule"><b>1. Грамматическая основа.</b> Подлежащее называет того, о ком говорится, а сказуемое сообщает, что он делает: «Студент читает».</p>
+<p class="rule"><b>2. Согласование.</b> Глагол должен соответствовать подлежащему: «Я читаю», «Ты читаешь», «Он читает», «Мы читаем», «Дети читают».</p>
+<p class="rule"><b>3. Знаки в конце.</b> Сообщение обычно заканчивается точкой, вопрос — вопросительным знаком, сильное чувство или призыв — восклицательным знаком.</p>
+<p class="hint">Важно: конструктор помогает тренироваться. Не всякое сочетание выбранных слов будет звучать естественно — после составления прочитай предложение и проверь его смысл.</p>
+</section>
+</main><footer>Учись составлять предложения шаг за шагом · Русский язык</footer>
+<script>
+const $=id=>document.getElementById(id);
+const verbs={
+ read:['читаю','читаешь','читает','читаем','читают'],
+ study:['изучаю','изучаешь','изучает','изучаем','изучают'],
+ learn:['учусь','учишься','учится','учимся','учатся'],
+ explain:['объясняю','объясняешь','объясняет','объясняем','объясняют'],
+ help:['помогаю','помогаешь','помогает','помогаем','помогают'],
+ play:['играю','играешь','играет','играем','играют'],
+ write:['пишу','пишешь','пишет','пишем','пишут'],
+ love:['люблю','любишь','любит','любим','любят'],
+ work:['работаю','работаешь','работает','работаем','работают'],
+ speak:['говорю','говоришь','говорит','говорим','говорят'],
+ listen:['слушаю','слушаешь','слушает','слушаем','слушают']
+};
+const subjects={
+ 'я':{text:'Я',form:0},'ты':{text:'Ты',form:1},'он':{text:'Он',form:2},
+ 'она':{text:'Она',form:2},student:{text:'Студент',form:2},studentka:{text:'Студентка',form:2},
+ teacher:{text:'Учитель',form:2},family:{text:'Моя семья',form:2},children:{text:'Дети',form:4},
+ we:{text:'Мы',form:3},friend:{text:'Мой друг',form:2}
+};
+const examples=[
+'Я изучаю русский язык каждый день.',
+'Студент читает книгу в библиотеке.',
+'Учитель объясняет новое правило.',
+'Моя семья помогает мне учиться.',
+'Дети играют во дворе.',
+'Мы пишем домашнее задание вечером.',
+'Мой друг любит стихи Пушкина.',
+'Она внимательно слушает учителя.',
+'Ты говоришь по-русски.',
+'Студенты учатся в университете.'
+];
+function build(){
+ const s=subjects[$('who').value],verb=verbs[$('act').value][s.form];
+ const what=$('what').value,where=$('where').value,when=$('when').value;
+ const parts=[s.text,verb];
+ if(what!=='—')parts.push(what);
+ if(where!=='—')parts.push(where);
+ if(when!=='—')parts.push(when);
+ let sentence=parts.join(' ').replace(/\s+/g,' ').trim();
+ sentence=sentence.charAt(0).toUpperCase()+sentence.slice(1).replace(/[.!?]*$/,'')+$('endmark').value;
+ $('result').textContent=sentence;$('status').textContent='';
+}
+function showExample(sentence){$('result').textContent=sentence;$('status').textContent='Пример выбран.';}
+$('build').addEventListener('click',build);
+$('random').addEventListener('click',()=>showExample(examples[Math.floor(Math.random()*examples.length)]));
+$('reset').addEventListener('click',()=>{$('who').value='я';$('act').value='read';$('what').selectedIndex=0;$('where').selectedIndex=0;$('when').selectedIndex=0;$('endmark').value='.';build();$('status').textContent='Выбор сброшен.';});
+$('copy').addEventListener('click',async()=>{
+ const value=$('result').textContent;
+ try{await navigator.clipboard.writeText(value);$('status').textContent='Предложение скопировано!';}
+ catch(e){const t=document.createElement('textarea');t.value=value;t.style.position='fixed';t.style.opacity='0';document.body.appendChild(t);t.select();const ok=document.execCommand('copy');t.remove();$('status').textContent=ok?'Предложение скопировано!':'Не удалось скопировать. Выдели текст и скопируй вручную.';}
+});
+examples.forEach(s=>{const b=document.createElement('button');b.className='secondary';b.textContent=s;b.addEventListener('click',()=>showExample(s));$('examples').appendChild(b);});
+</script>
+</body></html>
