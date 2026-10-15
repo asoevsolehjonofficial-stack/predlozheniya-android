@@ -197,6 +197,7 @@ async function prepareTurnstile(cfg){
  turnstileWidgetKey=cfg.siteKey;
  turnstileWidgetId=window.turnstile.render($('turnstileWidget'),{
   sitekey:cfg.siteKey,
+  action:'build_apk',
   callback:(token)=>{turnstileToken=token;buildStatus('Проверка пройдена. Теперь нажми «Собрать APK проекта».');},
   'expired-callback':()=>{turnstileToken='';buildStatus('Проверка истекла. Пройди её снова.');},
   'error-callback':()=>{turnstileToken='';buildStatus('Не удалось пройти проверку. Попробуй ещё раз.');}
