@@ -18,39 +18,85 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
           packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+
+      - name: Configure stable signing key (optional)
+        if: ${{ secrets.AS_BUILDER_KEYSTORE_BASE64 != '' }}
+        env:
+          KEYSTORE_BASE64: ${{ secrets.AS_BUILDER_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.AS_BUILDER_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.AS_BUILDER_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.AS_BUILDER_KEY_PASSWORD }}
+        run: |
+          test -n "$KEYSTORE_PASSWORD" || (echo "Missing AS_BUILDER_KEYSTORE_PASSWORD secret" && exit 1)
+          test -n "$KEY_ALIAS" || (echo "Missing AS_BUILDER_KEY_ALIAS secret" && exit 1)
+          test -n "$KEY_PASSWORD" || (echo "Missing AS_BUILDER_KEY_PASSWORD secret" && exit 1)
+          KEY_PATH="$RUNNER_TEMP/as-builder-signing.jks"
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$KEY_PATH"
+          test -s "$KEY_PATH" || (echo "Signing keystore is empty or invalid" && exit 1)
+          {
+            echo "AS_BUILDER_KEYSTORE_PATH=$KEY_PATH"
+            echo "AS_BUILDER_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+            echo "AS_BUILDER_KEY_ALIAS=$KEY_ALIAS"
+            echo "AS_BUILDER_KEY_PASSWORD=$KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      - name: Set build version
+        run: echo "APP_VERSION_CODE=$((GITHUB_RUN_NUMBER + 1))" >> "$GITHUB_ENV"
+
       - name: Install Gradle
         run: |
           wget -q https://services.gradle.org/distributions/gradle-8.9-bin.zip -O /tmp/gradle.zip
           unzip -q /tmp/gradle.zip -d /tmp
           echo "/tmp/gradle-8.9/bin" >> "$GITHUB_PATH"
+
       - name: Build debug APK
-        run: gradle --no-daemon assembleDebug
+        run: gradle --no-daemon clean assembleDebug
+
+      - name: Verify APK package and signature
+        run: |
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          unzip -t "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee /tmp/apk-badging.txt
+          grep -q "package: name='tj.as.predlozheniya'" /tmp/apk-badging.txt
+          stat -c "APK size: %s bytes" "$APK"
+          sha256sum "$APK" | tee app/build/outputs/apk/debug/app-debug.apk.sha256
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: AS-App-Builder-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/debug/app-debug.apk.sha256
           if-no-files-found: error
           retention-days: 30
+
       - name: Publish latest APK download
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk
           name: A.S. APP BUILDER — Latest Android APK
           body: |
-            Latest automatically built debug APK for A.S. APP BUILDER.
-            Download app-debug.apk, open it on Android, and confirm installation.
-            This is a debug build. Android may require permission to install apps from your browser or file manager.
-          files: app/build/outputs/apk/debug/app-debug.apk
+            Latest automatically built APK for A.S. APP BUILDER.
+            On Android, open the downloaded APK and confirm installation.
+            If Android says the app conflicts with an installed version, uninstall the older test build first, then install this one.
+            For seamless updates, the same persistent signing key must be configured in Actions secrets.
+          files: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/debug/app-debug.apk.sha256
           overwrite_files: true
           fail_on_unmatched_files: true
           draft: false
