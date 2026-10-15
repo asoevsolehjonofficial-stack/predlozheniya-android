@@ -84,7 +84,7 @@ jobs:
           cp "$APK" dist/app-debug.apk
           (cd dist && sha256sum app-debug.apk > app-debug.apk.sha256)
           stat -c "APK size: %s bytes" dist/app-debug.apk
-          sha256sum -c dist/app-debug.apk.sha256
+          (cd dist && sha256sum -c app-debug.apk.sha256)
 
       - name: Upload verified APK to release job
         uses: actions/upload-artifact@v4
