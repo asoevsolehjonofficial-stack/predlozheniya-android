@@ -249,10 +249,10 @@ async function handleDownload(request, env, cors, requestId) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    const cors = originAllowed(request, env);
     try {
       if (url.pathname === "/api/internal/source" && request.method === "GET") return await handleSource(request, env, url.searchParams.get("requestId") || "");
       if (url.pathname === "/api/internal/upload" && request.method === "PUT") return await handleUpload(request, env, url.searchParams.get("requestId") || "");
-      const cors = originAllowed(request, env);
       if (request.method === "OPTIONS") {
         if (!cors.ok) return new Response(null, { status: 403 });
         return new Response(null, {
@@ -282,7 +282,7 @@ export default {
       return json({ error: "Not found." }, 404, cors.origin);
     } catch (error) {
       console.error("A.S. APP BUILDER API error:", error.message);
-      return json({ error: "The build service encountered an error. Check Worker logs for details." }, 500);
+      return json({ error: "The build service encountered an error. Check Worker logs for details." }, 500, cors.origin);
     }
   },
   async scheduled(_event, env) {
