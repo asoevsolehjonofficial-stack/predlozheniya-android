@@ -98,25 +98,26 @@ public class MainActivity extends Activity {
             OutputStream out = null;
             Uri itemUri = null;
             try {
-                if (base64 == null || base64.length() > 12 * 1024 * 1024) {
-                    throw new Exception("Файл слишком большой (максимум 8 МБ)");
+                if (base64 == null || base64.length() > 34 * 1024 * 1024) {
+                    throw new Exception("Файл слишком большой (максимум 25 МБ)");
                 }
                 String safeName = filename == null ? "as-app-download" : filename.replaceAll("[^A-Za-z0-9._-]", "_");
                 if (safeName.isEmpty()) safeName = "as-app-download";
                 if (safeName.length() > 100) safeName = safeName.substring(0, 100);
                 String lowerName = safeName.toLowerCase(Locale.ROOT);
-                if (!lowerName.matches(".*\\.(html?|zip|txt|json|csv|xml|pdf|md|css|js|svg|png|jpe?g|webp)$")) {
+                if (!lowerName.matches(".*\\.(html?|zip|txt|json|csv|xml|pdf|md|css|js|svg|png|jpe?g|webp|apk)$")) {
                     throw new Exception("Этот тип файла нельзя сохранять напрямую");
                 }
                 String mime = (mimeType == null || mimeType.isEmpty()) ? "application/octet-stream" : mimeType;
                 if (mime.length() > 120 || mime.contains("\\r") || mime.contains("\\n")) mime = "application/octet-stream";
                 byte[] bytes = android.util.Base64.decode(base64, android.util.Base64.DEFAULT);
-                if (bytes.length > 8 * 1024 * 1024) {
+                if (bytes.length > 25 * 1024 * 1024) {
                     throw new Exception("Файл слишком большой (максимум 8 МБ)");
                 }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     ContentValues values = new ContentValues();
                     values.put(MediaStore.MediaColumns.DISPLAY_NAME, safeName);
+                    if (lowerName.endsWith(".apk")) mime = "application/vnd.android.package-archive";
                     values.put(MediaStore.MediaColumns.MIME_TYPE, mime);
                     values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
                     values.put(MediaStore.MediaColumns.IS_PENDING, 1);
