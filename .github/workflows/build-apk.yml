@@ -31,6 +31,15 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Sync the current website into the Android app
+        run: |
+          set -euo pipefail
+          test -s index.html
+          mkdir -p app/src/main/assets
+          cp index.html app/src/main/assets/index.html
+          cmp -s index.html app/src/main/assets/index.html
+          echo "Android APK will contain the current website interface."
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
