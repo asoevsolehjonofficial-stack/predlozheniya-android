@@ -1,5 +1,5 @@
 name: Build APK for a user project
-run-name: 'User APK: ${{ inputs.request_id || "demo" }}'
+run-name: "User APK: ${{ inputs.request_id || 'demo' }}"
 
 on:
   push:
