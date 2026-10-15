@@ -89,7 +89,7 @@ async function findRun(env, requestId) {
 
 async function handleBuild(request, env, cors) {
   const ip = request.headers.get("CF-Connecting-IP") || "unknown";
-  if (!env.JOBS || !env.RATE_LIMITS || !env.GITHUB_TOKEN || !env.TURNSTILE_SECRET || !env.TURNSTILE_SITE_KEY || !env.SITE_ORIGIN) {
+  if (!env.JOBS || !env.RATE_LIMITS || !env.GITHUB_TOKEN || !env.TURNSTILE_SECRET || !env.TURNSTILE_SITE_KEY || env.TURNSTILE_SITE_KEY.startsWith("REPLACE_") || !env.SITE_ORIGIN) {
     return response({ error: "Backend is not configured. Set the Worker secrets, SITE_ORIGIN, and KV bindings." }, 503, cors.origin);
   }
 
@@ -235,10 +235,13 @@ export default {
     const url = new URL(request.url);
     try {
       if (url.pathname === "/api/health" && request.method === "GET") {
-        const configured = Boolean(env.GITHUB_TOKEN && env.TURNSTILE_SECRET && env.TURNSTILE_SITE_KEY && env.JOBS && env.RATE_LIMITS && env.SITE_ORIGIN);
+        const configured = Boolean(env.GITHUB_TOKEN && env.TURNSTILE_SECRET && env.TURNSTILE_SITE_KEY && !env.TURNSTILE_SITE_KEY.startsWith("REPLACE_") && env.JOBS && env.RATE_LIMITS && env.SITE_ORIGIN);
         return response({ ok: configured, service: "A.S. APP BUILDER build API", buildEnabled: configured }, configured ? 200 : 503, cors.origin);
       }
-      if (url.pathname === "/api/build" && request.method === "POST") return await handleBuild(request, env, cors);
+      if (url.pathname === "/api/build" && request.method === "POST") {
+        if (!(request.headers.get("Content-Type") || "").toLowerCase().startsWith("application/json")) return response({ error: "Content-Type must be application/json." }, 415, cors.origin);
+        return await handleBuild(request, env, cors);
+      }
       if (url.pathname === "/api/status" && request.method === "GET") return await handleStatus(request, env, cors, url.searchParams.get("requestId") || "");
       if (url.pathname === "/api/download" && request.method === "GET") return await handleDownload(env, cors, url.searchParams.get("requestId") || "");
       return response({ error: "Not found." }, 404, cors.origin);
