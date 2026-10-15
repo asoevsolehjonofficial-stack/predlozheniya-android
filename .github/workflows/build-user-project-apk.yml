@@ -1,15 +1,24 @@
 name: Build APK for a user project
+run-name: 'User APK: ${{ inputs.request_id || "demo" }}'
 
 on:
   push:
     branches: [main]
     paths:
-      - "projects/*/index.html"
+      - "projects/demo/index.html"
       - ".github/workflows/build-user-project-apk.yml"
   workflow_dispatch:
     inputs:
       project_slug:
-        description: "Project folder under projects/ (lowercase letters, numbers, hyphens)"
+        description: "Temporary project folder slug"
+        required: true
+        type: string
+      project_ref:
+        description: "Temporary source branch created by the secure backend"
+        required: true
+        type: string
+      request_id:
+        description: "Unique request ID used for status and artifact lookup"
         required: true
         type: string
 
@@ -25,8 +34,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
+      - name: Validate request identifiers
+        env:
+          PROJECT_SLUG: ${{ inputs.project_slug || 'demo' }}
+          PROJECT_REF: ${{ inputs.project_ref || github.ref_name }}
+          REQUEST_ID: ${{ inputs.request_id || 'demo' }}
+        run: |
+          [[ "$PROJECT_SLUG" =~ ^[a-z0-9][a-z0-9-]{0,39}$ ]]
+          [[ "$PROJECT_REF" =~ ^(main|asb-build-[a-f0-9]{20})$ ]]
+          [[ "$REQUEST_ID" =~ ^[a-f0-9]{32}$ || "$REQUEST_ID" == "demo" ]]
+
       - name: Checkout source
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.project_ref || github.ref_name }}
+          persist-credentials: false
 
       - name: Validate project slug
         env:
@@ -121,7 +143,7 @@ jobs:
       - name: Upload project APK
         uses: actions/upload-artifact@v4
         with:
-          name: project-${{ inputs.project_slug || 'demo' }}-apk
+          name: project-${{ inputs.project_slug || 'demo' }}-${{ inputs.request_id || 'demo' }}-apk
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             app/build/outputs/apk/debug/app-debug.apk.sha256
