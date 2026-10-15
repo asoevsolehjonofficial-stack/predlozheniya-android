@@ -64,7 +64,7 @@ jobs:
 
       - name: Prepare isolated project assets and identity
         env:
-          PROJECT_SLUG: ${{ inputs.project_slug }}
+          PROJECT_SLUG: ${{ inputs.project_slug || 'demo' }}
         run: |
           cp "projects/$PROJECT_SLUG/index.html" app/src/main/assets/index.html
           PACKAGE_SUFFIX="$(echo "$PROJECT_SLUG" | tr '-' '_')"
