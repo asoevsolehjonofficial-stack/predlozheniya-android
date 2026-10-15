@@ -102,6 +102,10 @@ public class MainActivity extends Activity {
                 String safeName = filename == null ? "as-app-download" : filename.replaceAll("[^A-Za-z0-9._-]", "_");
                 if (safeName.isEmpty()) safeName = "as-app-download";
                 if (safeName.length() > 100) safeName = safeName.substring(0, 100);
+                String lowerName = safeName.toLowerCase(Locale.ROOT);
+                if (!lowerName.matches(".*\\.(html?|zip|txt|json|csv|xml|pdf|md|css|js|svg|png|jpe?g|webp)$")) {
+                    throw new Exception("Этот тип файла нельзя сохранять напрямую");
+                }
                 String mime = (mimeType == null || mimeType.isEmpty()) ? "application/octet-stream" : mimeType;
                 if (mime.length() > 120 || mime.contains("\\r") || mime.contains("\\n")) mime = "application/octet-stream";
                 byte[] bytes = android.util.Base64.decode(base64, android.util.Base64.DEFAULT);
