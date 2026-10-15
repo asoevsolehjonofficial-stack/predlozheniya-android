@@ -44,7 +44,17 @@
 <div class="notice">HTML — веб-прототип. PWA ZIP можно установить после размещения на HTTPS-хостинге. «Android-проект ZIP» содержит исходники проекта для открытия в Android Studio; это ещё не APK. APK конструктора — отдельное приложение. Созданные проекты и настройки можно сохранять локально на этом устройстве.</div>
 </section>
 </main>
-<section class="section"><h2>03 / Установка на Android</h2><p class="sub">Есть два варианта: установить сайт как приложение (PWA) или скачать APK-файл конструктора. Android всегда попросит подтвердить установку APK; сайт не может устанавливать приложения незаметно.</p><div class="steps"><article class="step"><div class="num">ВАРИАНТ A</div><h3>Установить сайт</h3><p>Нажми «Установить сайт». В Chrome на Android может появиться системное предложение. Если кнопка не поддерживается, открой меню ⋮ и выбери «Установить приложение» или «Добавить на главный экран».</p></article><article class="step"><div class="num">ВАРИАНТ B</div><h3>Скачать APK</h3><p>Нажми «Скачать APK конструктора». После загрузки открой файл из уведомления или папки «Загрузки» и подтверди установку, если Android запросит разрешение.</p></article><article class="step"><div class="num">ВАЖНО</div><h3>APK отдельного проекта</h3><p>Текущая кнопка скачивает сам конструктор. Автоматическая сборка любого введённого пользователем проекта в отдельный APK ещё не реализована и требует безопасного сервера или авторизованного процесса сборки.</p></article></div></section><section class="section"><h2>04 / Экспорт проекта</h2><p class="sub">Сейчас конструктор создаёт веб-прототипы и позволяет скачать исходный HTML или PWA-пакет. Автоматическая сборка отдельного нативного APK для каждого нового проекта пока не доступна.</p><div class="steps"><article class="step"><div class="num">ШАГ 01</div><h3>Проверь прототип</h3><p>Создай проект и проверь его работу в окне предпросмотра.</p></article><article class="step"><div class="num">ШАГ 02</div><h3>Скачай файлы</h3><p>Используй «Скачать HTML» для веб-версии или «Скачать PWA-пакет ZIP» для устанавливаемого веб-приложения.</p></article><article class="step"><div class="num">СЛЕДУЮЩИЙ ЭТАП</div><h3>Нативный APK</h3><p>Для отдельного APK проекта понадобится безопасный сервис сборки Android. Эта функция ещё разрабатывается.</p></article></div></section>
+<section class="section"><h2>03 / Установка на Android</h2><p class="sub">Есть два варианта: установить сайт как приложение (PWA) или скачать APK-файл конструктора. Android всегда попросит подтвердить установку APK; сайт не может устанавливать приложения незаметно.</p><div class="steps"><article class="step"><div class="num">ВАРИАНТ A</div><h3>Установить сайт</h3><p>Нажми «Установить сайт». В Chrome на Android может появиться системное предложение. Если кнопка не поддерживается, открой меню ⋮ и выбери «Установить приложение» или «Добавить на главный экран».</p></article><article class="step"><div class="num">ВАРИАНТ B</div><h3>Скачать APK</h3><p>Нажми «Скачать APK конструктора». После загрузки открой файл из уведомления или папки «Загрузки» и подтверди установку, если Android запросит разрешение.</p></article><article class="step"><div class="num">ВАЖНО</div><h3>APK отдельного проекта</h3><p>Текущая кнопка скачивает сам конструктор. Автоматическая сборка любого введённого пользователем проекта в отдельный APK ещё не реализована и требует безопасного сервера или авторизованного процесса сборки.</p></article></div></section><section class="section"><h2>04 / Экспорт проекта</h2><p class="sub">Конструктор поддерживает веб-прототипы, HTML/PWA экспорт и отправку готового прототипа в настроенный защищённый сервис сборки APK.</p><div class="steps"><article class="step"><div class="num">ШАГ 01</div><h3>Проверь прототип</h3><p>Создай проект и проверь его работу в окне предпросмотра.</p></article><article class="step"><div class="num">ШАГ 02</div><h3>Скачай файлы</h3><p>Используй «Скачать HTML» для веб-версии или «Скачать PWA-пакет ZIP» для устанавливаемого веб-приложения.</p></article><article class="step"><div class="num">СЛЕДУЮЩИЙ ЭТАП</div><h3>Нативный APK</h3><p>Если владелец развернул защищённый сервис сборки, готовый прототип можно отправить на сборку отдельного APK ниже.</p></article></div></section>
+
+<section class="section" id="androidBuildSection">
+  <h2>05 / Сборка APK проекта</h2>
+  <p class="sub">Отправляет готовый HTML в отдельный сервер сборки, создаёт изолированную временную ветку, проверяет APK и возвращает файл для скачивания. Не отправляй пароли, личные данные или секретные ключи.</p>
+  <div class="field"><label for="backendUrl">Адрес защищённого сервера сборки</label><input id="backendUrl" type="url" inputmode="url" placeholder="https://твой-сервис.workers.dev" autocomplete="url"></div>
+  <div class="field"><label for="turnstileSiteKey">Публичный ключ Cloudflare Turnstile</label><input id="turnstileSiteKey" type="text" placeholder="Ключ сайта Turnstile" autocomplete="off"></div>
+  <div id="turnstileWidget" style="margin:12px 0"></div>
+  <div class="actions"><button class="btn secondary" id="checkBackend" type="button">Проверить сервер</button><button class="btn primary" id="buildApk" type="button">Собрать APK проекта →</button></div>
+  <div id="buildApkStatus" class="status" aria-live="polite">Для сборки необходимо развернуть backend и указать его адрес и публичный ключ Turnstile.</div>
+</section>
 <footer class="footer">A.S. APP BUILDER · Your Idea. Your App. Your APK.<br>Бесплатный MVP · Не загружай в промпт пароли, API-ключи и личные данные.</footer>
 <script>
 let installPromptEvent=null;
@@ -147,5 +157,96 @@ $('downloadPwa').addEventListener('click',()=>{
  if(!(window.AndroidDownloads&&typeof window.AndroidDownloads.saveBase64==='function'))$('status').textContent='PWA-пакет ZIP скачан. Размести его файлы на HTTPS-хостинге, затем установи сайт через браузер.';
 });
 
+
+const BUILD_CONFIG_KEY='asBuilderBackendConfigV1';
+let turnstileToken='',turnstileWidgetId=null,turnstileScriptPromise=null,turnstileWidgetKey='';
+function buildStatus(message){const el=$('buildApkStatus');if(el)el.textContent=message;}
+function getBuildConfig(){
+ const raw=$('backendUrl').value.trim().replace(/\/+$/,'');
+ const siteKey=$('turnstileSiteKey').value.trim();
+ let parsed;
+ try{parsed=new URL(raw)}catch(e){throw Error('Укажи корректный HTTPS-адрес сервера сборки.')}
+ if(parsed.protocol!=='https:'||parsed.username||parsed.password||parsed.search||parsed.hash||parsed.pathname!=='/')throw Error('Нужен чистый HTTPS-адрес сервера без логина, пути, параметров и фрагмента.');
+ if(!siteKey)throw Error('Укажи публичный ключ Cloudflare Turnstile.');
+ const cfg={url:parsed.origin,siteKey};
+ localStorage.setItem(BUILD_CONFIG_KEY,JSON.stringify(cfg));
+ return cfg;
+}
+function restoreBuildConfig(){
+ try{const cfg=JSON.parse(localStorage.getItem(BUILD_CONFIG_KEY)||'{}');if(cfg.url)$('backendUrl').value=cfg.url;if(cfg.siteKey)$('turnstileSiteKey').value=cfg.siteKey;}catch(e){}
+}
+function loadTurnstileScript(){
+ if(window.turnstile)return Promise.resolve();
+ if(turnstileScriptPromise)return turnstileScriptPromise;
+ turnstileScriptPromise=new Promise((resolve,reject)=>{
+  const script=document.createElement('script');
+  script.src='https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+  script.async=true;script.defer=true;
+  script.onload=()=>window.turnstile?resolve():reject(Error('Turnstile не загрузился.'));
+  script.onerror=()=>reject(Error('Не удалось загрузить Cloudflare Turnstile. Проверь подключение к интернету.'));
+  document.head.append(script);
+ });
+ return turnstileScriptPromise;
+}
+async function prepareTurnstile(cfg){
+ await loadTurnstileScript();
+ if(turnstileWidgetId!==null&&turnstileWidgetKey===cfg.siteKey)return;
+ if(turnstileWidgetId!==null){try{window.turnstile.remove(turnstileWidgetId)}catch(e){}turnstileWidgetId=null;}
+ $('turnstileWidget').replaceChildren();
+ turnstileToken='';
+ turnstileWidgetKey=cfg.siteKey;
+ turnstileWidgetId=window.turnstile.render($('turnstileWidget'),{
+  sitekey:cfg.siteKey,
+  callback:(token)=>{turnstileToken=token;buildStatus('Проверка пройдена. Теперь нажми «Собрать APK проекта».');},
+  'expired-callback':()=>{turnstileToken='';buildStatus('Проверка истекла. Пройди её снова.');},
+  'error-callback':()=>{turnstileToken='';buildStatus('Не удалось пройти проверку. Попробуй ещё раз.');}
+ });
+}
+$('checkBackend').addEventListener('click',async()=>{
+ try{
+  const cfg=getBuildConfig();buildStatus('Проверяю сервер…');
+  const res=await fetch(cfg.url+'/api/health',{headers:{'Accept':'application/json'}});
+  const data=await res.json().catch(()=>({}));
+  if(!res.ok||!data.ok)throw Error(data.error||'Сервис не настроен или недоступен (HTTP '+res.status+').');
+  buildStatus('Сервер доступен. Пройди проверку защиты от ботов, затем можно собирать APK.');
+  await prepareTurnstile(cfg);
+ }catch(e){buildStatus('Ошибка: '+e.message);}
+});
+$('buildApk').addEventListener('click',async()=>{
+ if(!generatedHTML){buildStatus('Сначала создай или сгенерируй приложение и проверь предпросмотр.');return;}
+ let cfg;
+ try{cfg=getBuildConfig();}catch(e){buildStatus('Настройка: '+e.message);return;}
+ if(!turnstileToken){try{await prepareTurnstile(cfg);buildStatus('Пройди проверку Cloudflare Turnstile, затем снова нажми «Собрать APK проекта».');}catch(e){buildStatus('Ошибка проверки: '+e.message);}return;}
+ const button=$('buildApk');button.disabled=true;
+ try{
+  buildStatus('Отправляю проект на защищённую сборку…');
+  const start=await fetch(cfg.url+'/api/build',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({html:generatedHTML,turnstileToken})});
+  turnstileToken='';
+  if(turnstileWidgetId!==null)try{window.turnstile.reset(turnstileWidgetId)}catch(e){}
+  const job=await start.json().catch(()=>({}));
+  if(!start.ok)throw Error(job.error||'Сервер отклонил запрос (HTTP '+start.status+').');
+  const requestId=job.requestId;
+  if(!/^[a-f0-9]{32}$/.test(requestId||''))throw Error('Сервер вернул неверный номер сборки.');
+  for(let attempt=0;attempt<90;attempt++){
+   await new Promise(resolve=>setTimeout(resolve,5000));
+   const statusResponse=await fetch(cfg.url+'/api/status?requestId='+encodeURIComponent(requestId),{headers:{'Accept':'application/json'}});
+   const state=await statusResponse.json().catch(()=>({}));
+   if(!statusResponse.ok)throw Error(state.error||'Не удалось проверить статус сборки.');
+   if(state.status==='failed')throw Error((state.message||'Сборка не удалась.')+(state.logs?' Журнал: '+state.logs:''));
+   if(state.status==='success'){
+    buildStatus('APK собран и проверен. Скачиваю файл…');
+    const downloadResponse=await fetch(new URL(state.downloadUrl,cfg.url).href);
+    if(!downloadResponse.ok){const err=await downloadResponse.json().catch(()=>({}));throw Error(err.error||'Не удалось скачать APK.');}
+    const blob=await downloadResponse.blob();
+    deliverBlob(blob,'as-app-'+requestId.slice(0,8)+'.apk');
+    buildStatus('Готово! APK прошёл проверку контрольной суммы. Открой файл из «Загрузок» и подтверди установку Android. Это тестовая сборка; для обычных обновлений нужна постоянная подпись.');
+    return;
+   }
+   buildStatus('Сборка: '+(state.message||state.status||'ожидание')+' · прошло '+Math.ceil((attempt+1)*5/60)+' мин.');
+  }
+  throw Error('Сборка занимает слишком много времени. Проверь журнал GitHub Actions и попробуй позже.');
+ }catch(e){buildStatus('Ошибка: '+e.message);}finally{button.disabled=false;}
+});
+restoreBuildConfig();
 </script>
 </body></html>
