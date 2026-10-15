@@ -9,6 +9,8 @@ on:
       - "service-worker.js"
       - "icon.svg"
       - ".github/workflows/validate-web.yml"
+      - ".github/workflows/deploy-backend.yml"
+      - "backend/**"
   pull_request:
     paths:
       - "index.html"
@@ -49,6 +51,9 @@ jobs:
           test -s service-worker.js
           test -s icon.svg
           test -s predlozheniya.html
+          test -s backend/src/index.js
+          test -s backend/wrangler.toml
+          test -s backend/package.json
           grep -qi '<html' index.html
           grep -qi '<head' index.html
           grep -qi '<body' index.html
@@ -73,8 +78,11 @@ jobs:
             node --check "$script"
           done
 
-      - name: Check service worker JavaScript syntax
-        run: node --check service-worker.js
+      - name: Check service worker and backend JavaScript syntax
+        run: |
+          node --check service-worker.js
+          node --check backend/src/index.js
+          node -e "JSON.parse(require('fs').readFileSync('backend/package.json','utf8'))"
 
       - name: Check for accidental conflict markers
         run: |
