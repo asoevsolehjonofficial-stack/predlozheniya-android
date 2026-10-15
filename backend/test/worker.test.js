@@ -68,7 +68,7 @@ test("unconfigured build API keeps CORS headers so the website can read the erro
   assert.match((await response.json()).error, /Backend is not configured/);
 });
 
-test("internal source endpoint rejects requests without the server secret", async () => {
+test("internal source endpoint rejects requests without GitHub OIDC credentials", async () => {
   const response = await call("/api/internal/source?requestId=0123456789abcdef0123456789abcdef");
   assert.equal(response.status, 401);
   assert.match((await response.json()).error, /Unauthorized/);
