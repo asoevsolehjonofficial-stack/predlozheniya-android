@@ -1,6 +1,6 @@
 # A.S. APP BUILDER — private APK build backend
 
-This Cloudflare Worker connects the public GitHub Pages UI to GitHub Actions while keeping the GitHub token, project source, and generated APK private. User HTML is stored temporarily in KV, fetched by a runner using a server-to-server secret, and removed from the job record. APK bytes are stored in a private R2 bucket, not in public repository branches or public Actions artifacts.
+This Cloudflare Worker connects the public Cloudflare Pages UI to GitHub Actions while keeping the GitHub token, project source, and generated APK private. User HTML is stored temporarily in KV, fetched by a runner using a server-to-server secret, and removed from the job record. APK bytes are stored in a private R2 bucket, not in public repository branches or public Actions artifacts.
 
 ## Required accounts and services
 
@@ -13,7 +13,7 @@ Never put any secret in `index.html`, browser storage, a public repository file,
 ## 1. Create Turnstile
 
 1. In Cloudflare, create a Turnstile widget.
-2. Allow hostname `asoevsolehjonofficial-stack.github.io`.
+2. Allow hostname `as-app-builder.pages.dev` (the currently used public site). If you later add a custom domain, allow that hostname too.
 3. Copy the **site key** for the website UI and the **secret key** for the Worker.
 
 The site key is public. The secret key must be stored as a Worker secret.
@@ -52,11 +52,11 @@ Add these repository **variables**:
 
 Then open GitHub **Actions → Deploy secure APK backend → Run workflow**. The workflow installs Wrangler, deploys a bootstrap Worker, updates Worker secrets from protected repository secrets, injects the namespace/site-key settings at deploy time, and redeploys the Worker with the complete configuration. It does not commit secret values into the repository.
 
-Copy the Worker URL printed in the deployment log, such as `https://as-app-builder-api.<account>.workers.dev`, and add a repository Actions variable named `AS_BUILDER_BUILD_API_URL` with that URL (no trailing slash). The Worker URL used on the website and in this variable must match.
+Copy the Worker URL printed in the deployment log, such as `https://as-app-builder-api.<account>.workers.dev`, and add a repository Actions variable named `AS_BUILDER_BUILD_API_URL` with that URL (no trailing slash). The Worker URL used on the website and in this variable must match. The Worker `SITE_ORIGIN` is configured for `https://as-app-builder.pages.dev`; if the public site domain changes, update that setting and the Turnstile hostname too.
 
 ## 5. Connect the website
 
-Open the public A.S. APP BUILDER site. In **05 / Сборка APK проекта**:
+Open the public A.S. APP BUILDER site at `https://as-app-builder.pages.dev/`. In **05 / Сборка APK проекта**:
 1. Enter the Worker URL.
 2. Enter the public Turnstile site key.
 3. Press **Проверить сервер**.
