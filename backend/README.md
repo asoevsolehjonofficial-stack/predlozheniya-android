@@ -55,15 +55,7 @@ Then open GitHub **Actions → Deploy secure APK backend → Run workflow**. The
 
 Copy the Worker URL printed in the deployment log, such as `https://as-app-builder-api.<account>.workers.dev`, and add a repository Actions variable named `AS_BUILDER_BUILD_API_URL` with that URL (no trailing slash). The Worker URL used on the website and in this variable must match.
 
-## 5. Configure GitHub Actions
-
-In the repository settings:
-1. Add an Actions **variable** named `AS_BUILDER_BUILD_API_URL` with the Worker base URL, e.g. `https://as-app-builder-api.<account>.workers.dev` (no trailing slash).
-2. Add an Actions **secret** named `AS_BUILDER_BUILD_SOURCE_SECRET` with the exact same long random secret configured as the Worker `BUILD_SOURCE_SECRET`.
-
-This secret lets the GitHub-hosted runner fetch one pending HTML source and upload a verified APK to the Worker. It is never passed as a workflow input and is not printed in logs.
-
-## 6. Connect the website
+## 5. Connect the website
 
 Open the public A.S. APP BUILDER site. In **05 / Сборка APK проекта**:
 1. Enter the Worker URL.
