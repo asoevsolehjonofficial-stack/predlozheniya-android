@@ -5,8 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Build steps receive read-only repository access. Only the tiny release job gets write access.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: latest-apk-release
@@ -15,9 +16,14 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -66,7 +72,7 @@ jobs:
       - name: Build debug APK
         run: gradle --no-daemon clean assembleDebug -PappVersionCode="$APP_VERSION_CODE"
 
-      - name: Verify APK package and signature
+      - name: Verify APK package, signature, and checksum
         run: |
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
@@ -74,18 +80,41 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee /tmp/apk-badging.txt
           grep -q "package: name='tj.as.predlozheniya'" /tmp/apk-badging.txt
-          stat -c "APK size: %s bytes" "$APK"
-          sha256sum "$APK" | tee app/build/outputs/apk/debug/app-debug.apk.sha256
+          mkdir -p dist
+          cp "$APK" dist/app-debug.apk
+          (cd dist && sha256sum app-debug.apk > app-debug.apk.sha256)
+          stat -c "APK size: %s bytes" dist/app-debug.apk
+          sha256sum -c dist/app-debug.apk.sha256
 
-      - name: Upload APK artifact
+      - name: Upload verified APK to release job
         uses: actions/upload-artifact@v4
         with:
-          name: AS-App-Builder-APK
+          name: AS-App-Builder-Verified-APK
           path: |
-            app/build/outputs/apk/debug/app-debug.apk
-            app/build/outputs/apk/debug/app-debug.apk.sha256
+            dist/app-debug.apk
+            dist/app-debug.apk.sha256
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 7
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified APK
+        uses: actions/download-artifact@v4
+        with:
+          name: AS-App-Builder-Verified-APK
+          path: dist
+          merge-multiple: true
+
+      - name: Verify downloaded artifact
+        run: |
+          test -s dist/app-debug.apk
+          test -s dist/app-debug.apk.sha256
+          (cd dist && sha256sum -c app-debug.apk.sha256)
 
       - name: Publish latest APK download
         uses: softprops/action-gh-release@v2
@@ -97,9 +126,10 @@ jobs:
             On Android, open the downloaded APK and confirm installation.
             If Android says the app conflicts with an installed version, uninstall the older test build first, then install this one.
             For seamless updates, the same persistent signing key must be configured in Actions secrets.
+            This is a test/debug APK, not a Play Store production release.
           files: |
-            app/build/outputs/apk/debug/app-debug.apk
-            app/build/outputs/apk/debug/app-debug.apk.sha256
+            dist/app-debug.apk
+            dist/app-debug.apk.sha256
           overwrite_files: true
           fail_on_unmatched_files: true
           draft: false
