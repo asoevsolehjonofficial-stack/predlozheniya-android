@@ -1,15 +1,6 @@
 name: Publish website
 on:
-  push:
-    branches: [main]
-    paths:
-      - "index.html"
-      - "predlozheniya.html"
-      - "manifest.webmanifest"
-      - "service-worker.js"
-      - "icon.svg"
-      - ".nojekyll"
-      - ".github/workflows/deploy-pages.yml"
+  # Cloudflare Pages is the primary host; GitHub Pages remains a manual alternative.
   workflow_dispatch:
 
 permissions:
