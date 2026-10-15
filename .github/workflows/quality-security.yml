@@ -10,6 +10,7 @@ on:
       - "app/src/main/java/**"
       - "app/build.gradle"
       - ".github/workflows/build-user-project-apk.yml"
+      - ".github/workflows/build-apk.yml"
       - ".github/workflows/quality-security.yml"
   pull_request:
     branches: [main]
@@ -50,6 +51,7 @@ jobs:
           activity = Path("app/src/main/java/tj/as/predlozheniya/MainActivity.java").read_text(encoding="utf-8")
           android_manifest = Path("app/src/main/AndroidManifest.xml").read_text(encoding="utf-8")
           build_workflow = Path(".github/workflows/build-user-project-apk.yml").read_text(encoding="utf-8")
+          release_workflow = Path(".github/workflows/build-apk.yml").read_text(encoding="utf-8")
 
           assert re.search(r"<!doctype html", html, re.I), "Missing HTML doctype"
           assert re.search(r"<html\b", html, re.I), "Missing html element"
@@ -64,7 +66,10 @@ jobs:
           assert "'unsafe-eval'" not in build_workflow, "Generated APK CSP must not permit unsafe-eval"
           assert "connect-src 'none'" in build_workflow, "Generated APK CSP should block network calls by default"
           assert "permissions:" in build_workflow and "contents: read" in build_workflow, "User-project build should use read-only repository permissions"
-          print("HTML, manifest, Android WebView protections, and generated-app CSP checks passed.")
+          assert "persist-credentials: false" in release_workflow, "Build job should not persist the checkout token"
+          assert "permissions:\n  contents: read" in release_workflow, "Top-level release workflow permissions must be read-only"
+          assert "publish:\n    needs: build" in release_workflow and "contents: write" in release_workflow, "Write permission should be isolated to the release job"
+          print("HTML, manifest, Android WebView protections, generated-app CSP, and workflow permissions checks passed.")
           PY
 
       - name: Check inline JavaScript syntax
