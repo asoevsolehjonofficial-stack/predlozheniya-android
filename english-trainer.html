@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#101827">
+<title>English Trainer — A.S. Academy</title>
+<style>
+:root{--bg:#f3f6fc;--card:#fff;--text:#18243b;--muted:#62718a;--line:#dce4f0;--accent:#425ee8;--good:#16845b;--bad:#c33b4b;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+[data-theme="dark"]{--bg:#0c1220;--card:#151f32;--text:#eff4ff;--muted:#a5b3cc;--line:#2b3a55;--accent:#8da2ff;--good:#62d6a2;--bad:#ff8995}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text)}button,input,select{font:inherit}button{cursor:pointer;border:0;border-radius:12px;padding:11px 14px;font-weight:700;background:var(--accent);color:white}button.secondary{background:var(--card);color:var(--text);border:1px solid var(--line)}button:disabled{opacity:.45;cursor:not-allowed}header{padding:18px max(16px,calc((100% - 1080px)/2));display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;background:var(--card);border-bottom:1px solid var(--line)}.brand{font-weight:900;font-size:19px}.brand small{display:block;color:var(--muted);font-size:11px;letter-spacing:.13em}.wrap{max-width:1080px;margin:auto;padding:20px 15px 45px}.hero{padding:20px 0 8px}.hero h1{font-size:clamp(30px,6vw,48px);margin:0 0 8px;letter-spacing:-.04em}.hero p{color:var(--muted);line-height:1.6;margin:0}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:18px 0}.stat,.panel{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;min-width:0}.stat strong{display:block;font-size:25px}.stat span{font-size:12px;color:var(--muted)}.nav{display:flex;gap:8px;overflow:auto;padding:4px 0 14px}.nav button{white-space:nowrap}.nav button.active{outline:3px solid color-mix(in srgb,var(--accent) 25%,transparent)}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.panel h2{font-size:19px;margin:0 0 12px}.muted{color:var(--muted);font-size:13px;line-height:1.55}.filters{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:8px;margin:10px 0 14px}.filters input,.filters select{width:100%;min-width:0;padding:11px;border-radius:11px;border:1px solid var(--line);background:var(--bg);color:var(--text)}.wordcard{text-align:center;padding:24px 14px;border-radius:16px;background:var(--bg);border:1px solid var(--line);margin:12px 0}.word{font-size:clamp(30px,7vw,44px);font-weight:850;letter-spacing:-.03em}.phonetic{color:var(--muted);margin:5px 0}.translation{font-size:23px;font-weight:750;margin:14px 0 7px}.example{color:var(--muted);line-height:1.5}.row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1}.progress{height:9px;border-radius:999px;background:var(--line);overflow:hidden;margin:10px 0}.progress div{height:100%;background:var(--accent);width:0%;transition:width .2s}.list{display:grid;gap:8px;max-height:390px;overflow:auto}.item{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:11px;border:1px solid var(--line);border-radius:12px}.item strong{display:block}.item small{color:var(--muted)}.quiz-question{font-size:21px;font-weight:800;line-height:1.35;margin:18px 0}.answers{display:grid;grid-template-columns:1fr 1fr;gap:8px}.answers button{background:var(--bg);border:1px solid var(--line);color:var(--text);text-align:left}.answers button.correct{border-color:var(--good);background:color-mix(in srgb,var(--good) 12%,var(--card))}.answers button.wrong{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,var(--card))}.notice{padding:12px;border-radius:12px;background:var(--bg);color:var(--muted);font-size:12px;line-height:1.5;margin-top:12px}.hidden{display:none!important}.badge{font-size:11px;border:1px solid var(--line);border-radius:999px;padding:4px 8px;color:var(--muted)}.footer{text-align:center;color:var(--muted);font-size:12px;padding:25px 0 0}
+@media(max-width:720px){.grid{grid-template-columns:1fr}.filters{grid-template-columns:1fr 1fr}.filters input{grid-column:1/-1}.stats{gap:7px}.stat{padding:12px}.stat strong{font-size:21px}.answers{grid-template-columns:1fr}.panel{padding:14px}}
+</style>
+</head>
+<body>
+<header><div class="brand">A.S. ENGLISH TRAINER<small>LEARN A LITTLE EVERY DAY</small></div><div class="row" style="flex:0 1 auto"><button class="secondary" id="themeBtn">🌙 Тема</button><button class="secondary" id="exportBtn">Экспорт прогресса</button></div></header>
+<div class="wrap">
+<section class="hero"><h1>Английский — шаг за шагом.</h1><p>Учись по карточкам, слушай произношение, проходи тесты и отслеживай прогресс. Данные сохраняются на этом устройстве. Основные функции работают офлайн после первого открытия.</p></section>
+<div class="stats"><div class="stat"><strong id="statTotal">0</strong><span>слов в словаре</span></div><div class="stat"><strong id="statKnown">0</strong><span>слов изучено</span></div><div class="stat"><strong id="statBest">0%</strong><span>результат тестов</span></div></div>
+<nav class="nav"><button data-page="cards" class="active">🃏 Карточки</button><button data-page="dictionary" class="secondary">📚 Словарь</button><button data-page="quiz" class="secondary">📝 Тест</button><button data-page="lessons" class="secondary">🎯 Уроки</button><button data-page="progress" class="secondary">📈 Прогресс</button></nav>
+<section id="page-cards" class="grid">
+<div class="panel"><h2>Карточки слов <span class="badge" id="cardCount"></span></h2><p class="muted">Выбери тему и уровень или повторяй слова по порядку.</p>
+<div class="filters"><input id="cardSearch" placeholder="Найти слово…"><select id="cardTopic"><option value="">Все темы</option></select><select id="cardLevel"><option value="">Все уровни</option><option>A1</option><option>A2</option><option>B1</option><option>B2</option></select></div>
+<div class="wordcard"><div class="word" id="cardWord">hello</div><div class="phonetic" id="cardPhonetic">/həˈləʊ/</div><button class="secondary" id="speakBtn">🔊 Произнести</button><div class="translation hidden" id="cardTranslation">привет</div><div class="example hidden" id="cardExample">Hello, how are you?</div></div>
+<div class="row"><button class="secondary" id="showTranslation">Показать перевод</button><button id="knownBtn">✓ Знаю слово</button></div><div class="row" style="margin-top:8px"><button class="secondary" id="prevCard">← Назад</button><button class="secondary" id="nextCard">Следующее →</button></div><div class="progress"><div id="cardProgress"></div></div><p class="muted" id="cardPosition"></p></div>
+<div class="panel"><h2>Как заниматься</h2><div class="list"><div class="item"><div><strong>1. Прочитай слово</strong><small>Посмотри на произношение и послушай его.</small></div></div><div class="item"><div><strong>2. Вспомни перевод</strong><small>Открой перевод и прочитай пример.</small></div></div><div class="item"><div><strong>3. Отметь результат</strong><small>Нажми «Знаю слово», чтобы сохранить его в прогрессе.</small></div></div><div class="item"><div><strong>4. Пройди тест</strong><small>Проверь, насколько хорошо запомнил слова.</small></div></div></div><div class="notice">Произношение использует голосовой движок браузера/Android. Если звука нет, проверь громкость и наличие английского голоса в настройках телефона.</div></div></section>
+<section id="page-dictionary" class="panel hidden"><h2>Полный словарь</h2><p class="muted">Поиск работает по английскому слову и русскому переводу.</p><div class="filters"><input id="dictSearch" placeholder="Например, apple или яблоко"><select id="dictTopic"><option value="">Все темы</option></select><select id="dictLevel"><option value="">Все уровни</option><option>A1</option><option>A2</option><option>B1</option><option>B2</option></select></div><div class="list" id="dictionaryList"></div></section>
+<section id="page-quiz" class="panel hidden"><h2>Проверка знаний</h2><p class="muted">10 вопросов, четыре варианта ответа. Вопросы выбираются из словаря.</p><div id="quizStart"><button id="startQuiz">Начать тест из 10 вопросов</button></div><div id="quizArea" class="hidden"><div class="progress"><div id="quizProgress"></div></div><p class="muted" id="quizPosition"></p><div class="quiz-question" id="quizQuestion"></div><div class="answers" id="quizAnswers"></div><p id="quizFeedback" class="muted" aria-live="polite"></p><button id="quizNext" class="hidden">Следующий вопрос →</button></div><div id="quizResult" class="hidden"></div></section>
+<section id="page-lessons" class="panel hidden"><h2>12 тематических уроков</h2><p class="muted">Выбери урок, чтобы открыть карточки этой темы.</p><div class="list" id="lessonList"></div></section>
+<section id="page-progress" class="grid hidden"><div class="panel"><h2>Твой прогресс</h2><p class="muted" id="progressSummary"></p><div class="progress"><div id="knownProgress"></div></div><div class="list" id="progressTopics"></div><button class="secondary" id="resetProgress">Сбросить прогресс</button></div><div class="panel"><h2>Цель на сегодня</h2><p class="muted">Изучи хотя бы 10 слов и пройди один тест.</p><div class="wordcard"><div class="word" id="todayCount">0 / 10</div><div class="example">изучено сегодня</div></div><button id="goCards">Продолжить карточки</button></div></section>
+<div class="footer">A.S. ENGLISH TRAINER · Версия 1.0 · Словарь, тесты и прогресс хранятся локально на устройстве.</div>
+</div>
+<script>
+const raw = `
+hello|привет|/həˈləʊ/|Основы|A1|Hello, my name is Anna.
+goodbye|до свидания|/ˌɡʊdˈbaɪ/|Основы|A1|Goodbye, see you tomorrow.
+please|пожалуйста|/pliːz/|Основы|A1|Please sit down.
+thank you|спасибо|/ˈθæŋk juː/|Основы|A1|Thank you for your help.
+sorry|извини; простите|/ˈsɒri/|Основы|A1|I am sorry I am late.
+yes|да|/jes/|Основы|A1|Yes, I understand.
+no|нет|/nəʊ/|Основы|A1|No, thank you.
+maybe|может быть|/ˈmeɪbi/|Основы|A1|Maybe we can go tomorrow.
+welcome|добро пожаловать|/ˈwelkəm/|Основы|A1|Welcome to our school.
+name|имя|/neɪm/|Основы|A1|What is your name?
+friend|друг|/frend/|Люди|A1|My friend is kind.
+family|семья|/ˈfæməli/|Люди|A1|My family is big.
+mother|мать|/ˈmʌðə/|Люди|A1|My mother is a teacher.
+father|отец|/ˈfɑːðə/|Люди|A1|My father works in a shop.
+sister|сестра|/ˈsɪstə/|Люди|A1|I have one sister.
+brother|брат|/ˈbrʌðə/|Люди|A1|My brother is younger.
+parents|родители|/ˈpeərənts/|Люди|A1|My parents are at home.
+child|ребёнок|/tʃaɪld/|Люди|A1|The child is happy.
+people|люди|/ˈpiːpl/|Люди|A1|Many people live here.
+teacher|учитель|/ˈtiːtʃə/|Школа|A1|Our teacher is helpful.
+student|студент; ученик|/ˈstjuːdnt/|Школа|A1|I am a student.
+school|школа|/skuːl/|Школа|A1|The school is near my home.
+university|университет|/ˌjuːnɪˈvɜːsəti/|Школа|A2|She studies at university.
+book|книга|/bʊk/|Школа|A1|I read a book every day.
+notebook|тетрадь|/ˈnəʊtbʊk/|Школа|A1|My notebook is blue.
+pen|ручка|/pen/|Школа|A1|Can I borrow your pen?
+pencil|карандаш|/ˈpensl/|Школа|A1|Write your name in pencil.
+lesson|урок|/ˈlesn/|Школа|A1|The lesson starts at nine.
+question|вопрос|/ˈkwestʃən/|Школа|A1|I have a question.
+answer|ответ|/ˈɑːnsə/|Школа|A1|Your answer is correct.
+learn|учить; изучать|/lɜːn/|Учёба|A1|I learn English at home.
+study|учиться; изучать|/ˈstʌdi/|Учёба|A1|I study every evening.
+read|читать|/riːd/|Учёба|A1|Please read the text.
+write|писать|/raɪt/|Учёба|A1|Write three sentences.
+speak|говорить|/spiːk/|Учёба|A1|Can you speak English?
+listen|слушать|/ˈlɪsn/|Учёба|A1|Listen to the dialogue.
+understand|понимать|/ˌʌndəˈstænd/|Учёба|A2|I understand the rule.
+remember|помнить|/rɪˈmembə/|Учёба|A2|Remember this word.
+practice|практиковаться|/ˈpræktɪs/|Учёба|A2|Practice speaking every day.
+improve|улучшать|/ɪmˈpruːv/|Учёба|A2|I want to improve my English.
+apple|яблоко|/ˈæpl/|Еда|A1|I eat an apple every morning.
+bread|хлеб|/bred/|Еда|A1|We need some bread.
+water|вода|/ˈwɔːtə/|Еда|A1|Drink more water.
+milk|молоко|/mɪlk/|Еда|A1|She drinks milk.
+tea|чай|/tiː/|Еда|A1|Would you like some tea?
+coffee|кофе|/ˈkɒfi/|Еда|A1|He drinks coffee at breakfast.
+rice|рис|/raɪs/|Еда|A1|We eat rice for lunch.
+meat|мясо|/miːt/|Еда|A1|I do not eat meat.
+fish|рыба|/fɪʃ/|Еда|A1|They cook fish for dinner.
+egg|яйцо|/eɡ/|Еда|A1|I have an egg for breakfast.
+cheese|сыр|/tʃiːz/|Еда|A1|Would you like cheese?
+fruit|фрукты|/fruːt/|Еда|A1|Fruit is good for you.
+vegetable|овощ|/ˈvedʒtəbl/|Еда|A1|A carrot is a vegetable.
+breakfast|завтрак|/ˈbrekfəst/|Еда|A1|Breakfast is ready.
+lunch|обед|/lʌntʃ/|Еда|A1|We have lunch at noon.
+dinner|ужин|/ˈdɪnə/|Еда|A1|Dinner is at seven.
+hungry|голодный|/ˈhʌŋɡri/|Еда|A1|I am hungry now.
+thirsty|испытывающий жажду|/ˈθɜːsti/|Еда|A1|She is thirsty after running.
+delicious|вкусный|/dɪˈlɪʃəs/|Еда|A2|This soup is delicious.
+kitchen|кухня|/ˈkɪtʃɪn/|Дом|A1|The kitchen is clean.
+house|дом|/haʊs/|Дом|A1|Their house is large.
+room|комната|/ruːm/|Дом|A1|My room is small.
+door|дверь|/dɔː/|Дом|A1|Please close the door.
+window|окно|/ˈwɪndəʊ/|Дом|A1|Open the window, please.
+table|стол|/ˈteɪbl/|Дом|A1|The keys are on the table.
+chair|стул|/tʃeə/|Дом|A1|Sit on this chair.
+bed|кровать|/bed/|Дом|A1|The cat is on the bed.
+floor|пол; этаж|/flɔː/|Дом|A1|The floor is clean.
+wall|стена|/wɔːl/|Дом|A1|There is a clock on the wall.
+light|свет|/laɪt/|Дом|A1|Turn on the light.
+key|ключ|/kiː/|Дом|A1|I cannot find my key.
+phone|телефон|/fəʊn/|Технологии|A1|My phone is new.
+computer|компьютер|/kəmˈpjuːtə/|Технологии|A1|I use a computer at work.
+screen|экран|/skriːn/|Технологии|A2|The screen is bright.
+keyboard|клавиатура|/ˈkiːbɔːd/|Технологии|A2|The keyboard is wireless.
+internet|интернет|/ˈɪntənet/|Технологии|A1|The internet is slow today.
+website|веб-сайт|/ˈwebsaɪt/|Технологии|A2|I made a website.
+file|файл|/faɪl/|Технологии|A1|Save the file here.
+download|скачивать|/ˌdaʊnˈləʊd/|Технологии|A2|Download the document.
+upload|загружать|/ˈʌpləʊd/|Технологии|A2|Upload your photo.
+password|пароль|/ˈpɑːswɜːd/|Технологии|A2|Never share your password.
+morning|утро|/ˈmɔːnɪŋ/|Время|A1|Good morning, everyone.
+afternoon|день; после полудня|/ˌɑːftəˈnuːn/|Время|A1|See you this afternoon.
+evening|вечер|/ˈiːvnɪŋ/|Время|A1|We walk in the evening.
+night|ночь|/naɪt/|Время|A1|Good night.
+today|сегодня|/təˈdeɪ/|Время|A1|I am busy today.
+tomorrow|завтра|/təˈmɒrəʊ/|Время|A1|We will meet tomorrow.
+yesterday|вчера|/ˈjestədeɪ/|Время|A1|I was at home yesterday.
+week|неделя|/wiːk/|Время|A1|A week has seven days.
+month|месяц|/mʌnθ/|Время|A1|Next month is November.
+year|год|/jɪə/|Время|A1|This year is important.
+hour|час|/ˈaʊə/|Время|A1|Wait for one hour.
+minute|минута|/ˈmɪnɪt/|Время|A1|Give me a minute.
+early|рано|/ˈɜːli/|Время|A1|I get up early.
+late|поздно; опоздавший|/leɪt/|Время|A1|Do not be late.
+always|всегда|/ˈɔːlweɪz/|Время|A2|She always helps me.
+often|часто|/ˈɒfn/|Время|A2|We often play football.
+sometimes|иногда|/ˈsʌmtaɪmz/|Время|A2|I sometimes read at night.
+never|никогда|/ˈnevə/|Время|A2|I never smoke.
+now|сейчас|/naʊ/|Время|A1|I am busy now.
+happy|счастливый|/ˈhæpi/|Чувства|A1|The children are happy.
+sad|грустный|/sæd/|Чувства|A1|He feels sad today.
+angry|сердитый|/ˈæŋɡri/|Чувства|A1|She is angry with me.
+tired|уставший|/ˈtaɪəd/|Чувства|A1|I am tired after work.
+excited|взволнованный; радостный|/ɪkˈsaɪtɪd/|Чувства|A2|We are excited about the trip.
+afraid|испуганный|/əˈfreɪd/|Чувства|A2|The child is afraid of dogs.
+worried|обеспокоенный|/ˈwʌrid/|Чувства|A2|I am worried about the exam.
+surprised|удивлённый|/səˈpraɪzd/|Чувства|A2|She was surprised by the gift.
+kind|добрый|/kaɪnd/|Характер|A1|Our neighbour is kind.
+polite|вежливый|/pəˈlaɪt/|Характер|A2|Be polite to everyone.
+honest|честный|/ˈɒnɪst/|Характер|A2|He is an honest person.
+brave|смелый|/breɪv/|Характер|A2|The brave girl helped us.
+careful|осторожный; внимательный|/ˈkeəfl/|Характер|A2|Be careful on the road.
+clever|умный|/ˈklevə/|Характер|A1|That is a clever idea.
+friendly|дружелюбный|/ˈfrendli/|Характер|A1|The dog is friendly.
+patient|терпеливый|/ˈpeɪʃnt/|Характер|A2|A good teacher is patient.
+hard-working|трудолюбивый|/ˌhɑːd ˈwɜːkɪŋ/|Характер|B1|She is hard-working.
+confident|уверенный в себе|/ˈkɒnfɪdənt/|Характер|B1|He feels confident now.
+beautiful|красивый|/ˈbjuːtɪfl/|Описание|A1|What a beautiful day!
+important|важный|/ɪmˈpɔːtnt/|Описание|A1|Education is important.
+different|разный; другой|/ˈdɪfrənt/|Описание|A1|We have different opinions.
+interesting|интересный|/ˈɪntrəstɪŋ/|Описание|A1|This book is interesting.
+difficult|трудный|/ˈdɪfɪkəlt/|Описание|A1|The question is difficult.
+easy|лёгкий; простой|/ˈiːzi/|Описание|A1|This exercise is easy.
+possible|возможный|/ˈpɒsəbl/|Описание|A2|Is it possible to help?
+necessary|необходимый|/ˈnesəsəri/|Описание|A2|Sleep is necessary.
+ready|готовый|/ˈredi/|Описание|A1|I am ready to start.
+busy|занятый|/ˈbɪzi/|Описание|A1|My mother is busy.
+free|свободный; бесплатный|/friː/|Описание|A1|Are you free this evening?
+expensive|дорогой|/ɪkˈspensɪv/|Покупки|A1|This phone is expensive.
+cheap|дешёвый|/tʃiːp/|Покупки|A1|The ticket is cheap.
+price|цена|/praɪs/|Покупки|A1|What is the price?
+money|деньги|/ˈmʌni/|Покупки|A1|I need some money.
+shop|магазин|/ʃɒp/|Покупки|A1|The shop opens at eight.
+market|рынок|/ˈmɑːkɪt/|Покупки|A1|We buy fruit at the market.
+buy|покупать|/baɪ/|Покупки|A1|I want to buy a book.
+sell|продавать|/sel/|Покупки|A1|They sell fresh bread.
+pay|платить|/peɪ/|Покупки|A1|Can I pay by card?
+change|сдача; менять|/tʃeɪndʒ/|Покупки|A1|Keep the change.
+receipt|чек|/rɪˈsiːt/|Покупки|A2|Please keep the receipt.
+city|город|/ˈsɪti/|Город|A1|This city is beautiful.
+village|деревня|/ˈvɪlɪdʒ/|Город|A1|My grandparents live in a village.
+street|улица|/striːt/|Город|A1|Our street is quiet.
+road|дорога|/rəʊd/|Город|A1|The road is long.
+bridge|мост|/brɪdʒ/|Город|A1|We crossed the bridge.
+building|здание|/ˈbɪldɪŋ/|Город|A1|That building is tall.
+hospital|больница|/ˈhɒspɪtl/|Город|A1|The hospital is nearby.
+bank|банк|/bæŋk/|Город|A1|I need to go to the bank.
+library|библиотека|/ˈlaɪbrəri/|Город|A1|The library is quiet.
+station|станция; вокзал|/ˈsteɪʃn/|Город|A1|Meet me at the station.
+airport|аэропорт|/ˈeəpɔːt/|Путешествия|A1|We arrived at the airport.
+hotel|отель|/həʊˈtel/|Путешествия|A1|Our hotel is near the sea.
+ticket|билет|/ˈtɪkɪt/|Путешествия|A1|I bought a bus ticket.
+passport|паспорт|/ˈpɑːspɔːt/|Путешествия|A1|Do not forget your passport.
+luggage|багаж|/ˈlʌɡɪdʒ/|Путешествия|A2|My luggage is heavy.
+journey|путешествие; поездка|/ˈdʒɜːni/|Путешествия|A2|The journey takes two hours.
+travel|путешествовать|/ˈtrævl/|Путешествия|A1|I want to travel abroad.
+arrive|прибывать|/əˈraɪv/|Путешествия|A2|We arrive at noon.
+leave|уходить; уезжать|/liːv/|Путешествия|A1|The train leaves at six.
+visit|посещать|/ˈvɪzɪt/|Путешествия|A1|I want to visit London.
+map|карта|/mæp/|Путешествия|A1|Look at the map.
+north|север|/nɔːθ/|Направления|A2|The city is north of here.
+south|юг|/saʊθ/|Направления|A2|They live in the south.
+east|восток|/iːst/|Направления|A2|The sun rises in the east.
+west|запад|/west/|Направления|A2|The wind comes from the west.
+left|левый; налево|/left/|Направления|A1|Turn left at the corner.
+right|правый; направо|/raɪt/|Направления|A1|Turn right here.
+straight|прямо|/streɪt/|Направления|A1|Go straight ahead.
+near|близко; рядом|/nɪə/|Направления|A1|The school is near my home.
+far|далеко|/fɑː/|Направления|A1|The station is far away.
+behind|позади; за|/bɪˈhaɪnd/|Направления|A1|The garden is behind the house.
+between|между|/bɪˈtwiːn/|Направления|A1|Sit between your friends.
+weather|погода|/ˈweðə/|Природа|A1|The weather is nice today.
+sun|солнце|/sʌn/|Природа|A1|The sun is bright.
+rain|дождь|/reɪn/|Природа|A1|The rain stopped.
+snow|снег|/snəʊ/|Природа|A1|The snow is white.
+wind|ветер|/wɪnd/|Природа|A1|The wind is strong.
+cloud|облако|/klaʊd/|Природа|A1|A dark cloud is coming.
+sky|небо|/skaɪ/|Природа|A1|The sky is blue.
+mountain|гора|/ˈmaʊntən/|Природа|A1|The mountain is high.
+river|река|/ˈrɪvə/|Природа|A1|The river is cold.
+lake|озеро|/leɪk/|Природа|A1|We walked around the lake.
+tree|дерево|/triː/|Природа|A1|There is a tree in the garden.
+flower|цветок|/ˈflaʊə/|Природа|A1|This flower smells sweet.
+forest|лес|/ˈfɒrɪst/|Природа|A1|Many animals live in the forest.
+animal|животное|/ˈænɪml/|Животные|A1|A cat is an animal.
+dog|собака|/dɒɡ/|Животные|A1|The dog is sleeping.
+cat|кошка|/kæt/|Животные|A1|My cat likes milk.
+bird|птица|/bɜːd/|Животные|A1|A bird is in the tree.
+horse|лошадь|/hɔːs/|Животные|A1|The horse runs fast.
+cow|корова|/kaʊ/|Животные|A1|The cow eats grass.
+sheep|овца|/ʃiːp/|Животные|A1|The sheep is white.
+rabbit|кролик|/ˈræbɪt/|Животные|A1|The rabbit is small.
+health|здоровье|/helθ/|Здоровье|A1|Health is very important.
+doctor|врач|/ˈdɒktə/|Здоровье|A1|The doctor is kind.
+nurse|медсестра; медбрат|/nɜːs/|Здоровье|A1|The nurse helped me.
+medicine|лекарство|/ˈmedsn/|Здоровье|A2|Take your medicine as directed.
+pain|боль|/peɪn/|Здоровье|A1|I have pain in my arm.
+headache|головная боль|/ˈhedeɪk/|Здоровье|A2|I have a headache.
+fever|жар; высокая температура|/ˈfiːvə/|Здоровье|A2|He has a fever.
+exercise|упражнение; тренироваться|/ˈeksəsaɪz/|Здоровье|A1|Exercise every day.
+sleep|спать; сон|/sliːp/|Здоровье|A1|I need more sleep.
+healthy|здоровый|/ˈhelθi/|Здоровье|A1|Fruit is healthy.
+work|работа; работать|/wɜːk/|Работа|A1|I work from Monday to Friday.
+job|работа; должность|/dʒɒb/|Работа|A1|She has a new job.
+office|офис|/ˈɒfɪs/|Работа|A1|The office is on the second floor.
+meeting|встреча; собрание|/ˈmiːtɪŋ/|Работа|A2|The meeting starts soon.
+company|компания|/ˈkʌmpəni/|Работа|A1|He works for a small company.
+manager|менеджер; руководитель|/ˈmænɪdʒə/|Работа|A2|The manager is busy.
+salary|зарплата|/ˈsæləri/|Работа|A2|They pay a monthly salary.
+business|бизнес; дело|/ˈbɪznəs/|Работа|A2|She wants to start a business.
+skill|навык|/skɪl/|Работа|A2|Communication is an important skill.
+goal|цель|/ɡəʊl/|Работа|A2|My goal is to speak English.
+create|создавать|/kriˈeɪt/|Действия|A2|We create useful apps.
+build|строить; создавать|/bɪld/|Действия|A1|They build a new school.
+choose|выбирать|/tʃuːz/|Действия|A1|Choose the correct answer.
+decide|решать; принимать решение|/dɪˈsaɪd/|Действия|A2|I need to decide today.
+explain|объяснять|/ɪkˈspleɪn/|Действия|A2|Can you explain this rule?
+help|помогать; помощь|/help/|Действия|A1|Can you help me?
+need|нуждаться; нуждаться в|/niːd/|Действия|A1|I need your advice.
+want|хотеть|/wɒnt/|Действия|A1|I want to learn.
+hope|надеяться; надежда|/həʊp/|Действия|A2|I hope you feel better.
+try|пытаться; пробовать|/traɪ/|Действия|A1|Try again, please.
+finish|заканчивать|/ˈfɪnɪʃ/|Действия|A1|Finish your homework.
+start|начинать|/stɑːt/|Действия|A1|Let's start the lesson.
+continue|продолжать|/kənˈtɪnjuː/|Действия|A2|Continue reading, please.
+change|изменять; изменение|/tʃeɪndʒ/|Действия|A1|Things can change quickly.
+develop|развивать; разрабатывать|/dɪˈveləp/|Действия|B1|We develop new skills.
+solve|решать (задачу)|/sɒlv/|Действия|A2|Let's solve this problem.
+problem|проблема; задача|/ˈprɒbləm/|Учёба|A1|We have a problem.
+solution|решение|/səˈluːʃn/|Учёба|A2|This is a simple solution.
+reason|причина; рассуждать|/ˈriːzn/|Учёба|A2|What is the reason?
+result|результат|/rɪˈzʌlt/|Учёба|A1|The result is good.
+idea|идея|/aɪˈdɪə/|Учёба|A1|That is a great idea.
+example|пример|/ɪɡˈzɑːmpl/|Учёба|A1|Give me an example.
+language|язык|/ˈlæŋɡwɪdʒ/|Учёба|A1|English is a useful language.
+word|слово|/wɜːd/|Учёба|A1|Learn five words a day.
+sentence|предложение|/ˈsentəns/|Учёба|A1|Write a full sentence.
+grammar|грамматика|/ˈɡræmə/|Учёба|A2|Grammar helps you write clearly.
+pronunciation|произношение|/prəˌnʌnsiˈeɪʃn/|Учёба|B1|Her pronunciation is clear.
+translation|перевод|/trænzˈleɪʃn/|Учёба|A2|Check the translation.
+culture|культура|/ˈkʌltʃə/|Культура|A2|Language and culture are connected.
+history|история|/ˈhɪstri/|Культура|A1|I enjoy learning history.
+music|музыка|/ˈmjuːzɪk/|Культура|A1|I listen to music every day.
+movie|фильм|/ˈmuːvi/|Культура|A1|We watched a good movie.
+story|рассказ; история|/ˈstɔːri/|Культура|A1|Tell me a story.
+art|искусство|/ɑːt/|Культура|A1|Art can express feelings.
+dance|танцевать; танец|/dɑːns/|Культура|A1|They dance very well.
+sport|спорт|/spɔːt/|Спорт|A1|Sport keeps us active.
+football|футбол|/ˈfʊtbɔːl/|Спорт|A1|We play football after class.
+run|бегать|/rʌn/|Спорт|A1|I run in the park.
+walk|ходить пешком; гулять|/wɔːk/|Спорт|A1|Let's walk to school.
+swim|плавать|/swɪm/|Спорт|A1|Can you swim?
+win|побеждать|/wɪn/|Спорт|A1|Our team wants to win.
+lose|проигрывать; терять|/luːz/|Спорт|A1|Sometimes we lose a game.
+team|команда|/tiːm/|Спорт|A1|Our team works together.
+strong|сильный|/strɒŋ/|Описание|A1|She is strong and healthy.
+fast|быстрый; быстро|/fɑːst/|Описание|A1|That runner is fast.
+slow|медленный; медленно|/sləʊ/|Описание|A1|The internet is slow.
+high|высокий; высоко|/haɪ/|Описание|A1|The mountain is high.
+low|низкий; низко|/ləʊ/|Описание|A1|The table is too low.
+large|большой|/lɑːdʒ/|Описание|A1|They live in a large house.
+small|маленький|/smɔːl/|Описание|A1|I have a small bag.
+young|молодой|/jʌŋ/|Описание|A1|The young man is a student.
+old|старый; пожилой|/əʊld/|Описание|A1|This is an old building.
+new|новый|/njuː/|Описание|A1|I bought a new phone.
+modern|современный|/ˈmɒdn/|Описание|A2|This is a modern library.
+safe|безопасный|/seɪf/|Описание|A2|Keep your password safe.
+dangerous|опасный|/ˈdeɪndʒərəs/|Описание|A2|It is dangerous to cross here.
+care|забота; заботиться|/keə/|Чувства|A2|Take care of yourself.
+respect|уважение; уважать|/rɪˈspekt/|Характер|A2|We respect our teachers.
+success|успех|/səkˈses/|Работа|A2|Practice brings success.
+successful|успешный|/səkˈsesfl/|Работа|B1|She is a successful student.
+future|будущее|/ˈfjuːtʃə/|Время|A2|Think about your future.
+past|прошлое|/pɑːst/|Время|A2|We learned about the past.
+present|настоящее; подарок|/ˈpreznt/|Время|A2|Live in the present.
+experience|опыт|/ɪkˈspɪəriəns/|Работа|B1|Experience helps us improve.
+opportunity|возможность|/ˌɒpəˈtjuːnəti/|Работа|B1|This is a good opportunity.
+challenge|сложная задача; вызов|/ˈtʃælɪndʒ/|Работа|B1|Every challenge teaches us something.
+knowledge|знание|/ˈnɒlɪdʒ/|Учёба|B1|Knowledge gives you confidence.
+advice|совет|/ədˈvaɪs/|Учёба|B1|Thank you for your advice.
+information|информация|/ˌɪnfəˈmeɪʃn/|Учёба|A2|I need more information.
+available|доступный; имеющийся|/əˈveɪləbl/|Описание|B1|The service is available online.
+environment|окружающая среда|/ɪnˈvaɪrənmənt/|Природа|B1|We must protect the environment.
+pollution|загрязнение|/pəˈluːʃn/|Природа|B1|Air pollution is a serious problem.
+recycle|перерабатывать|/ˌriːˈsaɪkl/|Природа|B1|We recycle paper and plastic.
+energy|энергия|/ˈenədʒi/|Природа|A2|Solar energy is clean.
+resource|ресурс|/rɪˈsɔːs/|Природа|B1|Water is a valuable resource.
+community|сообщество; община|/kəˈmjuːnəti/|Люди|B1|Our community helps children.
+volunteer|волонтёр; доброволец|/ˌvɒlənˈtɪə/|Люди|B1|I volunteer on weekends.
+support|поддержка; поддерживать|/səˈpɔːt/|Люди|A2|My family supports me.
+share|делиться; общий|/ʃeə/|Люди|A1|Share your ideas with us.
+trust|доверие; доверять|/trʌst/|Люди|A2|Trust takes time to build.
+relationship|отношения|/rɪˈleɪʃnʃɪp/|Люди|B1|Good relationships need respect.
+communicate|общаться|/kəˈmjuːnɪkeɪt/|Работа|B1|We communicate by email.
+opinion|мнение|/əˈpɪnjən/|Учёба|A2|What is your opinion?
+agree|соглашаться|/əˈɡriː/|Общение|A2|I agree with your idea.
+disagree|не соглашаться|/ˌdɪsəˈɡriː/|Общение|A2|We can disagree politely.
+suggest|предлагать|/səˈdʒest/|Общение|A2|Can you suggest a book?
+recommend|рекомендовать|/ˌrekəˈmend/|Общение|B1|I recommend this course.
+explain|объяснять|/ɪkˈspleɪn/|Общение|A2|Please explain your answer.
+promise|обещать; обещание|/ˈprɒmɪs/|Общение|A2|I promise to help.
+invite|приглашать|/ɪnˈvaɪt/|Общение|A2|I want to invite my friend.
+celebrate|праздновать|/ˈselɪbreɪt/|Культура|A2|We celebrate Navruz in spring.
+holiday|праздник; каникулы|/ˈhɒlədeɪ/|Культура|A1|The holiday starts tomorrow.
+tradition|традиция|/trəˈdɪʃn/|Культура|B1|This is an old tradition.
+festival|фестиваль; праздник|/ˈfestɪvl/|Культура|A2|The festival attracts visitors.
+gift|подарок|/ɡɪft/|Культура|A1|I bought a gift for my sister.
+`;
+const words=raw.trim().split(/\n/).map((line,i)=>{const [en,ru,phon,topic,level,example]=line.split("|");return {id:i,en,ru,phon:phon||"",topic:topic||"Основы",level:level||"A1",example:example||en+" is useful."}});
+const topics=[...new Set(words.map(w=>w.topic))];
+const lessonNames=["Приветствия и знакомство","Семья и люди","Школа и учёба","Еда и напитки","Дом и предметы","Время и распорядок","Чувства и характер","Город и места","Путешествия и направления","Природа и животные","Здоровье и спорт","Работа, технологии и развитие"];
+const lessonTopics=[["Основы"],["Люди"],["Школа","Учёба"],["Еда"],["Дом"],["Время"],["Чувства","Характер","Описание"],["Город"],["Путешествия","Направления"],["Природа","Животные"],["Здоровье","Спорт"],["Работа","Технологии","Действия","Культура","Покупки","Общение"]];
+const storeKey="asEnglishTrainerV1";
+let saved={known:[],best:0,tests:0,today:[],lastDay:""};
+try{saved={...saved,...JSON.parse(localStorage.getItem(storeKey)||"{}")}}catch(e){}
+let cardIndex=0, filtered=[...words], quiz=[],quizIndex=0,quizScore=0,quizAnswered=false;
+const $=id=>document.getElementById(id);
+function persist(){localStorage.setItem(storeKey,JSON.stringify(saved));renderStats()}
+function todayKey(){return new Date().toISOString().slice(0,10)}
+function syncToday(){const d=todayKey();if(saved.lastDay!==d){saved.lastDay=d;saved.today=[];persist()}}
+function renderStats(){$("statTotal").textContent=words.length;$("statKnown").textContent=saved.known.length;$("statBest").textContent=(saved.best||0)+"%";$("todayCount").textContent=(saved.today||[]).length+" / 10"}
+function fillTopics(){for(const id of ["cardTopic","dictTopic"]){const el=$(id);topics.forEach(t=>{const o=document.createElement("option");o.value=t;o.textContent=t;el.append(o)})}}
+function speak(text){if(!("speechSynthesis" in window)){alert("Голосовое произношение не поддерживается этим браузером.");return}speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang="en-US";u.rate=.85;speechSynthesis.speak(u)}
+function setPage(page){document.querySelectorAll("[id^='page-']").forEach(el=>el.classList.toggle("hidden",el.id!=="page-"+page));document.querySelectorAll(".nav button").forEach(b=>{const active=b.dataset.page===page;b.classList.toggle("active",active);b.classList.toggle("secondary",!active)});if(page==="dictionary")renderDictionary();if(page==="lessons")renderLessons();if(page==="progress")renderProgress()}
+document.querySelectorAll(".nav button").forEach(b=>b.addEventListener("click",()=>setPage(b.dataset.page)));
+function applyCardFilters(){const q=$("cardSearch").value.trim().toLowerCase(),topic=$("cardTopic").value,level=$("cardLevel").value;filtered=words.filter(w=>(!q||(w.en+" "+w.ru).toLowerCase().includes(q))&&(!topic||w.topic===topic)&&(!level||w.level===level));cardIndex=0;renderCard()}
+function renderCard(){if(!filtered.length){$("cardWord").textContent="Ничего не найдено";$("cardPhonetic").textContent="Измени поиск или фильтр";$("cardTranslation").classList.add("hidden");$("cardExample").classList.add("hidden");$("cardPosition").textContent="0 карточек";$("cardCount").textContent="0";$("cardProgress").style.width="0%";return}const w=filtered[cardIndex];$("cardWord").textContent=w.en;$("cardPhonetic").textContent=w.phon;$("cardTranslation").textContent=w.ru;$("cardExample").textContent=w.example;$("cardTranslation").classList.add("hidden");$("cardExample").classList.add("hidden");$("showTranslation").textContent="Показать перевод";$("knownBtn").textContent=saved.known.includes(w.id)?"✓ Уже изучено":"✓ Знаю слово";$("cardCount").textContent=filtered.length+" слов";$("cardPosition").textContent="Карточка "+(cardIndex+1)+" из "+filtered.length+" · "+w.topic+" · "+w.level;$("cardProgress").style.width=((cardIndex+1)/filtered.length*100)+"%"}
+$("cardSearch").addEventListener("input",applyCardFilters);$("cardTopic").addEventListener("change",applyCardFilters);$("cardLevel").addEventListener("change",applyCardFilters);
+$("showTranslation").onclick=()=>{const hidden=$("cardTranslation").classList.contains("hidden");$("cardTranslation").classList.toggle("hidden",!hidden);$("cardExample").classList.toggle("hidden",!hidden);$("showTranslation").textContent=hidden?"Скрыть перевод":"Показать перевод"};
+$("speakBtn").onclick=()=>{if(filtered.length)speak(filtered[cardIndex].en)};
+$("prevCard").onclick=()=>{if(filtered.length){cardIndex=(cardIndex-1+filtered.length)%filtered.length;renderCard()}};
+$("nextCard").onclick=()=>{if(filtered.length){cardIndex=(cardIndex+1)%filtered.length;renderCard()}};
+$("knownBtn").onclick=()=>{if(!filtered.length)return;const id=filtered[cardIndex].id;if(!saved.known.includes(id)){saved.known.push(id);syncToday();if(!saved.today.includes(id))saved.today.push(id);persist()}renderCard()};
+function renderDictionary(){const q=$("dictSearch").value.trim().toLowerCase(),topic=$("dictTopic").value,level=$("dictLevel").value;const matches=words.filter(w=>(!q||(w.en+" "+w.ru).toLowerCase().includes(q))&&(!topic||w.topic===topic)&&(!level||w.level===level));$("dictionaryList").innerHTML="";matches.forEach(w=>{const el=document.createElement("div");el.className="item";const left=document.createElement("div");left.innerHTML="<strong></strong><small></small>";left.children[0].textContent=w.en+" — "+w.ru;left.children[1].textContent=w.topic+" · "+w.level+" · "+w.phon;const btn=document.createElement("button");btn.className="secondary";btn.textContent="🔊";btn.onclick=()=>speak(w.en);el.append(left,btn);$("dictionaryList").append(el)});if(!matches.length)$("dictionaryList").textContent="Ничего не найдено."}
+["dictSearch","dictTopic","dictLevel"].forEach(id=>$(id).addEventListener(id==="dictSearch"?"input":"change",renderDictionary));
+function renderLessons(){$("lessonList").innerHTML="";lessonNames.forEach((name,i)=>{const subset=words.filter(w=>lessonTopics[i].includes(w.topic));const el=document.createElement("div");el.className="item";const left=document.createElement("div");left.innerHTML="<strong></strong><small></small>";left.children[0].textContent=(i+1)+". "+name;left.children[1].textContent=subset.length+" слов · "+lessonTopics[i].join(", ");const btn=document.createElement("button");btn.textContent="Учить";btn.onclick=()=>{const topicSet=lessonTopics[i];$("cardSearch").value="";$("cardTopic").value=topics.includes(topicSet[0])?topicSet[0]:"";$("cardLevel").value="";if(topicSet.length>1){filtered=words.filter(w=>topicSet.includes(w.topic));cardIndex=0;renderCard()}else applyCardFilters();setPage("cards")};el.append(left,btn);$("lessonList").append(el)})}
+function renderProgress(){$("progressSummary").textContent="Изучено "+saved.known.length+" из "+words.length+" слов ("+Math.round(saved.known.length/words.length*100)+"%). Пройдено тестов: "+(saved.tests||0)+". Лучший результат: "+(saved.best||0)+"%.";$("knownProgress").style.width=(saved.known.length/words.length*100)+"%";const counts={};words.forEach(w=>{counts[w.topic]??={all:0,known:0};counts[w.topic].all++;if(saved.known.includes(w.id))counts[w.topic].known++});$("progressTopics").innerHTML="";Object.entries(counts).forEach(([topic,v])=>{const el=document.createElement("div");el.className="item";el.innerHTML="<div><strong></strong><small></small></div>";el.querySelector("strong").textContent=topic;el.querySelector("small").textContent=v.known+" / "+v.all+" слов";$("progressTopics").append(el)});renderStats()}
+function startQuiz(){quiz=[...words].sort(()=>Math.random()-.5).slice(0,Math.min(10,words.length));quizIndex=0;quizScore=0;quizAnswered=false;$("quizStart").classList.add("hidden");$("quizResult").classList.add("hidden");$("quizArea").classList.remove("hidden");renderQuestion()}
+function renderQuestion(){const w=quiz[quizIndex];$("quizPosition").textContent="Вопрос "+(quizIndex+1)+" из "+quiz.length;$("quizProgress").style.width=(quizIndex/quiz.length*100)+"%";$("quizQuestion").textContent="Как переводится: "+w.en+"?";$("quizFeedback").textContent="";$("quizNext").classList.add("hidden");quizAnswered=false;const distractors=words.filter(x=>x.id!==w.id).sort(()=>Math.random()-.5).slice(0,3);const opts=[w,...distractors].sort(()=>Math.random()-.5);$("quizAnswers").innerHTML="";opts.forEach(opt=>{const b=document.createElement("button");b.textContent=opt.ru;b.onclick=()=>answerQuiz(b,opt.id===w.id,w);$("quizAnswers").append(b)})}
+function answerQuiz(button,correct,w){if(quizAnswered)return;quizAnswered=true;if(correct){quizScore++;button.classList.add("correct");$("quizFeedback").textContent="Верно! "+w.en+" — "+w.ru}else{button.classList.add("wrong");[...$("quizAnswers").children].forEach(b=>{if(b.textContent===w.ru)b.classList.add("correct")});$("quizFeedback").textContent="Правильный ответ: "+w.ru}document.querySelectorAll("#quizAnswers button").forEach(b=>b.disabled=true);$("quizNext").classList.remove("hidden");$("quizNext").textContent=quizIndex===quiz.length-1?"Показать результат":"Следующий вопрос →"}
+$("startQuiz").onclick=startQuiz;$("quizNext").onclick=()=>{if(quizIndex<quiz.length-1){quizIndex++;renderQuestion()}else{const pct=Math.round(quizScore/quiz.length*100);saved.best=Math.max(saved.best||0,pct);saved.tests=(saved.tests||0)+1;persist();$("quizArea").classList.add("hidden");$("quizResult").classList.remove("hidden");$("quizResult").innerHTML="";const h=document.createElement("div");h.className="wordcard";h.innerHTML="<div class='word'>"+pct+"%</div><div class='translation'>"+quizScore+" из "+quiz.length+" правильных ответов</div><div class='example'>"+(pct>=80?"Отлично! Продолжай в том же духе.":pct>=50?"Хороший старт. Повтори слова и попробуй снова.":"Повтори карточки и пройди тест ещё раз.")+"</div>";const b=document.createElement("button");b.textContent="Пройти ещё раз";b.onclick=startQuiz;$("quizResult").append(h,b)}};
+$("resetProgress").onclick=()=>{if(confirm("Точно сбросить изученные слова и результаты тестов?")){saved={known:[],best:0,tests:0,today:[],lastDay:todayKey()};persist();renderProgress();renderCard()}};
+$("goCards").onclick=()=>setPage("cards");
+$("themeBtn").onclick=()=>{const dark=document.documentElement.dataset.theme!=="dark";document.documentElement.dataset.theme=dark?"dark":"light";localStorage.setItem("asEnglishTheme",dark?"dark":"light");$("themeBtn").textContent=dark?"☀️ Тема":"🌙 Тема"};
+$("exportBtn").onclick=()=>{const blob=new Blob([JSON.stringify({saved,exportedAt:new Date().toISOString()},null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="english-trainer-progress.json";a.click();URL.revokeObjectURL(a.href)};
+fillTopics();syncToday();if(localStorage.getItem("asEnglishTheme")==="dark"){document.documentElement.dataset.theme="dark";$("themeBtn").textContent="☀️ Тема"}renderStats();renderCard();renderLessons();
+</script>
+</body>
+</html>
