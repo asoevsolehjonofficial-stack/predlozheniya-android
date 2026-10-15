@@ -76,6 +76,10 @@ jobs:
         working-directory: backend
         run: npm install --no-audit --no-fund
 
+      - name: Bootstrap Worker so secret uploads have a deployment target
+        working-directory: backend
+        run: npx wrangler deploy --config wrangler.toml
+
       - name: Update Worker secrets
         working-directory: backend
         env:
@@ -87,6 +91,6 @@ jobs:
           printf '%s' "$TURNSTILE_SECRET" | npx wrangler secret put TURNSTILE_SECRET --config wrangler.toml
           printf '%s' "$BUILD_SOURCE_SECRET" | npx wrangler secret put BUILD_SOURCE_SECRET --config wrangler.toml
 
-      - name: Deploy Worker
+      - name: Finalize Worker deployment
         working-directory: backend
         run: npx wrangler deploy --config wrangler.toml
