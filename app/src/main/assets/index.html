@@ -227,16 +227,18 @@ $('buildApk').addEventListener('click',async()=>{
   const job=await start.json().catch(()=>({}));
   if(!start.ok)throw Error(job.error||'Сервер отклонил запрос (HTTP '+start.status+').');
   const requestId=job.requestId;
+  const downloadToken=job.downloadToken;
   if(!/^[a-f0-9]{32}$/.test(requestId||''))throw Error('Сервер вернул неверный номер сборки.');
+  if(!/^[a-f0-9]{64}$/.test(downloadToken||''))throw Error('Сервер не выдал токен безопасного доступа к APK.');
   for(let attempt=0;attempt<90;attempt++){
    await new Promise(resolve=>setTimeout(resolve,5000));
-   const statusResponse=await fetch(cfg.url+'/api/status?requestId='+encodeURIComponent(requestId),{headers:{'Accept':'application/json'}});
+   const statusResponse=await fetch(cfg.url+'/api/status?requestId='+encodeURIComponent(requestId),{headers:{'Accept':'application/json','Authorization':'Bearer '+downloadToken}});
    const state=await statusResponse.json().catch(()=>({}));
    if(!statusResponse.ok)throw Error(state.error||'Не удалось проверить статус сборки.');
    if(state.status==='failed')throw Error((state.message||'Сборка не удалась.')+(state.logs?' Журнал: '+state.logs:''));
    if(state.status==='success'){
     buildStatus('APK собран и проверен. Скачиваю файл…');
-    const downloadResponse=await fetch(new URL(state.downloadUrl,cfg.url).href);
+    const downloadResponse=await fetch(new URL(state.downloadUrl,cfg.url).href,{headers:{'Authorization':'Bearer '+downloadToken}});
     if(!downloadResponse.ok){const err=await downloadResponse.json().catch(()=>({}));throw Error(err.error||'Не удалось скачать APK.');}
     const blob=await downloadResponse.blob();
     deliverBlob(blob,'as-app-'+requestId.slice(0,8)+'.apk');
