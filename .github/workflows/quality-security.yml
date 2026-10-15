@@ -53,6 +53,7 @@ jobs:
           android_manifest = Path("app/src/main/AndroidManifest.xml").read_text(encoding="utf-8")
           build_workflow = Path(".github/workflows/build-user-project-apk.yml").read_text(encoding="utf-8")
           release_workflow = Path(".github/workflows/build-apk.yml").read_text(encoding="utf-8")
+          backend = Path("backend/src/index.js").read_text(encoding="utf-8")
 
           assert re.search(r"<!doctype html", html, re.I), "Missing HTML doctype"
           assert re.search(r"<html\b", html, re.I), "Missing html element"
@@ -70,6 +71,13 @@ jobs:
           assert "'unsafe-eval'" not in build_workflow, "Generated APK CSP must not permit unsafe-eval"
           assert "connect-src 'none'" in build_workflow, "Generated APK CSP should block network calls by default"
           assert "permissions:" in build_workflow and "contents: read" in build_workflow, "User-project build should use read-only repository permissions"
+          assert "persist-credentials: false" in build_workflow, "User-project build must not persist the checkout token"
+          assert "AS_BUILDER_BUILD_SOURCE_SECRET" in build_workflow and "AS_BUILDER_BUILD_API_URL" in build_workflow, "User-project build must use server-side configuration"
+          assert "api/internal/source" in build_workflow and "api/internal/upload" in build_workflow, "User-project source and APK must travel through the private backend"
+          assert "actions/upload-artifact" not in build_workflow, "User APKs must not be exposed as public workflow artifacts"
+          assert "tokenHash" in backend and "BUILD_SOURCE_SECRET" in backend, "Backend must protect job status/downloads and internal endpoints"
+          assert 'env.BUILDS.put("apk:" + requestId' in backend, "APKs must be stored in private R2"
+          assert "git/refs/heads" not in backend, "User project source must not be written to public repository branches"
           assert "persist-credentials: false" in release_workflow, "Build job should not persist the checkout token"
           assert "permissions:\n  contents: read" in release_workflow, "Top-level release workflow permissions must be read-only"
           assert "publish:\n    needs: build" in release_workflow and "contents: write" in release_workflow, "Write permission should be isolated to the release job"
