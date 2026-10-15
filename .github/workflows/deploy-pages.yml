@@ -49,7 +49,7 @@ jobs:
           test -s site-dist/service-worker.js
 
       - name: Upload website
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: site-dist
 
