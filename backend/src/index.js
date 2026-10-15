@@ -3,7 +3,8 @@ const OWNER = "asoevsolehjonofficial-stack";
 const REPO = "predlozheniya-android";
 const WORKFLOW = "build-user-project-apk.yml";
 const MAX_HTML_BYTES = 1024 * 1024;
-const MAX_APK_BYTES = 25 * 1024 * 1024;
+// Keep base64-encoded APK below the Cloudflare KV 25 MiB value limit.
+const MAX_APK_BYTES = 18 * 1024 * 1024;
 const UUID_RE = /^[a-f0-9]{32}$/;
 const HASH_RE = /^[a-f0-9]{64}$/;
 
@@ -41,6 +42,20 @@ function validHtml(html) {
   return "";
 }
 
+function bytesToBase64(bytes) {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length)));
+  }
+  return btoa(binary);
+}
+function base64ToBytes(value) {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
 async function sha256(value) {
   return sha256Bytes(new TextEncoder().encode(value));
 }
@@ -109,10 +124,10 @@ async function findRun(env, requestId) {
 
 async function handleBuild(request, env, cors) {
   const ip = request.headers.get("CF-Connecting-IP") || "unknown";
-  if (!env.JOBS || !env.RATE_LIMITS || !env.BUILDS || !env.GITHUB_TOKEN || !env.BUILD_SOURCE_SECRET ||
+  if (!env.JOBS || !env.RATE_LIMITS || !env.GITHUB_TOKEN || !env.BUILD_SOURCE_SECRET ||
       env.BUILD_SOURCE_SECRET.length < 32 || !env.TURNSTILE_SECRET || !env.TURNSTILE_SITE_KEY ||
       env.TURNSTILE_SITE_KEY.startsWith("REPLACE_") || !env.SITE_ORIGIN) {
-    return json({ error: "Backend is not configured. Check Worker secrets, KV/R2 bindings, and site settings." }, 503, cors.origin);
+    return json({ error: "Backend is not configured. Check Worker secrets, KV bindings, and site settings." }, 503, cors.origin);
   }
   const limitKey = "ip:" + await sha256(ip);
   const current = Number(await env.RATE_LIMITS.get(limitKey) || "0");
@@ -173,7 +188,7 @@ async function handleSource(request, env, requestId) {
 
 async function handleUpload(request, env, requestId) {
   if (!sourceSecretValid(request, env)) return json({ error: "Unauthorized." }, 401);
-  if (!env.BUILDS) return json({ error: "Private build storage is not configured." }, 503);
+  if (!env.JOBS) return json({ error: "Free KV build storage is not configured." }, 503);
   const job = await getJob(env, requestId);
   if (!job || !job.sourceFetchedAt || job.status === "failed") return json({ error: "Build request not found or source was not fetched." }, 404);
   if (job.apkUploadedAt) return json({ error: "APK was already uploaded." }, 409);
@@ -185,10 +200,10 @@ async function handleUpload(request, env, requestId) {
   const expected = (request.headers.get("X-APK-SHA256") || "").toLowerCase();
   const actual = await sha256Bytes(bytes);
   if (!HASH_RE.test(expected) || !safeEqual(expected, actual)) return json({ error: "APK checksum verification failed." }, 400);
-  await env.BUILDS.put("apk:" + requestId, bytes, {
-    httpMetadata: { contentType: "application/vnd.android.package-archive", cacheControl: "no-store" },
-    customMetadata: { requestId, sha256: actual, createdAt: String(Date.now()) }
-  });
+  const encoded = bytesToBase64(bytes);
+  const record = JSON.stringify({ base64: encoded, sha256: actual, createdAt: Date.now() });
+  if (new TextEncoder().encode(record).byteLength > 25 * 1024 * 1024) return json({ error: "APK is too large for the free storage limit." }, 413);
+  await env.JOBS.put("apk:" + requestId, record, { expirationTtl: 86400 });
   job.apkSha256 = actual;
   job.apkUploadedAt = Date.now();
   job.status = "uploaded";
@@ -206,7 +221,7 @@ async function handleStatus(request, env, cors, requestId) {
     job.status = "failed";
     delete job.html;
     await env.JOBS.put("job:" + requestId, JSON.stringify(job), { expirationTtl: 86400 });
-    await env.BUILDS.delete("apk:" + requestId);
+    await env.JOBS.delete("apk:" + requestId);
     return json({ requestId, status: "failed", message: "Build failed. Open the GitHub Actions run for diagnostics.", logs: run.html_url }, 200, cors.origin);
   }
   job.status = "success";
@@ -220,12 +235,23 @@ async function handleDownload(request, env, cors, requestId) {
   const job = await authorizedJob(request, env, requestId);
   if (!job) return json({ error: "Build request not found or access token is invalid." }, 404, cors.origin);
   if (job.status !== "success") return json({ error: "APK is not ready yet." }, 409, cors.origin);
-  const object = await env.BUILDS.get("apk:" + requestId);
-  if (!object) return json({ error: "APK expired or not found." }, 410, cors.origin);
-  const bytes = new Uint8Array(await object.arrayBuffer());
+  const stored = await env.JOBS.get("apk:" + requestId);
+  if (!stored) return json({ error: "APK expired or not found." }, 410, cors.origin);
+  let record;
+  try { record = JSON.parse(stored); } catch { record = null; }
+  if (!record || typeof record.base64 !== "string" || typeof record.sha256 !== "string") {
+    await env.JOBS.delete("apk:" + requestId);
+    return json({ error: "Stored APK record is invalid." }, 502, cors.origin);
+  }
+  let bytes;
+  try { bytes = base64ToBytes(record.base64); } catch { bytes = null; }
+  if (!bytes || bytes.byteLength < 1024 || bytes.byteLength > MAX_APK_BYTES) {
+    await env.JOBS.delete("apk:" + requestId);
+    return json({ error: "Stored APK data is invalid." }, 502, cors.origin);
+  }
   const actual = await sha256Bytes(bytes);
-  if (!object.customMetadata || !safeEqual(actual, object.customMetadata.sha256 || "") || !safeEqual(actual, job.apkSha256 || "")) {
-    await env.BUILDS.delete("apk:" + requestId);
+  if (!safeEqual(actual, record.sha256) || !safeEqual(actual, job.apkSha256 || "")) {
+    await env.JOBS.delete("apk:" + requestId);
     return json({ error: "Stored APK integrity check failed." }, 502, cors.origin);
   }
   return new Response(bytes, {
@@ -270,7 +296,7 @@ export default {
       if (url.pathname === "/api/health" && request.method === "GET") {
         const configured = Boolean(env.GITHUB_TOKEN && env.BUILD_SOURCE_SECRET && env.BUILD_SOURCE_SECRET.length >= 32 &&
           env.TURNSTILE_SECRET && env.TURNSTILE_SITE_KEY && !env.TURNSTILE_SITE_KEY.startsWith("REPLACE_") &&
-          env.JOBS && env.RATE_LIMITS && env.BUILDS && env.SITE_ORIGIN);
+          env.JOBS && env.RATE_LIMITS && env.SITE_ORIGIN);
         return json({ ok: configured, service: "A.S. APP BUILDER build API", buildEnabled: configured }, configured ? 200 : 503, cors.origin);
       }
       if (url.pathname === "/api/build" && request.method === "POST") {
@@ -293,14 +319,10 @@ export default {
         const job = await getJob(env, item.name.slice(4));
         if (job && Number(job.createdAt || 0) < cutoff) {
           await env.JOBS.delete(item.name);
-          await env.BUILDS.delete("apk:" + job.requestId);
+          await env.JOBS.delete("apk:" + job.requestId);
         }
       }
-      const objects = await env.BUILDS.list({ prefix: "apk:", limit: 1000, include: ["customMetadata"] });
-      for (const item of objects.objects || []) {
-        const createdAt = Number(item.customMetadata?.createdAt || item.uploaded?.getTime?.() || 0);
-        if (createdAt && createdAt < cutoff) await env.BUILDS.delete(item.key);
-      }
+      // APK records expire automatically after 24 hours through KV expirationTtl.
     } catch (error) {
       console.error("Scheduled cleanup failed:", error.message);
     }
