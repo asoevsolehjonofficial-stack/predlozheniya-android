@@ -311,12 +311,12 @@ export default {
           }
         });
       }
-      if (!cors.ok) return json({ error: "Origin is not allowed." }, 403, cors.origin);
       if (url.pathname === "/api/health" && request.method === "GET") {
         const configured = Boolean(env.TURNSTILE_SECRET && env.TURNSTILE_SITE_KEY && !env.TURNSTILE_SITE_KEY.startsWith("REPLACE_") &&
           env.JOBS && env.RATE_LIMITS && env.SITE_ORIGIN);
-        return json({ ok: configured, service: "A.S. APP BUILDER build API", buildEnabled: configured }, configured ? 200 : 503, cors.origin);
+        return json({ ok: configured, service: "A.S. APP BUILDER build API", buildEnabled: configured }, configured ? 200 : 503, cors.ok ? cors.origin : "");
       }
+      if (!cors.ok) return json({ error: "Origin is not allowed." }, 403, cors.origin);
       if (url.pathname === "/api/build" && request.method === "POST") {
         if (!(request.headers.get("Content-Type") || "").toLowerCase().startsWith("application/json")) return json({ error: "Content-Type must be application/json." }, 415, cors.origin);
         return await handleBuild(request, env, cors);
