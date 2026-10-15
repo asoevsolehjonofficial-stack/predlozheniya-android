@@ -80,7 +80,7 @@ $('copyCode').addEventListener('click',()=>generatedHTML&&copyText(generatedHTML
 function crc32(bytes){let crc=0xffffffff;for(const b of bytes){crc^=b;for(let k=0;k<8;k++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}return (crc^0xffffffff)>>>0;}
 function makeZip(files){
  const enc=new TextEncoder(),local=[],central=[];let offset=0;
- const put16=(v,n)=>v.setUint16(n, true), put32=(v,n)=>v.setUint32(n,true);
+ const put16=(v,n,value)=>v.setUint16(n,value,true), put32=(v,n,value)=>v.setUint32(n,value,true);
  for(const [name,text] of Object.entries(files)){
   const nb=enc.encode(name),data=typeof text==='string'?enc.encode(text):text,crc=crc32(data);
   const lh=new Uint8Array(30+nb.length),lv=new DataView(lh.buffer);
