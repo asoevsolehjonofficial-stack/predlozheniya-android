@@ -31,6 +31,12 @@ public class MainActivity extends Activity {
         settings.setDomStorageEnabled(true);
         settings.setAllowFileAccess(true);
         settings.setAllowContentAccess(true);
+        settings.setAllowFileAccessFromFileURLs(false);
+        settings.setAllowUniversalAccessFromFileURLs(false);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            settings.setSafeBrowsingEnabled(true);
+        }
         webView.addJavascriptInterface(new DownloadsBridge(), "AndroidDownloads");
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -57,10 +63,18 @@ public class MainActivity extends Activity {
             OutputStream out = null;
             Uri itemUri = null;
             try {
+                if (base64 == null || base64.length() > 12 * 1024 * 1024) {
+                    throw new Exception("Файл слишком большой (максимум 8 МБ)");
+                }
                 String safeName = filename == null ? "as-app-download" : filename.replaceAll("[^A-Za-z0-9._-]", "_");
                 if (safeName.isEmpty()) safeName = "as-app-download";
+                if (safeName.length() > 100) safeName = safeName.substring(0, 100);
                 String mime = (mimeType == null || mimeType.isEmpty()) ? "application/octet-stream" : mimeType;
+                if (mime.length() > 120 || mime.contains("\\r") || mime.contains("\\n")) mime = "application/octet-stream";
                 byte[] bytes = android.util.Base64.decode(base64, android.util.Base64.DEFAULT);
+                if (bytes.length > 8 * 1024 * 1024) {
+                    throw new Exception("Файл слишком большой (максимум 8 МБ)");
+                }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     ContentValues values = new ContentValues();
                     values.put(MediaStore.MediaColumns.DISPLAY_NAME, safeName);
