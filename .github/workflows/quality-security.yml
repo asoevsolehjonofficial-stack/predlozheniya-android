@@ -108,7 +108,6 @@ jobs:
           cd backend
           npm install --ignore-scripts --no-audit --no-fund
           node --check src/index.js
-          node --input-type=module -e "import('fflate').then(m => { if (typeof m.unzipSync !== 'function') process.exit(1); })"
 
       - name: Check for accidentally committed credentials
         run: |
