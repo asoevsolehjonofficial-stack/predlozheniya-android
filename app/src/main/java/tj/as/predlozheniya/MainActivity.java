@@ -1,6 +1,8 @@
 package tj.as.predlozheniya;
 
 import android.app.Activity;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.webkit.WebChromeClient;
 import android.webkit.WebView;
@@ -17,7 +19,20 @@ public class MainActivity extends Activity {
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
-        webView.setWebViewClient(new WebViewClient());
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                if (url != null && (url.startsWith("https://") || url.startsWith("http://"))) {
+                    try {
+                        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+                        return true;
+                    } catch (Exception ignored) {
+                        return false;
+                    }
+                }
+                return false;
+            }
+        });
         webView.setWebChromeClient(new WebChromeClient());
         setContentView(webView);
         webView.loadUrl("file:///android_asset/index.html");

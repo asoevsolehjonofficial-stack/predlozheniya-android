@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build and publish A.S. APP BUILDER APK
 
 on:
   push:
@@ -6,7 +6,11 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: latest-apk-release
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -30,9 +34,25 @@ jobs:
           echo "/tmp/gradle-8.9/bin" >> "$GITHUB_PATH"
       - name: Build debug APK
         run: gradle --no-daemon assembleDebug
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Predlozheniya-Android-APK
+          name: AS-App-Builder-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+          retention-days: 30
+      - name: Publish latest APK download
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-apk
+          name: A.S. APP BUILDER — Latest Android APK
+          body: |
+            Latest automatically built debug APK for A.S. APP BUILDER.
+            Download app-debug.apk, open it on Android, and confirm installation.
+            This is a debug build. Android may require permission to install apps from your browser or file manager.
+          files: app/build/outputs/apk/debug/app-debug.apk
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          draft: false
+          prerelease: true
+          make_latest: false
