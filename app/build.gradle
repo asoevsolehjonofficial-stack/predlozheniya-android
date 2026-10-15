@@ -10,7 +10,30 @@ android {
         applicationId 'tj.as.predlozheniya'
         minSdk 23
         targetSdk 35
-        versionCode 1
+        versionCode (System.getenv("APP_VERSION_CODE") ?: "1").toInteger()
         versionName '1.0'
+    }
+
+    // Optional persistent signing for repeatable updates. Configure the
+    // AS_BUILDER_KEYSTORE_* Actions secrets to reuse one private key.
+    signingConfigs {
+        stable {
+            def keyPath = System.getenv("AS_BUILDER_KEYSTORE_PATH")
+            if (keyPath != null && !keyPath.isEmpty()) {
+                storeFile file(keyPath)
+                storePassword System.getenv("AS_BUILDER_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("AS_BUILDER_KEY_ALIAS")
+                keyPassword System.getenv("AS_BUILDER_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            def keyPath = System.getenv("AS_BUILDER_KEYSTORE_PATH")
+            if (keyPath != null && !keyPath.isEmpty()) {
+                signingConfig signingConfigs.stable
+            }
+        }
     }
 }
