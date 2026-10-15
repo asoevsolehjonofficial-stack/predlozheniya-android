@@ -2,6 +2,10 @@ name: Build APK for a user project
 run-name: "Free APK queue worker"
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/build-user-project-apk.yml"
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
@@ -28,6 +32,13 @@ jobs:
       request_id: ${{ steps.claim.outputs.request_id }}
       project_slug: ${{ steps.claim.outputs.project_slug }}
     steps:
+      - name: Verify live backend health
+        run: |
+          set -euo pipefail
+          HEALTH="$(curl --fail --silent --show-error --max-time 20 "$BUILD_API_URL/api/health")"
+          jq -e '.ok == true and .buildEnabled == true' <<< "$HEALTH" >/dev/null
+          echo "Backend health is OK and APK builds are enabled."
+
       - name: Claim one queued build using short-lived GitHub OIDC
         id: claim
         shell: bash
