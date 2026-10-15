@@ -1,24 +1,15 @@
 name: Build APK for a user project
-run-name: "User APK: ${{ inputs.request_id || 'demo' }}"
+run-name: "User APK: ${{ inputs.request_id || 'unknown' }}"
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "projects/demo/index.html"
-      - ".github/workflows/build-user-project-apk.yml"
   workflow_dispatch:
     inputs:
       project_slug:
         description: "Temporary project folder slug"
         required: true
         type: string
-      project_ref:
-        description: "Temporary source branch created by the secure backend"
-        required: true
-        type: string
       request_id:
-        description: "Unique request ID used for status and artifact lookup"
+        description: "Unique build request ID"
         required: true
         type: string
 
@@ -26,42 +17,52 @@ permissions:
   contents: read
 
 concurrency:
-  group: user-apk-${{ inputs.project_slug || 'demo' }}
+  group: user-apk-${{ inputs.request_id || github.run_id }}
   cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    permissions:
+      contents: read
     steps:
       - name: Validate request identifiers
         env:
-          PROJECT_SLUG: ${{ inputs.project_slug || 'demo' }}
-          PROJECT_REF: ${{ inputs.project_ref || github.ref_name }}
-          REQUEST_ID: ${{ inputs.request_id || 'demo' }}
+          PROJECT_SLUG: ${{ inputs.project_slug }}
+          REQUEST_ID: ${{ inputs.request_id }}
         run: |
-          [[ "$PROJECT_SLUG" =~ ^[a-z0-9][a-z0-9-]{0,39}$ ]]
-          [[ "$PROJECT_REF" =~ ^(main|asb-build-[a-f0-9]{20})$ ]]
-          [[ "$REQUEST_ID" =~ ^[a-f0-9]{32}$ || "$REQUEST_ID" == "demo" ]]
+          [[ "$PROJECT_SLUG" =~ ^[a-z0-9][a-z0-9-]{0,39}$ ]] || { echo "Invalid project slug"; exit 1; }
+          [[ "$REQUEST_ID" =~ ^[a-f0-9]{32}$ ]] || { echo "Invalid request ID"; exit 1; }
 
-      - name: Checkout source
+      - name: Checkout trusted builder source
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.project_ref || github.ref_name }}
+          ref: main
           persist-credentials: false
 
-      - name: Validate project slug
+      - name: Fetch private project source from the backend
         env:
-          PROJECT_SLUG: ${{ inputs.project_slug || 'demo' }}
+          BUILD_API_URL: ${{ vars.AS_BUILDER_BUILD_API_URL }}
+          BUILD_SOURCE_SECRET: ${{ secrets.AS_BUILDER_BUILD_SOURCE_SECRET }}
+          PROJECT_SLUG: ${{ inputs.project_slug }}
+          REQUEST_ID: ${{ inputs.request_id }}
         run: |
-          if ! [[ "$PROJECT_SLUG" =~ ^[a-z0-9][a-z0-9-]{0,39}$ ]]; then
-            echo "Invalid project slug. Use 1-40 lowercase letters, numbers, or hyphens."
-            exit 1
-          fi
-          test -f "projects/$PROJECT_SLUG/index.html" || {
-            echo "Missing projects/$PROJECT_SLUG/index.html"
-            exit 1
-          }
+          set -euo pipefail
+          test -n "$BUILD_API_URL" || { echo "Missing Actions variable AS_BUILDER_BUILD_API_URL"; exit 1; }
+          test -n "$BUILD_SOURCE_SECRET" || { echo "Missing Actions secret AS_BUILDER_BUILD_SOURCE_SECRET"; exit 1; }
+          BUILD_API_URL="${BUILD_API_URL%/}"
+          mkdir -p "projects/$PROJECT_SLUG"
+          curl --fail --silent --show-error --max-time 60 \
+            -H "Authorization: Bearer $BUILD_SOURCE_SECRET" \
+            "$BUILD_API_URL/api/internal/source?requestId=$REQUEST_ID" \
+            -o "projects/$PROJECT_SLUG/index.html"
+          test -s "projects/$PROJECT_SLUG/index.html"
+
+      - name: Validate project HTML
+        env:
+          PROJECT_SLUG: ${{ inputs.project_slug }}
+        run: |
           FILE="projects/$PROJECT_SLUG/index.html"
           SIZE=$(wc -c < "$FILE")
           if [ "$SIZE" -gt 1048576 ]; then
@@ -70,6 +71,10 @@ jobs:
           fi
           if ! grep -Eiq '<!doctype html|<html[[:space:]>]' "$FILE"; then
             echo "Input is not an HTML document."
+            exit 1
+          fi
+          if ! grep -Eiq '<head[[:space:]>]' "$FILE" || ! grep -Eiq '<body[[:space:]>]' "$FILE"; then
+            echo "HTML must contain head and body elements."
             exit 1
           fi
           if grep -Eiq '(github_pat_[A-Za-z0-9_]+|gh[pousr]_[A-Za-z0-9]{20,}|BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9_-]{20,})' "$FILE"; then
@@ -83,7 +88,7 @@ jobs:
 
       - name: Apply restrictive WebView content policy
         env:
-          PROJECT_SLUG: ${{ inputs.project_slug || 'demo' }}
+          PROJECT_SLUG: ${{ inputs.project_slug }}
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -123,7 +128,7 @@ jobs:
 
       - name: Prepare isolated project assets and identity
         env:
-          PROJECT_SLUG: ${{ inputs.project_slug || 'demo' }}
+          PROJECT_SLUG: ${{ inputs.project_slug }}
         run: |
           cp "projects/$PROJECT_SLUG/index.html" app/src/main/assets/index.html
           PACKAGE_SUFFIX="p_$(echo "$PROJECT_SLUG" | tr '-' '_')"
@@ -131,21 +136,35 @@ jobs:
           sed -i "s/android:label=\"A.S. APP BUILDER\"/android:label=\"$PROJECT_SLUG\"/" app/src/main/AndroidManifest.xml
 
       - name: Build project APK
-        run: gradle --no-daemon assembleDebug
+        run: gradle --no-daemon clean assembleDebug
 
-      - name: Verify APK signature and generate checksum
+      - name: Verify APK signature and checksum
+        id: verify
         run: |
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
+          unzip -t "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -q "package: name='tj.as.generated."
           sha256sum "$APK" > "$APK.sha256"
+          sha256sum -c "$APK.sha256"
+          echo "APK verified; checksum calculated."
 
-      - name: Upload project APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: project-${{ inputs.project_slug || 'demo' }}-${{ inputs.request_id || 'demo' }}-apk
-          path: |
-            app/build/outputs/apk/debug/app-debug.apk
-            app/build/outputs/apk/debug/app-debug.apk.sha256
-          if-no-files-found: error
-          retention-days: 30
+      - name: Upload APK to private backend storage
+        env:
+          BUILD_API_URL: ${{ vars.AS_BUILDER_BUILD_API_URL }}
+          BUILD_SOURCE_SECRET: ${{ secrets.AS_BUILDER_BUILD_SOURCE_SECRET }}
+          REQUEST_ID: ${{ inputs.request_id }}
+        run: |
+          set -euo pipefail
+          BUILD_API_URL="${BUILD_API_URL%/}"
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          HASH="$(sha256sum "$APK" | cut -d ' ' -f1)"
+          curl --fail --silent --show-error --max-time 120 \
+            -X PUT "$BUILD_API_URL/api/internal/upload?requestId=$REQUEST_ID" \
+            -H "Authorization: Bearer $BUILD_SOURCE_SECRET" \
+            -H "Content-Type: application/octet-stream" \
+            -H "X-APK-SHA256: $HASH" \
+            --data-binary @"$APK" > /tmp/upload-result.json
+          grep -q '"ok":true' /tmp/upload-result.json
+          echo "Verified APK uploaded to private storage."
