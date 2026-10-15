@@ -76,16 +76,6 @@ jobs:
         working-directory: backend
         run: npm install --no-audit --no-fund
 
-      - name: Ensure private R2 bucket exists
-        working-directory: backend
-        run: |
-          if npx wrangler r2 bucket create as-app-builder-builds; then
-            echo "Created private APK storage bucket."
-          else
-            echo "Bucket creation returned an error; checking whether the bucket already exists."
-            npx wrangler r2 bucket list
-          fi
-
       - name: Bootstrap Worker so secret uploads have a deployment target
         working-directory: backend
         run: npx wrangler deploy --config wrangler.toml
