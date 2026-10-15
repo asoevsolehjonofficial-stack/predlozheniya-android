@@ -10,7 +10,7 @@ android {
         applicationId 'tj.as.predlozheniya'
         minSdk 23
         targetSdk 35
-        versionCode (System.getenv("APP_VERSION_CODE") ?: "1").toInteger()
+        versionCode (project.findProperty('appVersionCode') != null ? project.findProperty('appVersionCode').toString().toInteger() : 1)
         versionName '1.0'
     }
 
