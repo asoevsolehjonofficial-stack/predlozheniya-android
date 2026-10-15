@@ -2,6 +2,14 @@ name: Publish website
 on:
   push:
     branches: [main]
+    paths:
+      - "index.html"
+      - "predlozheniya.html"
+      - "manifest.webmanifest"
+      - "service-worker.js"
+      - "icon.svg"
+      - ".nojekyll"
+      - ".github/workflows/deploy-pages.yml"
   workflow_dispatch:
 
 permissions:
