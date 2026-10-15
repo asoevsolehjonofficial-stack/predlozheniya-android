@@ -21,10 +21,9 @@ The site key is public. The secret key must be stored as a Worker secret.
 ## 2. Create a least-privilege GitHub token
 
 Create a fine-grained token restricted to this one repository. Grant only:
-- **Contents: Read-only** — the build workflow checks out the trusted builder source.
-- **Actions: Read and write** — the Worker dispatches the workflow and reads its run status.
+- **Actions: Read and write** — the Worker dispatches the build workflow and reads its run status.
 
-The token does not need repository write access. Do not use an account-wide classic token. Set an expiration date and rotate it if exposed.
+The token does not need Contents access or repository write access. Do not use an account-wide classic token. Set an expiration date and rotate it if exposed.
 
 ## 3. Create storage resources
 
@@ -41,7 +40,7 @@ In repository **Settings → Secrets and variables → Actions**, add these repo
 
 - `CLOUDFLARE_API_TOKEN` — scoped to the correct Cloudflare account with permission to deploy Workers and manage the configured KV/R2 bindings and Worker secrets.
 - `CLOUDFLARE_ACCOUNT_ID` — your Cloudflare account ID.
-- `AS_BUILDER_GITHUB_TOKEN` — a fine-grained GitHub token restricted to this repository, with Contents: Read-only and Actions: Read/Write.
+- `AS_BUILDER_GITHUB_TOKEN` — a fine-grained GitHub token restricted to this repository, with only Actions: Read/Write.
 - `TURNSTILE_SECRET` — the Turnstile secret key.
 - `AS_BUILDER_BUILD_SOURCE_SECRET` — a long random value of at least 32 characters. The same value is used by the Worker and GitHub-hosted build runner.
 
