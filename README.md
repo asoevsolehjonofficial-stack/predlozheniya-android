@@ -20,7 +20,7 @@
 ## Честные ограничения текущей версии
 Это **MVP, а не полноценный автономный AI-сервис**. Статическая страница не подключена к AI API: она создаёт прототипы по ограниченным локальным шаблонам. Для сложного приложения используйте генерацию ТЗ и внешнюю AI-систему для создания кода.
 
-Отдельный APK можно собрать для HTML-проекта, добавленного в репозиторий: откройте **Actions → Build APK for a user project → Run workflow** и укажите slug папки проекта. Сайт пока не может запускать сборку APK для произвольных посетителей напрямую: для этого необходим защищённый серверный компонент с аутентификацией, ограничениями и очередью сборок. Не помещайте GitHub-токены, пароли или API-ключи в HTML/JavaScript сайта.
+Отдельный APK можно собрать вручную через **Actions → Build APK for a user project → Run workflow**. Для запуска сборки прямо с сайта добавлен защищённый Cloudflare Worker (`backend/src/index.js`) и workflow **Deploy secure APK backend**. Эта функция остаётся отключённой до настройки владельцем Cloudflare, Turnstile, KV/R2 и GitHub Actions secrets/variables. Не помещайте GitHub-токены, пароли или API-ключи в HTML/JavaScript сайта.
 
 ## Бесплатный адрес сайта и публикация
 Планируемый бесплатный адрес GitHub Pages (без покупки домена):
@@ -56,7 +56,11 @@ https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/releases/do
 - `.github/workflows/build-apk.yml` — сборка APK конструктора;
 - `.github/workflows/build-user-project-apk.yml` — сборка APK отдельного проекта;
 - `.github/workflows/deploy-pages.yml` — публикация сайта;
-- `projects/` — примеры HTML-проектов для сборки APK.
+- `projects/` — примеры HTML-проектов для сборки APK;
+- `backend/src/index.js` — защищённый API для запуска сборок, проверки статуса и выдачи APK;
+- `backend/wrangler.toml` — конфигурация Cloudflare Worker;
+- `.github/workflows/deploy-backend.yml` — развёртывание backend после настройки секретов;
+- `.github/workflows/validate-web.yml` — автоматическая проверка сайта.
 
 ## Автоматическая проверка качества
 
@@ -72,3 +76,10 @@ https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/releases/do
 
 Нельзя считать проект готовым на 100% только потому, что файлы находятся в GitHub: статус сайта подтверждается успешным Pages deployment, а статус APK — успешной сборкой, проверкой подписи и установочным тестом на Android.
 
+
+
+## Статус оставшихся действий владельца
+
+Код backend и workflow развёртывания находятся в репозитории, но я не могу создать Cloudflare-ресурсы, увидеть значения секретов аккаунта или подтвердить развёртывание без доступа к панели Cloudflare. Чтобы включить сборку APK непосредственно на сайте, выполните шаги в [инструкции backend](backend/README.md), затем запустите **Actions → Deploy secure APK backend → Run workflow** и добавьте переменную `AS_BUILDER_BUILD_API_URL` по URL из лога.
+
+GitHub Pages также требует, чтобы владелец один раз выбрал **Settings → Pages → Source: GitHub Actions**. GitHub официально указывает, что для deployment workflow нужны права `pages: write` и `id-token: write`; эти разрешения уже присутствуют в workflow. См. [документацию GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site).
