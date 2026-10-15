@@ -93,7 +93,7 @@ async function verifyGitHubOidc(request) {
   const now = Math.floor(Date.now() / 1000);
   if (header.alg !== "RS256" || claims.iss !== OIDC_ISSUER || claims.aud !== OIDC_AUDIENCE ||
       claims.repository !== OWNER + "/" + REPO ||
-      claims.workflow_ref !== ".github/workflows/build-user-project-apk.yml@refs/heads/main" ||
+      claims.workflow_ref !== OWNER + "/" + REPO + "/.github/workflows/build-user-project-apk.yml@refs/heads/main" ||
       claims.ref !== "refs/heads/main" || !Number.isFinite(claims.exp) || claims.exp <= now ||
       !Number.isFinite(claims.iat) || claims.iat > now + 60) return false;
   try {
