@@ -11,6 +11,7 @@ on:
       - "app/build.gradle"
       - ".github/workflows/build-user-project-apk.yml"
       - ".github/workflows/build-apk.yml"
+      - "backend/**"
       - ".github/workflows/quality-security.yml"
   pull_request:
     branches: [main]
@@ -92,6 +93,9 @@ jobs:
           for script in /tmp/as-app-builder-js/*.js; do
             node --check "$script"
           done
+
+      - name: Check backend JavaScript syntax
+        run: node --check backend/src/index.js
 
       - name: Check for accidentally committed credentials
         run: |
