@@ -37,6 +37,37 @@ test("rejects an unapproved website origin", async () => {
   assert.match((await response.json()).error, /Origin is not allowed/);
 });
 
+test("approved CORS preflight returns the website origin and required headers", async () => {
+  const response = await call("/api/build", {
+    method: "OPTIONS",
+    headers: { "Access-Control-Request-Method": "POST" }
+  });
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.get("access-control-allow-origin"), ORIGIN);
+  assert.match(response.headers.get("access-control-allow-methods") || "", /POST/);
+  assert.match(response.headers.get("access-control-allow-headers") || "", /authorization/i);
+});
+
+test("disallowed CORS preflight is rejected", async () => {
+  const response = await call("/api/build", {
+    method: "OPTIONS",
+    origin: "https://evil.example",
+    headers: { "Access-Control-Request-Method": "POST" }
+  });
+  assert.equal(response.status, 403);
+});
+
+test("unconfigured build API keeps CORS headers so the website can read the error", async () => {
+  const response = await call("/api/build", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ html: "<!doctype html><html><head></head><body></body></html>" })
+  });
+  assert.equal(response.status, 503);
+  assert.equal(response.headers.get("access-control-allow-origin"), ORIGIN);
+  assert.match((await response.json()).error, /Backend is not configured/);
+});
+
 test("internal source endpoint rejects requests without the server secret", async () => {
   const response = await call("/api/internal/source?requestId=0123456789abcdef0123456789abcdef");
   assert.equal(response.status, 401);
