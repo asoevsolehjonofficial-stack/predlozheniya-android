@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import worker from "../src/index.js";
 
-const ORIGIN = "https://asoevsolehjonofficial-stack.github.io";
+const ORIGIN = "https://as-app-builder.pages.dev";
 
 async function call(path, {
   method = "GET",
