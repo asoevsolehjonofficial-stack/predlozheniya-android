@@ -9,5 +9,5 @@ self.addEventListener('fetch',event=>{
  event.respondWith(fetch(event.request).then(response=>{
   if(response&&response.ok){const copy=response.clone();event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.put(event.request,copy)).catch(()=>{}));}
   return response;
- }).catch(()=>caches.match(event.request).then(response=>response||(event.request.mode==='navigate'?caches.match('./index.html'):Response.error()))));
+ }).catch(()=>caches.open(CACHE_NAME).then(cache=>cache.match(event.request).then(response=>response||(event.request.mode==='navigate'?cache.match('./index.html'):Response.error())))));
 });
