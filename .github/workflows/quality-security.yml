@@ -95,8 +95,12 @@ jobs:
             node --check "$script"
           done
 
-      - name: Check backend JavaScript syntax
-        run: node --check backend/src/index.js
+      - name: Check backend dependencies and JavaScript syntax
+        run: |
+          cd backend
+          npm install --ignore-scripts --no-audit --no-fund
+          node --check src/index.js
+          node --input-type=module -e "import('fflate').then(m => { if (typeof m.unzipSync !== 'function') process.exit(1); })"
 
       - name: Check for accidentally committed credentials
         run: |
