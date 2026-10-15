@@ -31,13 +31,16 @@ jobs:
           packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
 
       - name: Configure stable signing key (optional)
-        if: ${{ secrets.AS_BUILDER_KEYSTORE_BASE64 != '' }}
         env:
           KEYSTORE_BASE64: ${{ secrets.AS_BUILDER_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.AS_BUILDER_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.AS_BUILDER_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.AS_BUILDER_KEY_PASSWORD }}
         run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "No persistent signing key configured; this build uses the temporary debug key."
+            exit 0
+          fi
           test -n "$KEYSTORE_PASSWORD" || (echo "Missing AS_BUILDER_KEYSTORE_PASSWORD secret" && exit 1)
           test -n "$KEY_ALIAS" || (echo "Missing AS_BUILDER_KEY_ALIAS secret" && exit 1)
           test -n "$KEY_PASSWORD" || (echo "Missing AS_BUILDER_KEY_PASSWORD secret" && exit 1)
