@@ -20,7 +20,7 @@ The workflow validates branch/slug/request IDs, limits HTML to 1 MiB, checks for
 - The Android WebView blocks mixed content and cross-origin local-file access.
 - WebView navigation is restricted to bundled `android_asset` files and `about:blank`; arbitrary local file URLs and unsupported schemes are blocked.
 - Android app backup is disabled (`allowBackup=false`) to reduce accidental exposure of local app data.
-- The native download bridge limits files to 8 MiB and sanitizes filenames.
+- The native download bridge limits files to 8 MiB, sanitizes filenames, and permits only a fixed set of document/web-image extensions (not APK installers).
 - HTTP/HTTPS navigation requires confirmation and opens in the external browser; unsupported URL schemes are blocked.
 - The generated APK has Internet permission because the builder supports opt-in AI API calls. The default generated-project build CSP blocks network requests from generated app content, external frames, object embeds and form posts.
 - These measures reduce risk but are not a complete sandbox or a security audit. Review generated code; do not put secrets or sensitive private data in HTML. Never install APKs from unknown sources.
