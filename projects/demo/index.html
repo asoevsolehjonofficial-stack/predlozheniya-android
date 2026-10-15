@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#172033">
+<title>Demo project — A.S. APP BUILDER</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#eef2ff;color:#172033;font:16px/1.5 system-ui,sans-serif}.wrap{max-width:600px;margin:auto;padding:24px 16px}header,.card{background:#fff;border-radius:18px;padding:22px;margin:12px 0;box-shadow:0 8px 28px #1e293b12}header{background:#243b70;color:white}h1{margin:0 0 8px}button{background:#4f46e5;color:white;border:0;border-radius:10px;padding:12px 16px;font:inherit;font-weight:700}#count{font-size:42px;font-weight:800;margin:12px 0}
+</style>
+</head>
+<body><main class="wrap"><header><h1>Тестовый проект</h1><p>Проверка отдельной сборки Android APK.</p></header><section class="card"><h2>Счётчик</h2><p>Если эта страница открылась внутри APK, HTML успешно упакован в Android-оболочку.</p><div id="count">0</div><button id="add" type="button">Увеличить счётчик</button><p id="result" aria-live="polite">Нажми кнопку для проверки JavaScript.</p></section></main><script>let n=0;document.getElementById('add').addEventListener('click',()=>{n++;document.getElementById('count').textContent=n;document.getElementById('result').textContent='JavaScript работает: '+n;});</script></body></html>
