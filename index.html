@@ -50,7 +50,7 @@
 <section class="section" id="androidBuildSection">
   <h2>05 / Сборка APK проекта</h2>
   <p class="sub">Отправляет готовый HTML в отдельный сервер сборки, создаёт изолированный временный проект, проверяет APK и возвращает файл для скачивания. Не отправляй пароли, личные данные или секретные ключи.</p>
-  <div class="field"><label for="backendUrl">Адрес защищённого сервера сборки</label><input id="backendUrl" type="url" inputmode="url" placeholder="https://твой-сервис.workers.dev" autocomplete="url"></div>
+  <div class="field"><label for="backendUrl">Адрес защищённого сервера сборки</label><input id="backendUrl" type="url" inputmode="url" value="https://as-app-builder-api.asoev-solehjon-official.workers.dev" placeholder="https://твой-сервис.workers.dev" autocomplete="url"></div>
   <div class="field"><label for="turnstileSiteKey">Публичный ключ Cloudflare Turnstile</label><input id="turnstileSiteKey" type="text" value="0x4AAAAAAFXyrsPUlWHILpXf" placeholder="Ключ сайта Turnstile" autocomplete="off"></div>
   <div id="turnstileWidget" style="margin:12px 0"></div>
   <div class="actions"><button class="btn secondary" id="checkBackend" type="button">Проверить сервер</button><button class="btn primary" id="buildApk" type="button">Собрать APK проекта →</button></div>
