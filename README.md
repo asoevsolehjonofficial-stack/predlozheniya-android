@@ -23,18 +23,12 @@
 Отдельный APK можно собрать вручную через **Actions → Build APK for a user project → Run workflow**. Для запуска сборки прямо с сайта добавлен защищённый Cloudflare Worker (`backend/src/index.js`) и workflow **Deploy secure APK backend**. Эта функция остаётся отключённой до настройки владельцем Cloudflare, Turnstile, KV/R2 и GitHub Actions secrets/variables. Не помещайте GitHub-токены, пароли или API-ключи в HTML/JavaScript сайта.
 
 ## Бесплатный адрес сайта и публикация
-Планируемый бесплатный адрес GitHub Pages (без покупки домена):
-**https://asoevsolehjonofficial-stack.github.io/predlozheniya-android/**
+Основной адрес сайта, который сейчас используется проектом на Cloudflare Pages:
+**https://as-app-builder.pages.dev/**
 
-Этот адрес начнёт открываться только после включения GitHub Pages в настройках репозитория и успешной публикации. Сам коммит или файл в репозитории не может включить Pages, если GitHub не разрешает интеграции создать сайт.
+Cloudflare Pages публикует статическую страницу из репозитория. После изменения файлов дождитесь завершения сборки/развёртывания в панели Cloudflare Pages, затем обновите сайт на телефоне. В репозитории также оставлен отдельный workflow GitHub Pages как альтернативный вариант публикации; для него владелец должен включить GitHub Pages в Settings → Pages → Source: GitHub Actions. Этот альтернативный workflow не развёртывает Cloudflare Worker и сам по себе не включает сборку APK с сайта.
 
-1. Откройте [настройки GitHub Pages](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/settings/pages).
-2. В **Build and deployment** выберите **Source: GitHub Actions**.
-3. Сохраните настройку, если появится кнопка Save.
-4. Откройте [журнал публикации сайта](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/workflows/deploy-pages.yml) и запустите **Publish website** через **Run workflow** либо дождитесь автоматического запуска после следующего коммита.
-5. Убедитесь, что запуск завершился со статусом **Success**, затем откройте адрес выше.
-
-В репозитории есть файл `.nojekyll`, чтобы GitHub Pages публиковал статические файлы без обработки Jekyll. Если публикация падает с `Resource not accessible by integration` или `Pages site not found`, проблема находится в настройке Pages/правах GitHub, а не в HTML-коде; её нельзя исправить новым коммитом без включения Pages в настройках.
+Для безопасной сборки APK Worker должен разрешать точный origin `https://as-app-builder.pages.dev`. Домен `as-app-builder.pages.dev` также должен быть разрешён в настройках виджета Cloudflare Turnstile. Не публикуйте секретный ключ Turnstile или токены GitHub в репозитории и в HTML.
 
 ## Как получить APK конструктора
 Workflow **Build and publish A.S. APP BUILDER APK** собирает APK конструктора и публикует его в GitHub Release с тегом `latest-apk`. После успешной сборки ссылка на APK:
