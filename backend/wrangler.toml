@@ -4,7 +4,7 @@ compatibility_date = "2026-10-15"
 workers_dev = true
 
 [vars]
-SITE_ORIGIN = "https://asoevsolehjonofficial-stack.github.io"
+SITE_ORIGIN = "https://as-app-builder.pages.dev"
 TURNSTILE_SITE_KEY = "REPLACE_WITH_CLOUDFLARE_TURNSTILE_SITE_KEY"
 
 [[kv_namespaces]]
