@@ -62,7 +62,7 @@ https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/releases/do
 
 ## Что требуется до полноценного публичного запуска
 
-- **Публикация сайта:** владелец должен один раз включить GitHub Pages в Settings → Pages → Source: GitHub Actions. Коммит не может обойти отсутствие разрешения Pages.
+- **Публикация сайта:** основной адрес — Cloudflare Pages (`https://as-app-builder.pages.dev/`). GitHub Pages — только альтернативный ручной workflow; он не нужен для работы основного адреса.
 - **APK для любого созданного посетителем проекта:** нужен отдельный HTTPS backend. В репозитории предусмотрены workflow и API-контракт, но сам backend не развёрнут автоматически этим репозиторием.
 - **Секреты сборки:** в настройках Actions нужны переменная `AS_BUILDER_BUILD_API_URL` и секрет `AS_BUILDER_BUILD_SOURCE_SECRET`; backend должен реализовать `/api/internal/source` и `/api/internal/upload`, проверку Turnstile, ограничение частоты запросов, временное хранение, срок действия request ID и очистку APK. Не помещайте секреты в клиентский HTML.
 - **ИИ по промпту:** текущая генерация выполняется локальными шаблонами. Для настоящей генерации кода через модели нужен серверный адаптер к выбранным AI API, лимиты расходов и защита ключей. Без ключей/серверов нельзя честно обещать полноценную AI-генерацию.
@@ -76,4 +76,4 @@ https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/releases/do
 
 Код backend и workflow развёртывания находятся в репозитории, но я не могу создать Cloudflare-ресурсы, увидеть значения секретов аккаунта или подтвердить развёртывание без доступа к панели Cloudflare. Чтобы включить сборку APK непосредственно на сайте, выполните шаги в [инструкции backend](backend/README.md), затем запустите **Actions → Deploy secure APK backend → Run workflow** и добавьте переменную `AS_BUILDER_BUILD_API_URL` по URL из лога.
 
-GitHub Pages также требует, чтобы владелец один раз выбрал **Settings → Pages → Source: GitHub Actions**. GitHub официально указывает, что для deployment workflow нужны права `pages: write` и `id-token: write`; эти разрешения уже присутствуют в workflow. См. [документацию GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site).
+Для альтернативной публикации через GitHub Pages вручную запустите workflow **Publish website** после включения Settings → Pages → Source: GitHub Actions. Основной сайт при этом продолжает публиковаться Cloudflare Pages.
