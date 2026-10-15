@@ -346,3 +346,5 @@ export default {
     }
   }
 };
+
+export { validHtml, bytesToBase64, base64ToBytes, safeEqual, verifyGitHubOidc };
