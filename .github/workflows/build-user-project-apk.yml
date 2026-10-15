@@ -59,6 +59,29 @@ jobs:
             exit 1
           fi
 
+      - name: Apply restrictive WebView content policy
+        env:
+          PROJECT_SLUG: ${{ inputs.project_slug || 'demo' }}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os, re, sys
+          path = Path("projects") / os.environ["PROJECT_SLUG"] / "index.html"
+          html = path.read_text(encoding="utf-8")
+          if re.search(r'<meta[^>]+http-equiv=["\\']Content-Security-Policy', html, re.I):
+              print("Project already declares CSP; refusing ambiguous policy override.")
+              sys.exit(1)
+          policy = "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' data:; style-src 'self' 'unsafe-inline' data:; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data: blob:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; worker-src 'none'"
+          match = re.search(r'<head(?:\\s[^>]*)?>', html, re.I)
+          if not match:
+              print("HTML must contain a head element.")
+              sys.exit(1)
+          meta = '<meta http-equiv="Content-Security-Policy" content="' + policy + '">'
+          html = html[:match.end()] + '\\n' + meta + html[match.end():]
+          path.write_text(html, encoding="utf-8")
+          print("Applied restrictive CSP: no remote network requests, frames, objects, or form posts.")
+          PY
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
