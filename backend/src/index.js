@@ -314,6 +314,7 @@ export default {
         });
       }
       if (url.pathname === "/api/health" && request.method === "GET") {
+        if (request.headers.get("Origin") && !cors.ok) return json({ error: "Origin is not allowed." }, 403, cors.origin);
         const configured = Boolean(env.TURNSTILE_SECRET && env.TURNSTILE_SITE_KEY && !env.TURNSTILE_SITE_KEY.startsWith("REPLACE_") &&
           env.JOBS && env.RATE_LIMITS && env.SITE_ORIGIN);
         return json({ ok: configured, service: "A.S. APP BUILDER build API", buildEnabled: configured }, configured ? 200 : 503, cors.ok ? cors.origin : "");
