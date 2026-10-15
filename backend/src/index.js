@@ -8,7 +8,8 @@ const MAX_HTML_BYTES = 1024 * 1024;
 const UUID_RE = /^[a-f0-9]{32}$/;
 
 function response(body, status = 200, origin = "", extra = {}) {
-  return new Response(typeof body === "string" ? body : JSON.stringify(body), {
+  const responseBody = status === 204 ? null : (typeof body === "string" ? body : JSON.stringify(body));
+  return new Response(responseBody, {
     status,
     headers: {
       "content-type": typeof body === "string" ? "text/plain; charset=utf-8" : "application/json; charset=utf-8",
@@ -101,6 +102,7 @@ async function handleBuild(request, env, cors) {
   const problem = validHtml(payload.html);
   if (problem) return response({ error: problem }, 400, cors.origin);
 
+  await env.RATE_LIMITS.put(limitKey, String(current + 1), { expirationTtl: 3600 });
   const requestId = crypto.randomUUID().replace(/-/g, "");
   const slug = "build-" + requestId.slice(0, 12);
   const branch = "asb-build-" + requestId.slice(0, 20);
@@ -131,7 +133,6 @@ async function handleBuild(request, env, cors) {
     throw error;
   }
   await env.JOBS.put("job:" + requestId, JSON.stringify({ requestId, slug, branch, createdAt: Date.now(), status: "queued" }), { expirationTtl: 86400 });
-  await env.RATE_LIMITS.put(limitKey, String(current + 1), { expirationTtl: 3600 });
   return response({ requestId, status: "queued", message: "Build queued. Keep this page open to check progress." }, 202, cors.origin);
 }
 
