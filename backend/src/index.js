@@ -91,11 +91,13 @@ async function verifyGitHubOidc(request) {
     signature = Uint8Array.from(atob(parts[2].replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(parts[2].length / 4) * 4, "=")), c => c.charCodeAt(0));
   } catch { return false; }
   const now = Math.floor(Date.now() / 1000);
-  if (header.alg !== "RS256" || claims.iss !== OIDC_ISSUER || claims.aud !== OIDC_AUDIENCE ||
+  const audienceValid = claims.aud === OIDC_AUDIENCE || (Array.isArray(claims.aud) && claims.aud.includes(OIDC_AUDIENCE));
+  if (header.alg !== "RS256" || claims.iss !== OIDC_ISSUER || !audienceValid ||
       claims.repository !== OWNER + "/" + REPO ||
       claims.workflow_ref !== OWNER + "/" + REPO + "/.github/workflows/build-user-project-apk.yml@refs/heads/main" ||
       claims.ref !== "refs/heads/main" || !Number.isFinite(claims.exp) || claims.exp <= now ||
-      !Number.isFinite(claims.iat) || claims.iat > now + 60) return false;
+      !Number.isFinite(claims.iat) || claims.iat > now + 60 ||
+      (Number.isFinite(claims.nbf) && claims.nbf > now)) return false;
   try {
     if (!oidcJwksCache || Date.now() >= oidcJwksExpiresAt) {
       const response = await fetch(OIDC_ISSUER + "/.well-known/jwks");
