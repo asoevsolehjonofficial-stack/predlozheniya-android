@@ -62,7 +62,7 @@
 .top{position:sticky;top:0;z-index:30;backdrop-filter:blur(18px);background:#0b1120eF;border-bottom:1px solid #263750}
 .top .brand{font-weight:850}
 .top .brand small{color:#8fa1bd}
-.hero,.section,.footer{display:none!important}
+.hero,.footer{display:none!important}
 body{background:radial-gradient(ellipse at 48% -15%,#243759 0,transparent 45%),#080e19}
 body:has(.studio-shell){overflow-x:hidden}
 .studio-shell .status{font-size:12px;line-height:1.5}
@@ -197,6 +197,19 @@ $('aiTest').addEventListener('click',async()=>{
  }catch(e){$('aiStatus').textContent='Проверка не прошла: '+e.message+'. Проверь ключ, доступность модели, лимиты и CORS.'}
  finally{b.disabled=false}
 });
+function inspectGeneratedHTML(code){
+ const issues=[];
+ if(!/^\\s*<!doctype html/i.test(code))issues.push('Нет объявления DOCTYPE.');
+ if(!/<head[\\s>]/i.test(code))issues.push('Не найден раздел head.');
+ if(!/<body[\\s>]/i.test(code))issues.push('Не найден раздел body.');
+ if(!/<meta[^>]+name=["']viewport["']/i.test(code))issues.push('Нет meta viewport для мобильного экрана.');
+ const ids=[...code.matchAll(/\\bid=["']([^"']+)["']/gi)].map(m=>m[1]);
+ const duplicates=ids.filter((id,i)=>ids.indexOf(id)!==i);
+ if(duplicates.length)issues.push('Повторяющиеся ID: '+[...new Set(duplicates)].slice(0,8).join(', ')+'.');
+ const scripts=(code.match(/<script\\b/gi)||[]).length,closed=(code.match(/<\\/script\\s*>/gi)||[]).length;
+ if(scripts!==closed)issues.push('Количество открывающих и закрывающих script-тегов не совпадает.');
+ return issues;
+}
 async function runAIBuild(editInstruction=''){
  const prompt=$('prompt').value.trim(),key=$('aiKey').value.trim(),provider=$('aiProvider').value,model=$('aiModel').value.trim(),endpoint=$('aiEndpoint').value.trim();
  if(!prompt){$('aiStatus').textContent='Сначала опиши идею приложения.';return}
@@ -245,13 +258,14 @@ async function runAIBuild(editInstruction=''){
   let code=String(received||streamBuffer).trim().replace(/^\x60{3}(?:html)?\s*/i,'').replace(/\x60{3}$/,'').trim();
   const match=code.match(/<!doctype html[\s\S]*<\/html>/i);if(match)code=match[0];
   if(!/<html[\s>]/i.test(code)||!/<\/html>/i.test(code))throw Error('ИИ не вернул полный HTML-документ. Ответ показан во вкладке «Код». Попробуй уточнить задание и повторить.');
+  const staticIssues=inspectGeneratedHTML(code);
   generatedHTML=code;generatedSpec=instruction;
   $('code').textContent=code;$('spec').textContent=generatedSpec;
   $('previewPane').replaceChildren();const frame=document.createElement('iframe');frame.title='Живой предпросмотр приложения';frame.setAttribute('sandbox','allow-scripts');frame.srcdoc=code;$('previewPane').append(frame);
   $('download').disabled=false;$('downloadPwa').disabled=false;$('downloadAndroidProject').disabled=false;$('saveProject').disabled=false;$('copyCode').disabled=false;
   if(editButton)editButton.disabled=false;
   $('state').textContent=editInstruction?'Изменения применены':'Приложение готово';
-  finishBuildActivity(code);addActivity('Проверка результата','Получен полный HTML-документ. Предпросмотр обновлён; проверь интерактивные элементы вручную.','done');
+  finishBuildActivity(code);if(staticIssues.length){addActivity('Статическая проверка: есть замечания',staticIssues.join(' '),'error');$('buildSummary').textContent+=' Проверка: '+staticIssues.join(' ');}else{addActivity('Статическая проверка','Базовая структура HTML и парность script-тегов прошли проверку. Это не заменяет запуск и ручное тестирование приложения.','done');}addActivity('Проверка результата','Получен полный HTML-документ. Предпросмотр обновлён; проверь интерактивные элементы вручную.','done');
   $('activityPane').querySelector('.sub').textContent='Проект готов к следующему запросу. Опиши изменение ниже — ИИ получит текущий код и обновит приложение.';
   $('activityLive').textContent='Предпросмотр обновлён';showTab('activity');
   $('aiStatus').textContent='Поток генерации завершён. Код обновлён, предпросмотр перезапущен. Это веб-версия; APK и нативные функции требуют отдельной сборки и проверки.';
@@ -271,8 +285,8 @@ const PROJECTS_KEY='asAppBuilderProjectsV1';
 function readProjects(){try{const p=JSON.parse(localStorage.getItem(PROJECTS_KEY)||'[]');return Array.isArray(p)?p:[]}catch(e){return[]}}
 function refreshProjectList(){const sel=$('savedProjectList');if(!sel)return;const current=sel.value;const projects=readProjects();sel.innerHTML='';const empty=document.createElement('option');empty.value='';empty.textContent=projects.length?'Выбери сохранённый проект':'Нет сохранённых проектов';sel.append(empty);projects.forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.name+' · '+new Date(p.updated).toLocaleDateString();sel.append(o)});if(projects.some(p=>p.id===current))sel.value=current;$('loadProject').disabled=!sel.value;$('deleteProject').disabled=!sel.value}
 $('savedProjectList').addEventListener('change',()=>{const has=!!$('savedProjectList').value;$('loadProject').disabled=!has;$('deleteProject').disabled=!has});
-$('saveProject').addEventListener('click',()=>{if(!generatedHTML){$('status').textContent='Сначала создай прототип.';return;}const projects=readProjects(),name=$('appName').value.trim()||'Мой проект',id=String(Date.now());projects.unshift({id,name,prompt:$('prompt').value,features:$('features').value,kind,style:$('style').value,complexity:$('complexity').value,updated:new Date().toISOString()});localStorage.setItem(PROJECTS_KEY,JSON.stringify(projects.slice(0,30)));refreshProjectList();$('savedProjectList').value=id;$('loadProject').disabled=false;$('deleteProject').disabled=false;$('status').textContent='Проект «'+name+'» сохранён на этом устройстве.';});
-$('loadProject').addEventListener('click',()=>{const p=readProjects().find(x=>x.id===$('savedProjectList').value);if(!p)return;$('appName').value=p.name;$('prompt').value=p.prompt;$('features').value=p.features||'';$('style').value=p.style||'clean';$('complexity').value=p.complexity||'standard';kind=p.kind||'app';document.querySelectorAll('[data-kind]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.kind===kind)));$('generate').click();$('status').textContent='Проект «'+p.name+'» открыт.';});
+$('saveProject').addEventListener('click',()=>{if(!generatedHTML){$('status').textContent='Сначала создай прототип.';return;}const projects=readProjects(),name=$('appName').value.trim()||'Мой проект',id=String(Date.now());projects.unshift({id,name,prompt:$('prompt').value,features:$('features').value,kind,style:$('style').value,complexity:$('complexity').value,html:generatedHTML,spec:generatedSpec,updated:new Date().toISOString()});try{localStorage.setItem(PROJECTS_KEY,JSON.stringify(projects.slice(0,30)));refreshProjectList();$('savedProjectList').value=id;$('loadProject').disabled=false;$('deleteProject').disabled=false;$('status').textContent='Проект «'+name+'» и его HTML-код сохранены на этом устройстве.';}catch(e){$('status').textContent='Не удалось сохранить проект: память браузера заполнена. Удали старые проекты или экспортируй HTML.';}});
+$('loadProject').addEventListener('click',()=>{const p=readProjects().find(x=>x.id===$('savedProjectList').value);if(!p)return;$('appName').value=p.name;$('prompt').value=p.prompt;$('features').value=p.features||'';$('style').value=p.style||'clean';$('complexity').value=p.complexity||'standard';kind=p.kind||'app';document.querySelectorAll('[data-kind]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.kind===kind)));if(p.html){generatedHTML=p.html;generatedSpec=p.spec||p.prompt||'';$('code').textContent=generatedHTML;$('spec').textContent=generatedSpec;$('previewPane').replaceChildren();const frame=document.createElement('iframe');frame.title='Предпросмотр сохранённого проекта';frame.setAttribute('sandbox','allow-scripts');frame.srcdoc=generatedHTML;$('previewPane').append(frame);['download','downloadPwa','downloadAndroidProject','saveProject','copyCode'].forEach(id=>$(id).disabled=false);$('applyEdit').disabled=false;$('state').textContent='Проект открыт';$('activityFeed').replaceChildren();addActivity('Проект загружен','Восстановлены сохранённый код, описание и настройки проекта.','done');$('activityLive').textContent='Проект загружен';$('status').textContent='Проект «'+p.name+'» открыт.';showTab('activity');}else{$('status').textContent='Старая запись содержит только описание. Создай код заново, затем сохрани проект.';$('generate').click();}});
 $('deleteProject').addEventListener('click',()=>{const id=$('savedProjectList').value;if(!id)return;const projects=readProjects().filter(p=>p.id!==id);localStorage.setItem(PROJECTS_KEY,JSON.stringify(projects));refreshProjectList();$('status').textContent='Сохранённый проект удалён с этого устройства.';});
 refreshProjectList();
 $('downloadAndroidProject').addEventListener('click',()=>{if(!generatedHTML){$('status').textContent='Сначала создай прототип.';return;}const safeName=($('appName').value.trim()||'MyApp').replace(/[&<>"]/g,'').slice(0,45);const files={
