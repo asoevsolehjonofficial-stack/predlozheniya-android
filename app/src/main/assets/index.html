@@ -86,8 +86,8 @@ body:has(.studio-shell){overflow-x:hidden}
 <div class="field"><label for="features">Дополнительные пожелания</label><input id="features" maxlength="500" placeholder="Русский язык, тёмная тема, офлайн-доступ"></div>
 <details class="ai-panel" open><summary style="cursor:pointer;font-weight:800;margin-bottom:14px">🤖 Подключение ИИ-модели</summary><p class="sub">Подключи Gemini через Google AI Studio или другой совместимый API. Ключ нужен для генерации кода.</p>
 <div class="field"><label for="aiProvider">Провайдер</label><select id="aiProvider"><option value="gemini" selected>Google Gemini (Google AI Studio)</option><option value="openai">OpenAI</option><option value="openrouter">OpenRouter (единый шлюз моделей)</option><option value="compatible">OpenAI-совместимый API</option></select></div>
-<div class="field"><label for="aiEndpoint">API endpoint</label><input id="aiEndpoint" value="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent" autocomplete="off"></div>
-<div class="field"><label for="aiModel">Модель</label><input id="aiModel" value="gemini-2.5-flash" autocomplete="off"></div>
+<div class="field"><label for="aiEndpoint">API endpoint</label><input id="aiEndpoint" value="https://generativelanguage.googleapis.com/v1beta/interactions" autocomplete="off"></div>
+<div class="field"><label for="aiModel">Модель</label><input id="aiModel" value="gemini-3.8-flash" autocomplete="off"></div>
 <div class="field"><label for="aiKey">API-ключ</label><input id="aiKey" type="password" autocomplete="off" placeholder="Ключ не сохраняется сайтом"></div>
 <div class="actions"><button class="btn primary" id="aiGenerate" type="button">✨ Создать приложение с ИИ</button><button class="btn secondary" id="aiTest" type="button">Проверить API</button><button class="btn secondary" id="aiPromptCopy" type="button">Копировать промпт</button></div><div id="aiStatus" class="status" role="status"></div>
 <div class="ai-links"><a target="_blank" rel="noopener noreferrer" href="https://aistudio.google.com/apikey">Google AI Studio · API key</a><a target="_blank" rel="noopener noreferrer" href="https://chatgpt.com/">ChatGPT</a><a target="_blank" rel="noopener noreferrer" href="https://claude.ai/">Claude</a><a target="_blank" rel="noopener noreferrer" href="https://chat.deepseek.com/">DeepSeek</a><a target="_blank" rel="noopener noreferrer" href="https://chat.qwen.ai/">Qwen</a><a target="_blank" rel="noopener noreferrer" href="https://openrouter.ai/">OpenRouter</a></div>
@@ -172,7 +172,11 @@ function makeSpec(name,prompt,features,kind,style){return 'РОЛЬ: Ты опы
 
 function buildAIPrompt(){return 'Ты senior-разработчик мобильных web-приложений и инженер качества. Создай НЕ описание и НЕ демонстрационную страницу с пересказом задания, а рабочее приложение «'+($('appName').value.trim()||'Моё приложение')+'». Тип проекта: '+kind+'. Идея и требования пользователя:\n'+$('prompt').value.trim()+'\nДополнительные требования: '+($('features').value.trim()||'адаптивный мобильный интерфейс')+'. Уровень: '+$('complexity').value+'.\nОБЯЗАТЕЛЬНО: 1) верни один полный HTML5-документ от <!doctype html> до </html>; 2) весь CSS и JavaScript внутри этого файла; 3) создай реальный интерфейс приложения с экранами, навигацией и рабочими обработчиками событий; 4) не выводи этот промпт, техническое задание или длинное описание вместо приложения; 5) не добавляй кнопки-заглушки и фиктивные переключатели; 6) сохраняй пользовательские данные через localStorage, если это уместно; 7) обработай пустые состояния, ошибки, узкие экраны и клавиатурную доступность; 8) не используй eval, внешние скрипты, CDN, удалённые iframe, секреты или API-ключи; 9) не заявляй, что доступны нативные Android API, MediaStore, foreground service, системные уведомления или эквалайзер — HTML/WebView сам по себе их не предоставляет; если требуются такие функции, реализуй честный web-вариант и не притворяйся нативным приложением; 10) не имитируй серверные функции без backend. Верни только код, без Markdown и пояснений.'}
 $('aiPromptCopy').addEventListener('click',()=>copyText(buildAIPrompt(),'Промпт для ИИ скопирован.'));
-$('aiProvider').addEventListener('change',()=>{if($('aiProvider').value==='gemini'){$('aiModel').value='gemini-2.5-flash';$('aiEndpoint').value='https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'}else if($('aiProvider').value==='openai'){$('aiModel').value='gpt-4.1-mini';$('aiEndpoint').value='https://api.openai.com/v1/chat/completions'}else if($('aiProvider').value==='openrouter'){$('aiModel').value='openrouter/auto';$('aiEndpoint').value='https://openrouter.ai/api/v1/chat/completions'}else{$('aiModel').value='deepseek-chat';$('aiEndpoint').value=''}});
+$('aiProvider').addEventListener('change',()=>{if($('aiProvider').value==='gemini'){$('aiModel').value='gemini-3.8-flash';$('aiEndpoint').value='https://generativelanguage.googleapis.com/v1beta/interactions'}else if($('aiProvider').value==='openai'){$('aiModel').value='gpt-4.1-mini';$('aiEndpoint').value='https://api.openai.com/v1/chat/completions'}else if($('aiProvider').value==='openrouter'){$('aiModel').value='openrouter/auto';$('aiEndpoint').value='https://openrouter.ai/api/v1/chat/completions'}else{$('aiModel').value='deepseek-chat';$('aiEndpoint').value=''}});
+function extractGeminiInteractionText(data){
+ if(typeof data?.output_text==='string'&&data.output_text.trim())return data.output_text;
+ return (data?.steps||[]).filter(step=>step.type==='model_output').flatMap(step=>step.content||[]).filter(item=>item.type==='text').map(item=>item.text||'').join('');
+}
 $('aiTest').addEventListener('click',async()=>{
  const key=$('aiKey').value.trim(),provider=$('aiProvider').value,model=$('aiModel').value.trim(),endpoint=$('aiEndpoint').value.trim();
  if(!key){$('aiStatus').textContent='Введи API-ключ для проверки подключения.';return}
@@ -184,16 +188,16 @@ $('aiTest').addEventListener('click',async()=>{
  try{
   let res,data;
   if(provider==='gemini'){
-   const url='https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent';
-   res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify({contents:[{parts:[{text:'Reply with OK only.'}]}],generationConfig:{temperature:0,maxOutputTokens:8}})});
+   const url=endpoint||'https://generativelanguage.googleapis.com/v1beta/interactions';
+   res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify({model,input:'Reply with OK only.',generation_config:{max_output_tokens:64,thinking_level:'low'}})});
   }else{
    res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},body:JSON.stringify({model,temperature:0,max_tokens:8,messages:[{role:'user',content:'Reply with OK only.'}]})});
   }
   data=await res.json().catch(()=>({}));
   if(!res.ok)throw Error(data.error?.message||data.message||('HTTP '+res.status));
-  const textOut=provider==='gemini'?(data.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join(' '):(data.choices?.[0]?.message?.content||data.output_text||'');
+  const textOut=provider==='gemini'?extractGeminiInteractionText(data):(data.choices?.[0]?.message?.content||data.output_text||'');
   if(!textOut.trim())throw Error('API ответил без текста. Проверь модель и разрешения ключа.');
-  $('aiStatus').textContent='Подключение работает: '+host+'. Модель ответила. Теперь нажми «Создать код с ИИ».';
+  $('aiStatus').textContent='Подключение работает: '+host+'. Gemini 3.8 Flash ответил через Interactions API. Теперь нажми «Создать приложение с ИИ».';
  }catch(e){$('aiStatus').textContent='Проверка не прошла: '+e.message+'. Проверь ключ, доступность модели, лимиты и CORS.'}
  finally{b.disabled=false}
 });
@@ -229,21 +233,18 @@ async function runAIBuild(editInstruction=''){
    : buildAIPrompt();
   const systemText='You are a senior application engineer and coding agent. Return only one complete self-contained HTML document, from <!doctype html> through </html>. No Markdown fences or explanations. Keep all CSS and JavaScript inline. Implement functional interactions and preserve existing functionality when editing.';
   if(provider==='gemini'){
-   // Gemini JSON mode is more reliable across mobile browsers than parsing its SSE stream.
-   const url='https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent';
-   const payload={contents:[{parts:[{text:systemText+'\n\n'+instruction}]}],generationConfig:{temperature:0.2,maxOutputTokens:32768}};
-   $('activityLive').textContent='Gemini генерирует приложение';
-   const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify(payload)});
+   // Gemini 3.8 Flash uses the Interactions API.
+   const url=endpoint||'https://generativelanguage.googleapis.com/v1beta/interactions';
+   $('activityLive').textContent='Gemini 3.8 Flash генерирует приложение';
+   const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify({model,input:systemText+'\n\n'+instruction,generation_config:{max_output_tokens:32768,thinking_level:'low'}})});
    const data=await response.json().catch(()=>({}));
-   if(!response.ok)throw Error(data.error?.message||data.message||'Gemini API: HTTP '+response.status);
-   if(data.promptFeedback?.blockReason)throw Error('Запрос заблокирован Gemini: '+data.promptFeedback.blockReason+'. Измени формулировку задания.');
-   const candidate=data.candidates?.[0];
-   if(candidate?.finishReason==='MAX_TOKENS')throw Error('Gemini достиг лимита длины ответа и не завершил HTML. Раздели приложение на меньшие этапы и повтори генерацию.');
-   if(candidate?.finishReason==='SAFETY')throw Error('Gemini остановил ответ фильтром безопасности. Измени формулировку задания.');
-   received=(candidate?.content?.parts||[]).filter(part=>!part.thought).map(part=>part.text||'').join('');
+   if(!response.ok)throw Error(data.error?.message||data.message||'Gemini Interactions API: HTTP '+response.status);
+   if(data.status==='incomplete')throw Error('Gemini остановил ответ до завершения. Уменьши задание или раздели генерацию на этапы.');
+   if(data.status==='failed'||data.status==='cancelled')throw Error(data.error?.message||'Gemini завершил запрос со статусом '+data.status+'.');
+   received=extractGeminiInteractionText(data);
    streamBuffer=received;
    codeNode.textContent=received||'Gemini вернул пустой ответ.';
-   if(!received.trim())throw Error('Gemini ответил без текста. Проверь доступ модели и лимиты API.');
+   if(!received.trim())throw Error('Gemini API ответил без текста. Проверь доступность модели, лимиты и статус запроса.');
   }else{
    const payload={model,temperature:0.2,max_tokens:24576,stream:true,messages:[{role:'system',content:systemText},{role:'user',content:instruction}]};
    const response=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},body:JSON.stringify(payload)});
