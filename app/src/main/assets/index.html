@@ -228,32 +228,46 @@ async function runAIBuild(editInstruction=''){
    ? 'Измени существующее приложение по запросу пользователя. Сохрани работающие функции, исправь указанные места и не удаляй нужные возможности. Запрос на изменение:\n'+editInstruction+'\n\nТекущий полный HTML-код приложения:\n'+generatedHTML+'\n\nВерни обновлённый полный HTML-документ целиком.'
    : buildAIPrompt();
   const systemText='You are a senior application engineer and coding agent. Return only one complete self-contained HTML document, from <!doctype html> through </html>. No Markdown fences or explanations. Keep all CSS and JavaScript inline. Implement functional interactions and preserve existing functionality when editing.';
-  const url=provider==='gemini'
-   ? 'https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':streamGenerateContent?alt=sse'
-   : endpoint;
-  const payload=provider==='gemini'
-   ? {contents:[{parts:[{text:systemText+'\n\n'+instruction}]}],generationConfig:{temperature:0.2,maxOutputTokens:24576}}
-   : {model,temperature:0.2,max_tokens:24576,stream:true,messages:[{role:'system',content:systemText},{role:'user',content:instruction}]};
-  const headers={'Content-Type':'application/json'};
-  if(provider==='gemini')headers['x-goog-api-key']=key;else headers.Authorization='Bearer '+key;
-  const response=await fetch(url,{method:'POST',headers,body:JSON.stringify(payload)});
-  if(!response.ok){const err=await response.json().catch(()=>({}));throw Error(err.error?.message||err.message||'HTTP '+response.status)}
-  if(!response.body||!response.body.getReader)throw Error('Браузер не поддержал потоковый ответ. Обнови Chrome и повтори попытку.');
-  const reader=response.body.getReader(),decoder=new TextDecoder();let sseCarry='',lastUpdate=0;
-  while(true){
-   const {value,done}=await reader.read();if(done)break;
-   sseCarry+=decoder.decode(value,{stream:true});
-   const events=sseCarry.split(/\r?\n\r?\n/);sseCarry=events.pop()||'';
-   for(const event of events){
+  if(provider==='gemini'){
+   // Gemini JSON mode is more reliable across mobile browsers than parsing its SSE stream.
+   const url='https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent';
+   const payload={contents:[{parts:[{text:systemText+'\n\n'+instruction}]}],generationConfig:{temperature:0.2,maxOutputTokens:32768}};
+   $('activityLive').textContent='Gemini генерирует приложение';
+   const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify(payload)});
+   const data=await response.json().catch(()=>({}));
+   if(!response.ok)throw Error(data.error?.message||data.message||'Gemini API: HTTP '+response.status);
+   if(data.promptFeedback?.blockReason)throw Error('Запрос заблокирован Gemini: '+data.promptFeedback.blockReason+'. Измени формулировку задания.');
+   const candidate=data.candidates?.[0];
+   if(candidate?.finishReason==='MAX_TOKENS')throw Error('Gemini достиг лимита длины ответа и не завершил HTML. Раздели приложение на меньшие этапы и повтори генерацию.');
+   if(candidate?.finishReason==='SAFETY')throw Error('Gemini остановил ответ фильтром безопасности. Измени формулировку задания.');
+   received=(candidate?.content?.parts||[]).filter(part=>!part.thought).map(part=>part.text||'').join('');
+   streamBuffer=received;
+   codeNode.textContent=received||'Gemini вернул пустой ответ.';
+   if(!received.trim())throw Error('Gemini ответил без текста. Проверь доступ модели и лимиты API.');
+  }else{
+   const payload={model,temperature:0.2,max_tokens:24576,stream:true,messages:[{role:'system',content:systemText},{role:'user',content:instruction}]};
+   const response=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},body:JSON.stringify(payload)});
+   if(!response.ok){const err=await response.json().catch(()=>({}));throw Error(err.error?.message||err.message||'HTTP '+response.status)}
+   if(!response.body||!response.body.getReader)throw Error('Браузер не поддержал потоковый ответ. Обнови Chrome и повтори попытку.');
+   const reader=response.body.getReader(),decoder=new TextDecoder();let sseCarry='',lastUpdate=0;
+   const consumeSSE=event=>{
     const dataText=event.split(/\r?\n/).filter(line=>line.startsWith('data:')).map(line=>line.slice(5).trim()).join('\n');
-    if(!dataText||dataText==='[DONE]')continue;
-    let packet;try{packet=JSON.parse(dataText)}catch(e){continue}
-    let chunk='';
-    if(provider==='gemini')chunk=(packet.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('');
-    else chunk=packet.choices?.[0]?.delta?.content||packet.choices?.[0]?.message?.content||'';
+    if(!dataText||dataText==='[DONE]')return;
+    let packet;try{packet=JSON.parse(dataText)}catch(e){return}
+    const chunk=packet.choices?.[0]?.delta?.content||packet.choices?.[0]?.message?.content||'';
     if(chunk){received+=chunk;streamBuffer=received;codeNode.textContent=received;const now=Date.now();if(now-lastUpdate>500){lastUpdate=now;$('activityLive').textContent='Получен поток кода';const pending=$('activityFeed').querySelector('.activity-item.working');if(pending){const p=pending.querySelector('p');if(p)p.textContent='Получено '+received.length.toLocaleString()+' символов кода; ответ продолжается.';}}}
-    const apiError=packet.error?.message;if(apiError)throw Error(apiError);
+    if(packet.error?.message)throw Error(packet.error.message);
+   };
+   while(true){
+    const {value,done}=await reader.read();
+    if(done)break;
+    sseCarry+=decoder.decode(value,{stream:true});
+    const events=sseCarry.split(/\r?\n\r?\n/);sseCarry=events.pop()||'';
+    for(const event of events)consumeSSE(event);
    }
+   sseCarry+=decoder.decode();
+   if(sseCarry.trim())consumeSSE(sseCarry);
+   if(!received.trim())throw Error('Провайдер вернул пустой поток. Проверь endpoint, модель и формат совместимого API.');
   }
   let code=String(received||streamBuffer).trim().replace(/^\x60{3}(?:html)?\s*/i,'').replace(/\x60{3}$/,'').trim();
   const match=code.match(/<!doctype html[\s\S]*<\/html>/i);if(match)code=match[0];
