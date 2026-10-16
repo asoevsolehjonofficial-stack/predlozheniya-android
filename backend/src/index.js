@@ -203,12 +203,47 @@ async function handleBuild(request, env, cors) {
   return json({ requestId, downloadToken, status: "queued", message: "Build queued. Keep this page open to check progress." }, 202, cors.origin);
 }
 
+const STALE_BUILD_MS = 35 * 60 * 1000;
+const MAX_AUTOMATIC_RETRIES = 1;
+
+// Recover a worker that died after claiming a job. Keep source HTML until a
+// successful upload so one transient runner failure can be retried safely.
+function recoverStaleJob(job, now = Date.now()) {
+  if (!job || !["claimed", "building"].includes(job.status)) return false;
+  const startedAt = Number(job.status === "building"
+    ? (job.sourceFetchedAt || job.claimedAt || job.createdAt)
+    : (job.claimedAt || job.createdAt));
+  if (!Number.isFinite(startedAt) || now - startedAt < STALE_BUILD_MS) return false;
+
+  if (typeof job.html === "string" && Number(job.retryCount || 0) < MAX_AUTOMATIC_RETRIES) {
+    job.status = "queued";
+    job.retryCount = Number(job.retryCount || 0) + 1;
+    job.lastRecoveryAt = now;
+    job.lastError = "Worker timed out; job returned to the queue.";
+    delete job.claimedAt;
+    delete job.sourceFetchedAt;
+    return true;
+  }
+
+  job.status = "failed";
+  job.failedAt = now;
+  job.lastError = "Build worker timed out after the automatic retry.";
+  delete job.html;
+  return true;
+}
+
 async function handleClaim(request, env) {
   if (request.method !== "POST" || !(await verifyGitHubOidc(request))) return json({ error: "Unauthorized." }, 401);
   const listing = await env.JOBS.list({ prefix: "job:", limit: 1000 });
   for (const item of listing.keys || []) {
     const job = await getJob(env, item.name.slice(4));
-    if (!job || job.status !== "queued" || typeof job.html !== "string") continue;
+    if (!job) continue;
+
+    if (recoverStaleJob(job)) {
+      await env.JOBS.put(item.name, JSON.stringify(job), { expirationTtl: 86400 });
+    }
+    if (job.status !== "queued" || typeof job.html !== "string") continue;
+
     job.status = "claimed";
     job.claimedAt = Date.now();
     await env.JOBS.put(item.name, JSON.stringify(job), { expirationTtl: 86400 });
@@ -221,7 +256,8 @@ async function handleSource(request, env, requestId) {
   const job = await getJob(env, requestId);
   if (!job || typeof job.html !== "string" || !["claimed", "building"].includes(job.status)) return json({ error: "Source expired, already fetched, or not claimed." }, 404);
   const html = job.html;
-  delete job.html;
+  // Retain the private source until APK upload succeeds, enabling recovery
+  // if the GitHub runner exits unexpectedly after fetching the source.
   job.sourceFetchedAt = Date.now();
   job.status = "building";
   await env.JOBS.put("job:" + requestId, JSON.stringify(job), { expirationTtl: 86400 });
@@ -257,6 +293,8 @@ async function handleUpload(request, env, requestId) {
   job.apkSha256 = actual;
   job.apkUploadedAt = Date.now();
   job.status = "success";
+  delete job.html;
+  delete job.lastError;
   await env.JOBS.put("job:" + requestId, JSON.stringify(job), { expirationTtl: 86400 });
   return json({ ok: true, sha256: actual }, 201);
 }
@@ -276,12 +314,27 @@ async function handleFail(request, requestId, env) {
   if (!(await verifyGitHubOidc(request))) return json({ error: "Unauthorized." }, 401);
   const job = await getJob(env, requestId);
   if (!job) return json({ error: "Build request not found." }, 404);
+
+  // A single automatic retry covers transient runner/network failures without
+  // creating an unbounded loop. A second failure becomes terminal.
+  if (typeof job.html === "string" && Number(job.retryCount || 0) < MAX_AUTOMATIC_RETRIES) {
+    job.status = "queued";
+    job.retryCount = Number(job.retryCount || 0) + 1;
+    job.lastRecoveryAt = Date.now();
+    job.lastError = "The first build attempt failed; the job was returned to the queue once.";
+    delete job.claimedAt;
+    delete job.sourceFetchedAt;
+    await env.JOBS.put("job:" + requestId, JSON.stringify(job), { expirationTtl: 86400 });
+    return json({ ok: true, requeued: true, retryCount: job.retryCount });
+  }
+
   job.status = "failed";
   delete job.html;
   job.failedAt = Date.now();
+  job.lastError = "Build failed after the automatic retry.";
   await env.JOBS.put("job:" + requestId, JSON.stringify(job), { expirationTtl: 86400 });
   await env.JOBS.delete("apk:" + requestId);
-  return json({ ok: true });
+  return json({ ok: true, requeued: false });
 }
 
 async function handleDownload(request, env, cors, requestId) {
@@ -384,4 +437,4 @@ export default {
   }
 };
 
-export { validHtml, bytesToBase64, base64ToBytes, safeEqual, verifyGitHubOidc, readBodyLimited };
+export { validHtml, bytesToBase64, base64ToBytes, safeEqual, verifyGitHubOidc, readBodyLimited, recoverStaleJob, STALE_BUILD_MS };
