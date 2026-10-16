@@ -203,3 +203,39 @@ test("APK download rejects a tampered stored record and deletes it", async () =>
   assert.match((await response.json()).error, /integrity check failed/i);
   assert.equal(values.has("apk:" + requestId), false);
 });
+
+
+test("queued build status reports the queue state without exposing source data", async () => {
+  const requestId = "1234567890abcdef1234567890abcdef";
+  const token = "queued-status-test-token";
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  const job = {
+    requestId,
+    slug: "build-1234567890ab",
+    status: "queued",
+    createdAt: Date.now(),
+    html: "<!doctype html><html><head></head><body>private</body></html>",
+    tokenHash
+  };
+  const values = new Map([["job:" + requestId, JSON.stringify(job)]]);
+  const env = {
+    SITE_ORIGIN: ORIGIN,
+    JOBS: {
+      async get(key) { return values.get(key) || null; },
+      async put(key, value) { values.set(key, value); },
+      async delete(key) { values.delete(key); }
+    }
+  };
+
+  const response = await call("/api/status?requestId=" + requestId, {
+    env,
+    headers: { Authorization: "Bearer " + token }
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    requestId,
+    status: "queued",
+    message: "Waiting for the free build queue."
+  });
+  assert.doesNotMatch(await response.clone().text(), /private/);
+});
