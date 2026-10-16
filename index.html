@@ -232,8 +232,11 @@ $('buildApk').addEventListener('click',async()=>{
   const downloadToken=job.downloadToken;
   if(!/^[a-f0-9]{32}$/.test(requestId||''))throw Error('Сервер вернул неверный номер сборки.');
   if(!/^[a-f0-9]{64}$/.test(downloadToken||''))throw Error('Сервер не выдал токен безопасного доступа к APK.');
-  for(let attempt=0;attempt<90;attempt++){
-   await new Promise(resolve=>setTimeout(resolve,5000));
+  const pollingStartedAt=Date.now();
+  while(true){
+   const elapsedMs=Date.now()-pollingStartedAt;
+   const pollDelay=elapsedMs<5*60*1000?5000:(elapsedMs<15*60*1000?10000:15000);
+   await new Promise(resolve=>setTimeout(resolve,pollDelay));
    const statusResponse=await fetch(cfg.url+'/api/status?requestId='+encodeURIComponent(requestId),{headers:{'Accept':'application/json','Authorization':'Bearer '+downloadToken}});
    const state=await statusResponse.json().catch(()=>({}));
    if(!statusResponse.ok)throw Error(state.error||'Не удалось проверить статус сборки.');
@@ -247,9 +250,10 @@ $('buildApk').addEventListener('click',async()=>{
     buildStatus('Готово! APK прошёл проверку контрольной суммы. Открой файл из «Загрузок» и подтверди установку Android. Это тестовая сборка; для обычных обновлений нужна постоянная подпись.');
     return;
    }
-   buildStatus('Сборка: '+(state.message||state.status||'ожидание')+' · прошло '+Math.ceil((attempt+1)*5/60)+' мин.');
+   const elapsedMinutes=Math.ceil((Date.now()-pollingStartedAt)/60000);
+   const waitingHint=elapsedMinutes>=10?' · очередь может задерживаться; не отправляй повторный запрос, пока этот статус обновляется':'';
+   buildStatus('Сборка: '+(state.message||state.status||'ожидание')+' · прошло '+elapsedMinutes+' мин.'+waitingHint);
   }
-  throw Error('Сборка занимает слишком много времени. Проверь журнал сборки и попробуй позже.');
  }catch(e){buildStatus('Ошибка: '+e.message);}finally{button.disabled=false;}
 });
 
