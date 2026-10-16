@@ -240,6 +240,7 @@ $('buildApk').addEventListener('click',async()=>{
   const downloadToken=job.downloadToken;
   if(!/^[a-f0-9]{32}$/.test(requestId||''))throw Error('Сервер вернул неверный номер сборки.');
   if(!/^[a-f0-9]{64}$/.test(downloadToken||''))throw Error('Сервер не выдал токен безопасного доступа к APK.');
+  localStorage.setItem('asBuilderLastBuildV1',JSON.stringify({requestId,downloadToken,apiUrl:cfg.url,savedAt:Date.now()}));
   const pollingStartedAt=Date.now();
   while(true){
    const elapsedMs=Date.now()-pollingStartedAt;
@@ -302,7 +303,46 @@ $('buildApk').addEventListener('click',async()=>{
  }catch(e){buildStatus('Ошибка: '+e.message);}finally{button.disabled=false;}
 });
 
+async function resumeSavedBuild(){
+ let saved;
+ try{saved=JSON.parse(localStorage.getItem('asBuilderLastBuildV1')||'null')}catch(e){}
+ if(!saved||!/^[a-f0-9]{32}$/.test(saved.requestId||'')||!/^[a-f0-9]{64}$/.test(saved.downloadToken||'')||!saved.apiUrl)return;
+ const cfg={url:saved.apiUrl};
+ const button=$('buildApk');if(button)button.disabled=true;
+ try{
+  buildStatus('Восстанавливаю доступ к предыдущей сборке после обновления страницы…');
+  while(true){
+   let response;
+   try{response=await fetch(cfg.url+'/api/status?requestId='+encodeURIComponent(saved.requestId),{headers:{'Accept':'application/json','Authorization':'Bearer '+saved.downloadToken}})}
+   catch(e){buildStatus('Связь прервана. Повторяю восстановление доступа…');await new Promise(r=>setTimeout(r,5000));continue}
+   const state=await response.json().catch(()=>({}));
+   if(!response.ok)throw Error(state.error||'Не удалось восстановить доступ к сборке.');
+   if(state.status==='failed')throw Error(state.message||'Сборка завершилась ошибкой.');
+   if(state.status==='success'){
+    buildStatus('APK готов. Восстанавливаю скачивание…');
+    const downloadResponse=await fetch(new URL(state.downloadUrl,cfg.url).href,{headers:{'Authorization':'Bearer '+saved.downloadToken}});
+    if(!downloadResponse.ok)throw Error('Сборка готова, но скачать файл не удалось (HTTP '+downloadResponse.status+').');
+    const blob=await downloadResponse.blob();
+    deliverBlob(blob,'as-app-'+saved.requestId.slice(0,8)+'.apk');
+    localStorage.removeItem('asBuilderLastBuildV1');
+    buildStatus('Готово! APK восстановлен и скачан. Проверь папку «Загрузки» на телефоне.');
+    return;
+   }
+   buildStatus('Восстановление: '+(state.message||state.status||'ожидание')+'. Не запускай новую сборку.');
+   await new Promise(r=>setTimeout(r,5000));
+  }
+ }catch(e){buildStatus('Восстановление не удалось: '+e.message+' Если это предыдущая сборка, используй ссылку восстановления, полученную от поддержки.');}
+ finally{if(button)button.disabled=false;}
+}
 restoreBuildConfig();
+(function(){
+ const match=location.hash.match(/^#recover=([a-f0-9]{32})\.([a-f0-9]{64})$/);
+ if(match){
+  localStorage.setItem('asBuilderLastBuildV1',JSON.stringify({requestId:match[1],downloadToken:match[2],apiUrl:$('backendUrl').value.trim().replace(/\\/+$/,''),savedAt:Date.now()}));
+  history.replaceState(null,'',location.pathname+location.search);
+ }
+ if(localStorage.getItem('asBuilderLastBuildV1'))setTimeout(resumeSavedBuild,500);
+})();
 
 // Turnstile and the build API require the trusted HTTPS website origin.
 // Local file:// pages (including the bundled Android WebView asset) cannot
