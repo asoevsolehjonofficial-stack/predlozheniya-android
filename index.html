@@ -338,10 +338,16 @@ restoreBuildConfig();
 (function(){
  const match=location.hash.match(/^#recover=([a-f0-9]{32})\.([a-f0-9]{64})$/);
  if(match){
-  localStorage.setItem('asBuilderLastBuildV1',JSON.stringify({requestId:match[1],downloadToken:match[2],apiUrl:$('backendUrl').value.trim().replace(/\\/+$/,''),savedAt:Date.now()}));
+  const apiInput=$('backendUrl');
+  const apiUrl=(apiInput&&apiInput.value.trim())||'https://as-app-builder-api.asoev-solehjon-official.workers.dev';
+  localStorage.setItem('asBuilderLastBuildV1',JSON.stringify({requestId:match[1],downloadToken:match[2],apiUrl:apiUrl.replace(/\\/+$/,''),savedAt:Date.now()}));
   history.replaceState(null,'',location.pathname+location.search);
+  buildStatus('Ссылка восстановления найдена. Подключаюсь к серверу и восстанавливаю APK…');
+  $('buildApkStatus')?.scrollIntoView({behavior:'smooth',block:'center'});
+ } else if(localStorage.getItem('asBuilderLastBuildV1')) {
+  buildStatus('Найдена незавершённая загрузка APK. Восстанавливаю её…');
  }
- if(localStorage.getItem('asBuilderLastBuildV1'))setTimeout(resumeSavedBuild,500);
+ if(localStorage.getItem('asBuilderLastBuildV1'))setTimeout(resumeSavedBuild,700);
 })();
 
 // Turnstile and the build API require the trusted HTTPS website origin.
