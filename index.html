@@ -16,6 +16,61 @@
 .layout{max-width:1500px;grid-template-columns:minmax(310px,.72fr) minmax(0,1.48fr);align-items:start}.builder-form{position:relative}.studio-panel{padding:18px;min-height:740px}.studio-workspace{display:grid;grid-template-columns:minmax(230px,.78fr) minmax(270px,1fr);gap:16px;align-items:start}.activity-column,.device-column{min-width:0}.activity-head,.device-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}.activity-head h3,.device-head h3{font-size:15px;margin:0}.live-label{display:inline-flex;align-items:center;gap:6px;color:var(--mint);font-size:11px}.live-label:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--mint);box-shadow:0 0 0 4px #73e0c11c}.activity-feed{height:330px;overflow:auto;background:#09111f;border:1px solid #263750;border-radius:14px;padding:13px;display:flex;flex-direction:column;gap:11px}.activity-empty{color:#8fa1bd;font-size:12px;line-height:1.7;padding:5px}.activity-item{display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;font-size:12px;line-height:1.55;animation:activityIn .2s ease-out}.activity-icon{width:22px;height:22px;display:grid;place-items:center;border-radius:7px;background:#1d2b43;color:#9db5ff;font-size:11px}.activity-item.done .activity-icon{background:#15382f;color:#73e0c1}.activity-item.error .activity-icon{background:#402325;color:#ffb4a9}.activity-item strong{display:block;color:#eaf0ff;font-size:12px;font-weight:750}.activity-item p{margin:2px 0 0;color:#91a3bf}.activity-time{font-size:10px;color:#637794;margin-top:3px}.activity-tools{display:flex;gap:6px;margin:12px 0;flex-wrap:wrap}.activity-tools .tab{flex:1}.activity-column .code{max-height:390px;min-height:220px}.device-column{display:flex;flex-direction:column;align-items:center}.device-actions{display:flex;gap:5px}.device-actions button{font-size:11px;padding:7px 9px}.device-stage{width:100%;min-height:540px;display:flex;justify-content:center;align-items:center;padding:14px;background:radial-gradient(ellipse at center,#20304b 0,transparent 72%);border:1px solid #263750;border-radius:18px;overflow:hidden}.phone-shell{width:min(100%,320px);height:570px;max-height:72vh;min-height:420px;background:#05070b;border:3px solid #4a5870;border-radius:36px;padding:9px;box-shadow:0 20px 55px #0008;position:relative;display:flex;flex-direction:column}.phone-top{height:19px;flex:0 0 19px;display:flex;justify-content:center;align-items:center;background:#05070b;border-radius:25px 25px 0 0;position:relative;z-index:2}.phone-camera{width:68px;height:13px;border-radius:10px;background:#151b25;border:1px solid #242c3a}.phone-screen{position:relative;overflow:hidden;flex:1;background:#fff;border-radius:22px;min-height:0}.phone-screen #previewPane{height:100%;min-height:0;border-radius:22px;background:#fff;overflow:hidden}.phone-screen #previewPane iframe{display:block;width:100%;height:100%;min-height:0;border:0;background:#fff}.phone-screen #previewPane .empty{height:100%;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;background:linear-gradient(160deg,#f6f8ff,#e9eef8);color:#61718a}.phone-home{height:17px;flex:0 0 17px;display:flex;align-items:flex-end;justify-content:center}.phone-home:after{content:"";width:82px;height:4px;border-radius:9px;background:#c8ccd4}.device-caption{color:#8fa1bd;font-size:11px;line-height:1.5;text-align:center;margin:10px 0 0}.workspace-bottom{margin-top:16px;border-top:1px solid var(--line);padding-top:15px}.workspace-bottom .tabs{margin-bottom:10px}.workspace-bottom .field{margin:10px 0}.workspace-bottom .actions{margin-top:10px}.workspace-bottom .notice{margin-top:10px}.build-summary{display:none;border:1px solid #2d4b4b;background:#0d2827;border-radius:12px;padding:11px;color:#b9f3e2;font-size:12px;line-height:1.55;margin-top:12px}.build-summary.visible{display:block}@keyframes activityIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}@media(max-width:1080px){.layout{grid-template-columns:minmax(280px,.8fr) minmax(0,1.2fr)}.studio-workspace{grid-template-columns:1fr}.activity-feed{height:190px}.device-stage{min-height:500px}.phone-shell{height:540px}}@media(max-width:800px){.layout{grid-template-columns:1fr}.studio-panel{min-height:0}.studio-workspace{grid-template-columns:minmax(0,1fr)}.activity-feed{height:220px}.device-stage{min-height:500px}.phone-shell{height:560px;max-height:none;width:min(100%,320px)}.device-column{margin-top:2px}}@media(max-width:430px){.device-stage{padding:8px;min-height:470px}.phone-shell{height:530px;min-height:400px;width:min(100%,300px)}.activity-tools .tab{font-size:11px;padding:8px 5px}.activity-feed{height:210px}}
 
 .edit-prompt{margin-top:16px;padding:12px;border:1px solid #2b3d59;border-radius:13px;background:#0b1425}.edit-prompt textarea{width:100%;min-height:76px;resize:vertical;background:#101b2d;color:var(--text);border:1px solid #344663;border-radius:10px;padding:11px;line-height:1.5}.edit-prompt .btn{width:100%;margin-top:8px}.activity-item.working .activity-icon{animation:activityPulse 1s infinite alternate}@keyframes activityPulse{from{opacity:.45}to{opacity:1}}@media(max-width:800px){.studio-workspace{grid-template-columns:1fr}.activity-feed{height:260px}.device-stage{min-height:490px}.phone-shell{max-height:none;height:560px;width:min(100%,310px)}}
+
+/* A.S. Studio workspace refresh */
+.studio-shell{max-width:1600px;margin:0 auto;padding:14px 18px 28px;display:grid;grid-template-columns:250px minmax(330px,1fr) minmax(300px,390px);gap:14px;align-items:start}
+.studio-sidebar,.studio-main,.studio-preview{min-width:0;background:linear-gradient(180deg,#111d31,#0e1728);border:1px solid #2a3a55;border-radius:18px;padding:15px;box-shadow:0 12px 36px #0002}
+.studio-sidebar{position:sticky;top:76px;max-height:calc(100dvh - 92px);overflow:auto}
+.studio-main{min-height:calc(100dvh - 100px)}
+.studio-preview{position:sticky;top:76px;max-height:calc(100dvh - 92px);overflow:auto}
+.studio-kicker{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8ea6d0;font-weight:800;margin-bottom:8px}
+.studio-title{font-size:19px;font-weight:850;letter-spacing:-.03em;margin:0 0 6px}
+.studio-subtitle{font-size:12px;color:#91a3bf;line-height:1.55;margin:0 0 15px}
+.studio-sidebar .field{margin:11px 0}.studio-sidebar .field label,.studio-main .field label{font-size:11px;color:#aebfda}
+.studio-sidebar input,.studio-sidebar select,.studio-main input,.studio-main textarea{font-size:13px}
+.studio-sidebar .choices{grid-template-columns:1fr;gap:6px}
+.studio-sidebar .choice{text-align:left;padding:10px 11px}
+.studio-sidebar .ai-panel{margin-top:14px;background:#0b1425;border:1px solid #293a55;border-radius:13px;padding:12px}
+.studio-sidebar .ai-panel summary{font-size:12px!important}
+.studio-sidebar .ai-links{display:flex;flex-wrap:wrap;gap:8px}
+.studio-sidebar .ai-warning{font-size:11px;line-height:1.5}
+.studio-sidebar .workspace-project-actions{display:grid;grid-template-columns:1fr;gap:6px}
+.studio-sidebar .workspace-project-actions button{width:100%;justify-content:flex-start}
+.studio-main .studio-chat-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:16px}
+.studio-main .prompt-composer{padding:14px;border:1px solid #34496a;border-radius:16px;background:#0a1323;box-shadow:inset 0 1px #ffffff08}
+.studio-main .prompt-composer textarea{min-height:128px;resize:vertical;font-size:14px;line-height:1.6}
+.studio-main .prompt-composer .field{margin-bottom:10px}
+.studio-main .composer-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.studio-main .composer-actions .btn{flex:1}
+.studio-main .activity-column{margin-top:16px}
+.studio-main .activity-feed{height:210px}
+.studio-main .edit-prompt{background:#0a1323}
+.studio-preview .device-column{width:100%}
+.studio-preview .device-stage{min-height:440px;padding:10px}
+.studio-preview .phone-shell{height:min(66vh,650px);min-height:430px;width:min(100%,320px)}
+.studio-preview .device-head{align-items:center}
+.studio-preview .workspace-bottom{margin-top:14px}
+.studio-preview .workspace-bottom .tabs{display:grid;grid-template-columns:1fr;gap:6px}
+.studio-preview .workspace-bottom .actions{display:grid;grid-template-columns:1fr;gap:7px}
+.studio-preview .workspace-bottom .actions button{width:100%}
+.studio-preview #androidBuildSection{margin-top:14px;padding:12px;background:#0a1323;border:1px solid #2a3a55;border-radius:14px}
+.studio-preview #androidBuildSection h2{font-size:14px}
+.studio-preview #androidBuildSection .sub{font-size:11px;line-height:1.5}
+.studio-preview #androidBuildSection .actions{display:grid;grid-template-columns:1fr}
+.studio-preview #androidBuildSection .field{margin:8px 0}
+.studio-preview #androidBuildSection input{font-size:11px}
+.top{position:sticky;top:0;z-index:30;backdrop-filter:blur(18px);background:#0b1120eF;border-bottom:1px solid #263750}
+.top .brand{font-weight:850}
+.top .brand small{color:#8fa1bd}
+.hero,.section,.footer{display:none!important}
+body{background:radial-gradient(ellipse at 48% -15%,#243759 0,transparent 45%),#080e19}
+body:has(.studio-shell){overflow-x:hidden}
+.studio-shell .status{font-size:12px;line-height:1.5}
+.studio-shell .notice{font-size:11px;line-height:1.5}
+.studio-shell .hidden{display:none!important}
+@media(max-width:1150px){.studio-shell{grid-template-columns:220px minmax(0,1fr)}.studio-preview{position:static;grid-column:1/-1;max-height:none}.studio-preview .device-column{max-width:650px;margin:0 auto}.studio-preview .workspace-bottom .actions{grid-template-columns:repeat(2,minmax(0,1fr))}.studio-preview .workspace-bottom .tabs{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:760px){.top{padding:10px 12px}.top .brand{font-size:13px}.top .brand small{font-size:9px}.top-actions .btn{font-size:11px;padding:8px}.studio-shell{display:flex;flex-direction:column;padding:10px;gap:10px}.studio-sidebar,.studio-main,.studio-preview{width:100%;position:static;max-height:none;padding:12px}.studio-sidebar{order:1}.studio-main{order:2;min-height:0}.studio-preview{order:3}.studio-sidebar .choices{grid-template-columns:repeat(3,minmax(0,1fr))}.studio-sidebar .choice{text-align:center;font-size:11px;padding:9px 4px}.studio-main .studio-chat-head{align-items:flex-start}.studio-main .prompt-composer textarea{min-height:110px}.studio-preview .device-stage{min-height:440px}.studio-preview .phone-shell{height:530px;max-height:none}.studio-preview .workspace-bottom .actions{grid-template-columns:1fr}.studio-preview .workspace-bottom .tabs{grid-template-columns:1fr}.studio-main .activity-feed{height:190px}}
+
 </style>
 </head>
 <body>
@@ -475,6 +530,75 @@ function configureLocalBuildMode(){
  link.rel='noopener noreferrer';
  status.append(message,link);
 }
+
+/* Mount a three-pane AI studio layout while preserving existing project handlers and IDs. */
+function mountASStudio(){
+ if(document.querySelector('.studio-shell'))return;
+ const oldMain=document.querySelector('main.layout');
+ const form=document.querySelector('.builder-form');
+ const studio=document.querySelector('.studio-panel');
+ if(!oldMain||!form||!studio)return;
+ const shell=document.createElement('div');shell.className='studio-shell';
+ const side=document.createElement('aside');side.className='studio-sidebar';
+ const center=document.createElement('section');center.className='studio-main';
+ const right=document.createElement('aside');right.className='studio-preview';
+ const title=(k,t,sub)=>{const box=document.createElement('div');box.innerHTML='<div class="studio-kicker"></div><h2 class="studio-title"></h2><p class="studio-subtitle"></p>';box.children[0].textContent=k;box.children[1].textContent=t;box.children[2].textContent=sub;return box};
+ side.append(title('PROJECT WORKSPACE','Мой проект','Создай проект, настрой ИИ и продолжай работу в одном месте.'));
+ center.append(title('AI BUILDER','Опиши, что нужно создать','ИИ создаёт прототип, а ты можешь просить изменения обычным языком.'));
+ const choices=form.querySelector('.choices')?.closest('.field');
+ const name=form.querySelector('#appName')?.closest('.field');
+ const style=form.querySelector('#style')?.closest('.field');
+ const complexity=form.querySelector('#complexity')?.closest('.field');
+ const prompt=form.querySelector('#prompt')?.closest('.field');
+ const features=form.querySelector('#features')?.closest('.field');
+ const ai=form.querySelector('.ai-panel');
+ const actions=[...form.querySelectorAll(':scope > .actions')];
+ const status=form.querySelector('#status');
+ const example=form.querySelector('#example');
+ const localGenerate=form.querySelector('#generate');
+ const aiGenerate=form.querySelector('#aiGenerate');
+ const notice=form.querySelector('.notice');
+ if(choices)side.append(choices);
+ if(name)side.append(name);
+ if(style)side.append(style);
+ if(complexity)side.append(complexity);
+ if(ai){ai.removeAttribute('open');side.append(ai)}
+ const projectActions=document.createElement('div');projectActions.className='workspace-project-actions';
+ ['saveProject','loadProject','deleteProject'].forEach(id=>{const b=document.getElementById(id);if(b)projectActions.append(b)});
+ const saved=document.getElementById('savedProjectList')?.closest('.field');
+ if(saved)side.append(saved);
+ if(projectActions.children.length)side.append(projectActions);
+ if(prompt){prompt.classList.add('prompt-composer');center.append(prompt)}
+ if(features)center.append(features);
+ const composerActions=document.createElement('div');composerActions.className='composer-actions';
+ if(aiGenerate){aiGenerate.textContent='✦ Сгенерировать приложение';composerActions.append(aiGenerate)}
+ if(example)composerActions.append(example);
+ if(localGenerate)composerActions.append(localGenerate);
+ if(composerActions.children.length){const wrap=document.createElement('div');wrap.className='prompt-composer';wrap.append(composerActions);center.append(wrap)}
+ if(status)center.append(status);
+ if(notice)center.append(notice);
+ const activity=studio.querySelector('.activity-column');
+ const device=studio.querySelector('.device-column');
+ const bottom=studio.querySelector('.workspace-bottom');
+ if(activity)center.append(activity);
+ if(device)right.append(device);
+ if(bottom)right.append(bottom);
+ const build=document.getElementById('androidBuildSection');
+ if(build)right.append(build);
+ const state=document.getElementById('state');
+ if(state){state.style.display='inline-flex'}
+ shell.append(side,center,right);
+ oldMain.replaceWith(shell);
+ studio.remove();
+ document.querySelectorAll('.section').forEach(sec=>{if(sec.id!=='androidBuildSection')sec.style.display='none'});
+ document.querySelector('.hero')?.remove();
+ const oldHeader=document.querySelector('.top');
+ if(oldHeader){const small=document.createElement('span');small.className='pill';small.textContent='AI STUDIO · BETA';small.style.marginLeft='auto';oldHeader.querySelector('.top-actions')?.prepend(small)}
+ const mainHeading=center.querySelector('.studio-title');
+ if(mainHeading)mainHeading.setAttribute('id','studioBuilderTitle');
+}
+mountASStudio();
+
 configureLocalBuildMode();
 </script>
 </body></html>
