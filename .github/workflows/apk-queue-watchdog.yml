@@ -1,0 +1,33 @@
+name: Wake APK queue worker
+run-name: "APK queue watchdog"
+
+on:
+  schedule:
+    - cron: "3-59/5 * * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/apk-queue-watchdog.yml"
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: as-app-builder-queue-watchdog
+  cancel-in-progress: false
+
+jobs:
+  wake-queue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Dispatch the queue worker
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --method POST "repos/$GITHUB_REPOSITORY/actions/workflows/build-user-project-apk.yml/dispatches" \
+            -f ref=main
+          echo "Requested a queue pass. The worker itself checks backend health and claims at most one job."
