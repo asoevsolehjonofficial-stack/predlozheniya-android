@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validHtml, bytesToBase64, base64ToBytes, safeEqual, verifyGitHubOidc } from "../src/index.js";
+import { validHtml, bytesToBase64, base64ToBytes, safeEqual, verifyGitHubOidc, readBodyLimited } from "../src/index.js";
 
 test("accepts a complete self-contained HTML document", () => {
   assert.equal(validHtml("<!doctype html><html><head><title>Demo</title></head><body><h1>OK</h1></body></html>"), "");
@@ -33,4 +33,15 @@ test("binary APK base64 encoding round-trips bytes exactly", () => {
 test("rejects missing or malformed GitHub OIDC credentials", async () => {
   assert.equal(await verifyGitHubOidc(new Request("https://example.test/internal")), false);
   assert.equal(await verifyGitHubOidc(new Request("https://example.test/internal", { headers: { Authorization: "Bearer not.a.jwt" } })), false);
+});
+
+
+test("readBodyLimited reads small request bodies", async () => {
+  const request = new Request("https://example.test/api/build", { method: "POST", body: '{"html":"ok"}' });
+  assert.equal(await readBodyLimited(request, 100), '{"html":"ok"}');
+});
+
+test("readBodyLimited rejects bodies above the configured cap", async () => {
+  const request = new Request("https://example.test/api/build", { method: "POST", body: "x".repeat(1024) });
+  assert.equal(await readBodyLimited(request, 100), null);
 });
