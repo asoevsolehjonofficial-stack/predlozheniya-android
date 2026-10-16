@@ -264,8 +264,9 @@ $('buildApk').addEventListener('click',async()=>{
    if(state.status==='failed')throw Error((state.message||'Сборка не удалась.')+(state.logs?' Журнал: '+state.logs:''));
    if(state.status==='success'){
     buildStatus('APK собран и проверен. Скачиваю файл…');
-    let downloadResponse;
+    let blob;
     while(true){
+     let downloadResponse;
      try{
       downloadResponse=await fetch(new URL(state.downloadUrl,cfg.url).href,{headers:{'Authorization':'Bearer '+downloadToken}});
      }catch(e){
@@ -273,16 +274,23 @@ $('buildApk').addEventListener('click',async()=>{
       await new Promise(resolve=>setTimeout(resolve,5000));
       continue;
      }
-     if(downloadResponse.ok)break;
-     if(downloadResponse.status===429||downloadResponse.status>=500){
-      buildStatus('APK собран, сервер временно не отдаёт файл (HTTP '+downloadResponse.status+'). Повторяю скачивание автоматически.');
-      await new Promise(resolve=>setTimeout(resolve,5000));
-      continue;
+     if(!downloadResponse.ok){
+      if(downloadResponse.status===429||downloadResponse.status>=500){
+       buildStatus('APK собран, сервер временно не отдаёт файл (HTTP '+downloadResponse.status+'). Повторяю скачивание автоматически.');
+       await new Promise(resolve=>setTimeout(resolve,5000));
+       continue;
+      }
+      const err=await downloadResponse.json().catch(()=>({}));
+      throw Error(err.error||'Не удалось скачать APK.');
      }
-     const err=await downloadResponse.json().catch(()=>({}));
-     throw Error(err.error||'Не удалось скачать APK.');
+     try{
+      blob=await downloadResponse.blob();
+      break;
+     }catch(e){
+      buildStatus('Связь прервалась во время скачивания APK. Повторяю загрузку автоматически; не запускай новую сборку.');
+      await new Promise(resolve=>setTimeout(resolve,5000));
+     }
     }
-    const blob=await downloadResponse.blob();
     deliverBlob(blob,'as-app-'+requestId.slice(0,8)+'.apk');
     buildStatus('Готово! APK прошёл проверку контрольной суммы. Открой файл из «Загрузок» и подтверди установку Android. Это тестовая сборка; для обычных обновлений нужна постоянная подпись.');
     return;
