@@ -340,7 +340,7 @@ restoreBuildConfig();
  if(match){
   const apiInput=$('backendUrl');
   const apiUrl=(apiInput&&apiInput.value.trim())||'https://as-app-builder-api.asoev-solehjon-official.workers.dev';
-  localStorage.setItem('asBuilderLastBuildV1',JSON.stringify({requestId:match[1],downloadToken:match[2],apiUrl:apiUrl.replace(/\\/+$/,''),savedAt:Date.now()}));
+  localStorage.setItem('asBuilderLastBuildV1',JSON.stringify({requestId:match[1],downloadToken:match[2],apiUrl:apiUrl.replace(/\/+$/,''),savedAt:Date.now()}));
   history.replaceState(null,'',location.pathname+location.search);
   buildStatus('Ссылка восстановления найдена. Подключаюсь к серверу и восстанавливаю APK…');
   $('buildApkStatus')?.scrollIntoView({behavior:'smooth',block:'center'});
