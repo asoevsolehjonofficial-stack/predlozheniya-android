@@ -600,7 +600,7 @@ function mountASStudio(){
  const build=document.getElementById('androidBuildSection');
  if(build)right.append(build);
  const state=document.getElementById('state');
- if(state){state.style.display='inline-flex'}
+ if(state){state.style.display='inline-flex';center.querySelector('.studio-title')?.parentElement.append(state)}
  shell.append(side,center,right);
  oldMain.replaceWith(shell);
  studio.remove();
