@@ -46,6 +46,35 @@ function validHtml(html) {
   return "";
 }
 
+// Read request bodies incrementally so requests without Content-Length cannot force an unbounded allocation.
+async function readBodyLimited(request, maxBytes) {
+  const reader = request.body?.getReader();
+  if (!reader) return "";
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel();
+        return null;
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+}
+
 function bytesToBase64(bytes) {
   let binary = "";
   const chunkSize = 0x8000;
@@ -150,8 +179,13 @@ async function handleBuild(request, env, cors) {
   if (dailyCount >= 10) return json({ error: "The free daily build capacity has been reached. Please try again tomorrow." }, 429, cors.origin);
   const declaredLength = Number(request.headers.get("Content-Length") || "0");
   if (declaredLength > 6 * 1024 * 1024) return json({ error: "Request body is too large." }, 413, cors.origin);
-  const rawBody = await request.text();
-  if (new TextEncoder().encode(rawBody).byteLength > 6 * 1024 * 1024) return json({ error: "Request body is too large." }, 413, cors.origin);
+  let rawBody;
+  try {
+    rawBody = await readBodyLimited(request, 6 * 1024 * 1024);
+  } catch {
+    return json({ error: "Request body must be valid UTF-8." }, 400, cors.origin);
+  }
+  if (rawBody === null) return json({ error: "Request body is too large." }, 413, cors.origin);
   let payload;
   try { payload = JSON.parse(rawBody); } catch { payload = null; }
   if (!payload) return json({ error: "Invalid JSON request." }, 400, cors.origin);
@@ -350,4 +384,4 @@ export default {
   }
 };
 
-export { validHtml, bytesToBase64, base64ToBytes, safeEqual, verifyGitHubOidc };
+export { validHtml, bytesToBase64, base64ToBytes, safeEqual, verifyGitHubOidc, readBodyLimited };
