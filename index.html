@@ -34,7 +34,7 @@
 <div class="ai-links"><a target="_blank" rel="noopener noreferrer" href="https://chatgpt.com/">ChatGPT</a><a target="_blank" rel="noopener noreferrer" href="https://aistudio.google.com/">Gemini</a><a target="_blank" rel="noopener noreferrer" href="https://claude.ai/">Claude</a><a target="_blank" rel="noopener noreferrer" href="https://chat.deepseek.com/">DeepSeek</a><a target="_blank" rel="noopener noreferrer" href="https://chat.qwen.ai/">Qwen</a><a target="_blank" rel="noopener noreferrer" href="https://chat.mistral.ai/">Mistral</a><a target="_blank" rel="noopener noreferrer" href="https://openrouter.ai/">OpenRouter</a><a target="_blank" rel="noopener noreferrer" href="https://groq.com/">Groq</a><a target="_blank" rel="noopener noreferrer" href="https://replit.com/">Replit</a><a target="_blank" rel="noopener noreferrer" href="https://bolt.new/">Bolt</a><a target="_blank" rel="noopener noreferrer" href="https://lovable.dev/">Lovable</a><a target="_blank" rel="noopener noreferrer" href="https://v0.dev/">v0</a><a target="_blank" rel="noopener noreferrer" href="https://huggingface.co/">Hugging Face</a></div>
 <p class="ai-warning">Важно: ключ используется только в этой вкладке и не записывается в localStorage, но может быть виден в инструментах разработчика. Запрос отправляется напрямую выбранному провайдеру и может тарифицироваться. Не вводи ключ на чужом устройстве. Для безопасного публичного сервиса нужен backend с серверными секретами.</p></div>
 <div class="actions"><button class="btn primary" id="generate">Создать прототип →</button><button class="btn ghost" id="example">Вставить пример</button></div><div id="status" class="status" aria-live="polite"></div>
-<div class="notice">Прямое скачивание: после создания проекта нажми «Скачать проект на телефон (HTML)» — файл сохранится в загрузки телефона, его можно открыть в браузере. ZIP подготовит устанавливаемую PWA-версию, которую сначала нужно разместить на HTTPS-хостинге. Отдельный APK можно собрать через блок «Сборка APK проекта» после настройки защищённого сервера. Бесплатный генератор работает локально и не подключён к платному AI API.</div>
+<div class="notice">Прямое скачивание: после создания проекта нажми «Скачать проект на телефон (HTML)» — файл сохранится в загрузки телефона, его можно открыть в браузере. ZIP подготовит устанавливаемую PWA-версию, которую сначала нужно разместить на HTTPS-хостинге. Отдельный APK можно собрать через блок «Сборка APK проекта» на веб-версии по HTTPS. Бесплатный генератор работает локально и не подключён к платному AI API.</div>
 </section>
 <section class="panel">
 <div class="previewhead"><div><h2>02 / Результат</h2><p class="sub" style="margin:5px 0 0">Предварительный просмотр и экспорт</p></div><span class="pill" id="state">Ожидает идею</span></div>
@@ -49,12 +49,12 @@
 
 <section class="section" id="androidBuildSection">
   <h2>05 / Сборка APK проекта</h2>
-  <p class="sub">Отправляет готовый HTML в отдельный сервер сборки, создаёт изолированный временный проект, проверяет APK и возвращает файл для скачивания. Не отправляй пароли, личные данные или секретные ключи.</p>
+  <p class="sub">Отправляет готовый HTML в отдельный сервер сборки, создаёт изолированный временный проект, проверяет APK и возвращает файл для скачивания. Сборка доступна в веб-версии по HTTPS: локальный HTML-файл и Android-оболочка не могут пройти проверку Turnstile из-за ограничений происхождения. Не отправляй пароли, личные данные или секретные ключи.</p>
   <div class="field"><label for="backendUrl">Адрес защищённого сервера сборки</label><input id="backendUrl" type="url" inputmode="url" value="https://as-app-builder-api.asoev-solehjon-official.workers.dev" placeholder="https://твой-сервис.workers.dev" autocomplete="url"></div>
   <div class="field"><label for="turnstileSiteKey">Публичный ключ Cloudflare Turnstile</label><input id="turnstileSiteKey" type="text" value="0x4AAAAAAFXyrsPUlWHILpXf" placeholder="Ключ сайта Turnstile" autocomplete="off"></div>
   <div id="turnstileWidget" style="margin:12px 0"></div>
   <div class="actions"><button class="btn secondary" id="checkBackend" type="button">Проверить сервер</button><button class="btn primary" id="buildApk" type="button">Собрать APK проекта →</button></div>
-  <div id="buildApkStatus" class="status" aria-live="polite">Для сборки необходимо развернуть backend и указать его адрес и публичный ключ Turnstile.</div>
+  <div id="buildApkStatus" class="status" aria-live="polite">Сервер сборки настроен. Нажми «Проверить сервер», затем пройди Cloudflare Turnstile и нажми «Собрать APK проекта».</div>
 </section>
 <footer class="footer">A.S. APP BUILDER · Your Idea. Your App. Your APK.<br>Бесплатный MVP · Не загружай в промпт пароли, API-ключи и личные данные.</footer>
 <script>
@@ -303,5 +303,27 @@ $('buildApk').addEventListener('click',async()=>{
 });
 
 restoreBuildConfig();
+
+// Turnstile and the build API require the trusted HTTPS website origin.
+// Local file:// pages (including the bundled Android WebView asset) cannot
+// pass the server's origin/hostname checks. Keep local editing/export usable.
+function configureLocalBuildMode(){
+ if(location.protocol!=='file:')return;
+ $('backendUrl').closest('.field').classList.add('hidden');
+ $('turnstileSiteKey').closest('.field').classList.add('hidden');
+ $('turnstileWidget').classList.add('hidden');
+ $('checkBackend').classList.add('hidden');
+ $('buildApk').classList.add('hidden');
+ const status=$('buildApkStatus');
+ status.replaceChildren();
+ const message=document.createElement('span');
+ message.textContent='Сборка APK доступна только на защищённой веб-версии. Создание прототипов и экспорт файлов в этом режиме продолжают работать.';
+ const link=document.createElement('a');
+ link.href='https://as-app-builder.pages.dev/';
+ link.textContent=' Открыть веб-версию для сборки APK';
+ link.rel='noopener noreferrer';
+ status.append(message,link);
+}
+configureLocalBuildMode();
 </script>
 </body></html>
