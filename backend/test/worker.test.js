@@ -165,7 +165,7 @@ test("APK download verifies stored checksum and returns an installable-file resp
   });
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("content-type"), "application/vnd.android.package-archive");
-  assert.match(response.headers.get("content-disposition") || "", /attachment; filename="as-app-fedcba98\\.apk"/);
+  assert.match(response.headers.get("content-disposition") || "", /attachment; filename="as-app-fedcba98\.apk"/);
   assert.equal(response.headers.get("x-apk-sha256"), sha256);
   const downloaded = Buffer.from(await response.arrayBuffer());
   assert.deepEqual(downloaded, bytes);
