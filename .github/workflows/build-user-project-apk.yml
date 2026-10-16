@@ -57,7 +57,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-      actions: write
     env:
       PROJECT_SLUG: ${{ needs.claim.outputs.project_slug }}
       REQUEST_ID: ${{ needs.claim.outputs.request_id }}
@@ -187,10 +186,18 @@ jobs:
             "$BUILD_API_URL/api/internal/fail?requestId=$REQUEST_ID" \
             -H "Authorization: Bearer $OIDC_TOKEN" || true
 
+
+  dispatch-next:
+    needs: [claim, build]
+    if: always() && needs.claim.outputs.found == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      actions: write
+    steps:
       # A cron event can be delayed or dropped. After processing a real job,
       # dispatch one more pass immediately; an empty queue does not self-loop.
       - name: Trigger next queue pass after processing a job
-        if: always() && needs.claim.outputs.found == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
