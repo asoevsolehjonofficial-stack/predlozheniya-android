@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import worker from "../src/index.js";
 
 const ORIGIN = "https://as-app-builder.pages.dev";
@@ -94,4 +95,111 @@ test("API responses disable caching and sniffing", async () => {
   const response = await call("/api/health");
   assert.equal(response.headers.get("cache-control"), "no-store");
   assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+});
+
+
+test("successful build status is available only with the download token", async () => {
+  const requestId = "0123456789abcdef0123456789abcdef";
+  const token = "stage-one-test-token";
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  const job = {
+    requestId,
+    status: "success",
+    apkUploadedAt: Date.now(),
+    tokenHash,
+    apkSha256: "a".repeat(64)
+  };
+  const values = new Map([[ "job:" + requestId, JSON.stringify(job) ]]);
+  const env = {
+    SITE_ORIGIN: ORIGIN,
+    JOBS: {
+      async get(key) { return values.get(key) || null; },
+      async put(key, value) { values.set(key, value); },
+      async delete(key) { values.delete(key); }
+    }
+  };
+
+  const denied = await call("/api/status?requestId=" + requestId, { env });
+  assert.equal(denied.status, 404);
+
+  const response = await call("/api/status?requestId=" + requestId, {
+    env,
+    headers: { Authorization: "Bearer " + token }
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    requestId,
+    status: "success",
+    message: "APK is ready.",
+    downloadUrl: "/api/download?requestId=" + requestId,
+    logs: null
+  });
+});
+
+test("APK download verifies stored checksum and returns an installable-file response", async () => {
+  const requestId = "fedcba9876543210fedcba9876543210";
+  const token = "stage-one-download-token";
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  const bytes = Buffer.alloc(2048, 0x41);
+  bytes[0] = 0x50;
+  bytes[1] = 0x4b;
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const job = { requestId, status: "success", apkUploadedAt: Date.now(), tokenHash, apkSha256: sha256 };
+  const apk = { base64: bytes.toString("base64"), sha256, createdAt: Date.now() };
+  const values = new Map([
+    [ "job:" + requestId, JSON.stringify(job) ],
+    [ "apk:" + requestId, JSON.stringify(apk) ]
+  ]);
+  const env = {
+    SITE_ORIGIN: ORIGIN,
+    JOBS: {
+      async get(key) { return values.get(key) || null; },
+      async put(key, value) { values.set(key, value); },
+      async delete(key) { values.delete(key); }
+    }
+  };
+
+  const response = await call("/api/download?requestId=" + requestId, {
+    env,
+    headers: { Authorization: "Bearer " + token }
+  });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "application/vnd.android.package-archive");
+  assert.match(response.headers.get("content-disposition") || "", /attachment; filename="as-app-fedcba98\.apk"/);
+  assert.equal(response.headers.get("x-apk-sha256"), sha256);
+  const downloaded = Buffer.from(await response.arrayBuffer());
+  assert.deepEqual(downloaded, bytes);
+  assert.equal(createHash("sha256").update(downloaded).digest("hex"), sha256);
+});
+
+test("APK download rejects a tampered stored record and deletes it", async () => {
+  const requestId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const token = "stage-one-tamper-token";
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  const bytes = Buffer.alloc(2048, 0x41);
+  bytes[0] = 0x50;
+  bytes[1] = 0x4b;
+  const actual = createHash("sha256").update(bytes).digest("hex");
+  const job = { requestId, status: "success", apkUploadedAt: Date.now(), tokenHash, apkSha256: "b".repeat(64) };
+  const apk = { base64: bytes.toString("base64"), sha256: actual, createdAt: Date.now() };
+  const values = new Map([
+    [ "job:" + requestId, JSON.stringify(job) ],
+    [ "apk:" + requestId, JSON.stringify(apk) ]
+  ]);
+  const env = {
+    SITE_ORIGIN: ORIGIN,
+    JOBS: {
+      async get(key) { return values.get(key) || null; },
+      async put(key, value) { values.set(key, value); },
+      async delete(key) { values.delete(key); }
+    }
+  };
+
+  const response = await call("/api/download?requestId=" + requestId, {
+    env,
+    headers: { Authorization: "Bearer " + token }
+  });
+  assert.equal(response.status, 502);
+  assert.match((await response.json()).error, /integrity check failed/i);
+  assert.equal(values.has("apk:" + requestId), false);
 });
