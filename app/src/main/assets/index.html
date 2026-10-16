@@ -85,7 +85,7 @@ body:has(.studio-shell){overflow-x:hidden}
 <div class="field"><label for="prompt">Задание для ИИ</label><textarea id="prompt" maxlength="6000" placeholder="Создай приложение для изучения английского: карточки слов, тест из 10 вопросов, подсчёт баллов и сохранение результата на телефоне."></textarea></div>
 <div class="field"><label for="features">Дополнительные пожелания</label><input id="features" maxlength="500" placeholder="Русский язык, тёмная тема, офлайн-доступ"></div>
 <details class="ai-panel" open><summary style="cursor:pointer;font-weight:800;margin-bottom:14px">🤖 Подключение ИИ-модели</summary><p class="sub">Подключи Gemini через Google AI Studio или другой совместимый API. Ключ нужен для генерации кода.</p>
-<div class="field"><label for="aiProvider">Провайдер</label><select id="aiProvider"><option value="gemini" selected>Google Gemini (Google AI Studio)</option><option value="openai">OpenAI</option><option value="compatible">OpenAI-совместимый API</option></select></div>
+<div class="field"><label for="aiProvider">Провайдер</label><select id="aiProvider"><option value="gemini" selected>Google Gemini (Google AI Studio)</option><option value="openai">OpenAI</option><option value="openrouter">OpenRouter (единый шлюз моделей)</option><option value="compatible">OpenAI-совместимый API</option></select></div>
 <div class="field"><label for="aiEndpoint">API endpoint</label><input id="aiEndpoint" value="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent" autocomplete="off"></div>
 <div class="field"><label for="aiModel">Модель</label><input id="aiModel" value="gemini-2.5-flash" autocomplete="off"></div>
 <div class="field"><label for="aiKey">API-ключ</label><input id="aiKey" type="password" autocomplete="off" placeholder="Ключ не сохраняется сайтом"></div>
@@ -172,7 +172,7 @@ function makeSpec(name,prompt,features,kind,style){return 'РОЛЬ: Ты опы
 
 function buildAIPrompt(){return 'Ты senior-разработчик мобильных web-приложений и инженер качества. Создай НЕ описание и НЕ демонстрационную страницу с пересказом задания, а рабочее приложение «'+($('appName').value.trim()||'Моё приложение')+'». Тип проекта: '+kind+'. Идея и требования пользователя:\n'+$('prompt').value.trim()+'\nДополнительные требования: '+($('features').value.trim()||'адаптивный мобильный интерфейс')+'. Уровень: '+$('complexity').value+'.\nОБЯЗАТЕЛЬНО: 1) верни один полный HTML5-документ от <!doctype html> до </html>; 2) весь CSS и JavaScript внутри этого файла; 3) создай реальный интерфейс приложения с экранами, навигацией и рабочими обработчиками событий; 4) не выводи этот промпт, техническое задание или длинное описание вместо приложения; 5) не добавляй кнопки-заглушки и фиктивные переключатели; 6) сохраняй пользовательские данные через localStorage, если это уместно; 7) обработай пустые состояния, ошибки, узкие экраны и клавиатурную доступность; 8) не используй eval, внешние скрипты, CDN, удалённые iframe, секреты или API-ключи; 9) не заявляй, что доступны нативные Android API, MediaStore, foreground service, системные уведомления или эквалайзер — HTML/WebView сам по себе их не предоставляет; если требуются такие функции, реализуй честный web-вариант и не притворяйся нативным приложением; 10) не имитируй серверные функции без backend. Верни только код, без Markdown и пояснений.'}
 $('aiPromptCopy').addEventListener('click',()=>copyText(buildAIPrompt(),'Промпт для ИИ скопирован.'));
-$('aiProvider').addEventListener('change',()=>{if($('aiProvider').value==='gemini'){$('aiModel').value='gemini-2.5-flash';$('aiEndpoint').value='https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'}else if($('aiProvider').value==='openai'){$('aiModel').value='gpt-4.1-mini';$('aiEndpoint').value='https://api.openai.com/v1/chat/completions'}else{$('aiModel').value='deepseek-chat';$('aiEndpoint').value=''}});
+$('aiProvider').addEventListener('change',()=>{if($('aiProvider').value==='gemini'){$('aiModel').value='gemini-2.5-flash';$('aiEndpoint').value='https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'}else if($('aiProvider').value==='openai'){$('aiModel').value='gpt-4.1-mini';$('aiEndpoint').value='https://api.openai.com/v1/chat/completions'}else if($('aiProvider').value==='openrouter'){$('aiModel').value='openrouter/auto';$('aiEndpoint').value='https://openrouter.ai/api/v1/chat/completions'}else{$('aiModel').value='deepseek-chat';$('aiEndpoint').value=''}});
 $('aiTest').addEventListener('click',async()=>{
  const key=$('aiKey').value.trim(),provider=$('aiProvider').value,model=$('aiModel').value.trim(),endpoint=$('aiEndpoint').value.trim();
  if(!key){$('aiStatus').textContent='Введи API-ключ для проверки подключения.';return}
@@ -199,14 +199,14 @@ $('aiTest').addEventListener('click',async()=>{
 });
 function inspectGeneratedHTML(code){
  const issues=[];
- if(!/^\\s*<!doctype html/i.test(code))issues.push('Нет объявления DOCTYPE.');
- if(!/<head[\\s>]/i.test(code))issues.push('Не найден раздел head.');
- if(!/<body[\\s>]/i.test(code))issues.push('Не найден раздел body.');
+ if(!/^\s*<!doctype html/i.test(code))issues.push('Нет объявления DOCTYPE.');
+ if(!/<head[\s>]/i.test(code))issues.push('Не найден раздел head.');
+ if(!/<body[\s>]/i.test(code))issues.push('Не найден раздел body.');
  if(!/<meta[^>]+name=["']viewport["']/i.test(code))issues.push('Нет meta viewport для мобильного экрана.');
- const ids=[...code.matchAll(/\\bid=["']([^"']+)["']/gi)].map(m=>m[1]);
+ const ids=[...code.matchAll(/\bid=["']([^"']+)["']/gi)].map(m=>m[1]);
  const duplicates=ids.filter((id,i)=>ids.indexOf(id)!==i);
  if(duplicates.length)issues.push('Повторяющиеся ID: '+[...new Set(duplicates)].slice(0,8).join(', ')+'.');
- const scripts=(code.match(/<script\\b/gi)||[]).length,closed=(code.match(/<\\/script\\s*>/gi)||[]).length;
+ const scripts=(code.match(/<script\b/gi)||[]).length,closed=(code.match(/<\/script\s*>/gi)||[]).length;
  if(scripts!==closed)issues.push('Количество открывающих и закрывающих script-тегов не совпадает.');
  return issues;
 }
