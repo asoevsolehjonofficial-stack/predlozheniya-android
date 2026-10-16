@@ -9,6 +9,9 @@ on:
       - "backend/src/index.js"
       - "backend/test/security.test.js"
       - "backend/test/worker.test.js"
+      - "app/build.gradle"
+      - "app/src/main/AndroidManifest.xml"
+      - "app/src/main/assets/index.html"
   schedule:
     # Primary poll every five minutes plus an offset fallback. GitHub may delay
     # scheduled events under load; the worker chain drains additional jobs.
