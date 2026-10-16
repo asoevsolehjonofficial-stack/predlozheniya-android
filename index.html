@@ -223,7 +223,15 @@ $('buildApk').addEventListener('click',async()=>{
  const button=$('buildApk');button.disabled=true;
  try{
   buildStatus('Отправляю проект на защищённую сборку…');
-  const start=await fetch(cfg.url+'/api/build',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({html:generatedHTML,turnstileToken})});
+  let start;
+  try{
+   start=await fetch(cfg.url+'/api/build',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({html:generatedHTML,turnstileToken})});
+  }catch(e){
+   turnstileToken='';
+   if(turnstileWidgetId!==null)try{window.turnstile.reset(turnstileWidgetId)}catch(resetError){}
+   buildStatus('Связь прервалась при отправке. Запрос мог быть принят сервером. Не запускай сборку повторно сразу; проверь интернет и сервер.');
+   return;
+  }
   turnstileToken='';
   if(turnstileWidgetId!==null)try{window.turnstile.reset(turnstileWidgetId)}catch(e){}
   const job=await start.json().catch(()=>({}));
@@ -237,14 +245,43 @@ $('buildApk').addEventListener('click',async()=>{
    const elapsedMs=Date.now()-pollingStartedAt;
    const pollDelay=elapsedMs<5*60*1000?5000:(elapsedMs<15*60*1000?10000:15000);
    await new Promise(resolve=>setTimeout(resolve,pollDelay));
-   const statusResponse=await fetch(cfg.url+'/api/status?requestId='+encodeURIComponent(requestId),{headers:{'Accept':'application/json','Authorization':'Bearer '+downloadToken}});
+   let statusResponse;
+   try{
+    statusResponse=await fetch(cfg.url+'/api/status?requestId='+encodeURIComponent(requestId),{headers:{'Accept':'application/json','Authorization':'Bearer '+downloadToken}});
+   }catch(e){
+    const elapsedMinutes=Math.ceil((Date.now()-pollingStartedAt)/60000);
+    buildStatus('Связь временно прервана. Автоматически повторяю проверку статуса через несколько секунд; не отправляй сборку повторно. · прошло '+elapsedMinutes+' мин.');
+    continue;
+   }
    const state=await statusResponse.json().catch(()=>({}));
-   if(!statusResponse.ok)throw Error(state.error||'Не удалось проверить статус сборки.');
+   if(!statusResponse.ok){
+    if(statusResponse.status===429||statusResponse.status>=500){
+     buildStatus('Сервер временно недоступен (HTTP '+statusResponse.status+'). Повторяю проверку автоматически; не отправляй сборку повторно.');
+     continue;
+    }
+    throw Error(state.error||'Не удалось проверить статус сборки.');
+   }
    if(state.status==='failed')throw Error((state.message||'Сборка не удалась.')+(state.logs?' Журнал: '+state.logs:''));
    if(state.status==='success'){
     buildStatus('APK собран и проверен. Скачиваю файл…');
-    const downloadResponse=await fetch(new URL(state.downloadUrl,cfg.url).href,{headers:{'Authorization':'Bearer '+downloadToken}});
-    if(!downloadResponse.ok){const err=await downloadResponse.json().catch(()=>({}));throw Error(err.error||'Не удалось скачать APK.');}
+    let downloadResponse;
+    while(true){
+     try{
+      downloadResponse=await fetch(new URL(state.downloadUrl,cfg.url).href,{headers:{'Authorization':'Bearer '+downloadToken}});
+     }catch(e){
+      buildStatus('APK уже собран, но связь временно прервана. Повторяю скачивание автоматически; не запускай новую сборку.');
+      await new Promise(resolve=>setTimeout(resolve,5000));
+      continue;
+     }
+     if(downloadResponse.ok)break;
+     if(downloadResponse.status===429||downloadResponse.status>=500){
+      buildStatus('APK собран, сервер временно не отдаёт файл (HTTP '+downloadResponse.status+'). Повторяю скачивание автоматически.');
+      await new Promise(resolve=>setTimeout(resolve,5000));
+      continue;
+     }
+     const err=await downloadResponse.json().catch(()=>({}));
+     throw Error(err.error||'Не удалось скачать APK.');
+    }
     const blob=await downloadResponse.blob();
     deliverBlob(blob,'as-app-'+requestId.slice(0,8)+'.apk');
     buildStatus('Готово! APK прошёл проверку контрольной суммы. Открой файл из «Загрузок» и подтверди установку Android. Это тестовая сборка; для обычных обновлений нужна постоянная подпись.');
