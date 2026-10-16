@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validHtml, bytesToBase64, base64ToBytes, safeEqual, verifyGitHubOidc, readBodyLimited } from "../src/index.js";
+import { validHtml, bytesToBase64, base64ToBytes, safeEqual, verifyGitHubOidc, readBodyLimited, recoverStaleJob, STALE_BUILD_MS } from "../src/index.js";
 
 test("accepts a complete self-contained HTML document", () => {
   assert.equal(validHtml("<!doctype html><html><head><title>Demo</title></head><body><h1>OK</h1></body></html>"), "");
@@ -44,4 +44,49 @@ test("readBodyLimited reads small request bodies", async () => {
 test("readBodyLimited rejects bodies above the configured cap", async () => {
   const request = new Request("https://example.test/api/build", { method: "POST", body: "x".repeat(1024) });
   assert.equal(await readBodyLimited(request, 100), null);
+});
+
+
+test("does not recover a job while its worker is within the timeout window", () => {
+  const now = 1_000_000;
+  const job = { status: "building", sourceFetchedAt: now - STALE_BUILD_MS + 1, html: "<html></html>", retryCount: 0 };
+  assert.equal(recoverStaleJob(job, now), false);
+  assert.equal(job.status, "building");
+});
+
+test("requeues a stale claimed job once and preserves its source", () => {
+  const now = 2_000_000;
+  const job = { status: "claimed", claimedAt: now - STALE_BUILD_MS - 1, html: "<!doctype html>", retryCount: 0 };
+  assert.equal(recoverStaleJob(job, now), true);
+  assert.equal(job.status, "queued");
+  assert.equal(job.retryCount, 1);
+  assert.equal(job.html, "<!doctype html>");
+  assert.equal("claimedAt" in job, false);
+});
+
+test("requeues a stale building job with preserved source for one retry", () => {
+  const now = 3_000_000;
+  const job = { status: "building", sourceFetchedAt: now - STALE_BUILD_MS - 1, html: "<!doctype html>", retryCount: 0 };
+  assert.equal(recoverStaleJob(job, now), true);
+  assert.equal(job.status, "queued");
+  assert.equal(job.retryCount, 1);
+  assert.equal(job.html, "<!doctype html>");
+  assert.equal("sourceFetchedAt" in job, false);
+});
+
+test("marks a repeatedly stale job failed instead of retrying forever", () => {
+  const now = 4_000_000;
+  const job = { status: "building", sourceFetchedAt: now - STALE_BUILD_MS - 1, html: "<!doctype html>", retryCount: 1 };
+  assert.equal(recoverStaleJob(job, now), true);
+  assert.equal(job.status, "failed");
+  assert.equal(typeof job.failedAt, "number");
+  assert.equal("html" in job, false);
+});
+
+test("marks a stale legacy job without retained source failed safely", () => {
+  const now = 5_000_000;
+  const job = { status: "building", sourceFetchedAt: now - STALE_BUILD_MS - 1, retryCount: 0 };
+  assert.equal(recoverStaleJob(job, now), true);
+  assert.equal(job.status, "failed");
+  assert.equal("html" in job, false);
 });
