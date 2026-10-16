@@ -199,14 +199,14 @@ $('aiTest').addEventListener('click',async()=>{
 });
 function inspectGeneratedHTML(code){
  const issues=[];
- if(!/^\\s*<!doctype html/i.test(code))issues.push('Нет объявления DOCTYPE.');
- if(!/<head[\\s>]/i.test(code))issues.push('Не найден раздел head.');
- if(!/<body[\\s>]/i.test(code))issues.push('Не найден раздел body.');
+ if(!/^\s*<!doctype html/i.test(code))issues.push('Нет объявления DOCTYPE.');
+ if(!/<head[\s>]/i.test(code))issues.push('Не найден раздел head.');
+ if(!/<body[\s>]/i.test(code))issues.push('Не найден раздел body.');
  if(!/<meta[^>]+name=["']viewport["']/i.test(code))issues.push('Нет meta viewport для мобильного экрана.');
- const ids=[...code.matchAll(/\\bid=["']([^"']+)["']/gi)].map(m=>m[1]);
+ const ids=[...code.matchAll(/\bid=["']([^"']+)["']/gi)].map(m=>m[1]);
  const duplicates=ids.filter((id,i)=>ids.indexOf(id)!==i);
  if(duplicates.length)issues.push('Повторяющиеся ID: '+[...new Set(duplicates)].slice(0,8).join(', ')+'.');
- const scripts=(code.match(/<script\\b/gi)||[]).length,closed=(code.match(/<\\/script\\s*>/gi)||[]).length;
+ const scripts=(code.match(/<script\b/gi)||[]).length,closed=(code.match(/<\/script\s*>/gi)||[]).length;
  if(scripts!==closed)issues.push('Количество открывающих и закрывающих script-тегов не совпадает.');
  return issues;
 }
