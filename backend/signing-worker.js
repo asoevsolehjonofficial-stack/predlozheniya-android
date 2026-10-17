@@ -1,9 +1,12 @@
 const OWNER = "asoevsolehjonofficial-stack";
 const REPO = "predlozheniya-android";
-const WORKFLOW_REF = OWNER + "/" + REPO + "/.github/workflows/build-user-project-apk.yml@refs/heads/main";
+const WORKFLOW_REFS = {
+  generated: OWNER + "/" + REPO + "/.github/workflows/build-user-project-apk.yml@refs/heads/main",
+  builder: OWNER + "/" + REPO + "/.github/workflows/build-apk.yml@refs/heads/main"
+};
 const OIDC_ISSUER = "https://token.actions.githubusercontent.com";
 const OIDC_AUDIENCE = "as-app-builder-signing-key";
-const KEY_NAME = "permanent-apk-signing-key-v1";
+const KEY_NAMES = { generated: "permanent-apk-signing-key-v1", builder: "permanent-builder-apk-signing-key-v1" };
 let jwksCache = null;
 let jwksExpiresAt = 0;
 
@@ -53,7 +56,7 @@ async function verifyGitHubOidc(request) {
   const now = Math.floor(Date.now() / 1000);
   const audienceValid = claims.aud === OIDC_AUDIENCE || (Array.isArray(claims.aud) && claims.aud.includes(OIDC_AUDIENCE));
   if (header.alg !== "RS256" || claims.iss !== OIDC_ISSUER || !audienceValid ||
-      claims.repository !== OWNER + "/" + REPO || claims.workflow_ref !== WORKFLOW_REF ||
+      claims.repository !== OWNER + "/" + REPO || !Object.values(WORKFLOW_REFS).includes(claims.workflow_ref) ||
       claims.ref !== "refs/heads/main" || !Number.isFinite(claims.exp) || claims.exp <= now ||
       !Number.isFinite(claims.iat) || claims.iat > now + 60 ||
       (Number.isFinite(claims.nbf) && claims.nbf > now)) return false;
@@ -67,7 +70,8 @@ async function verifyGitHubOidc(request) {
     const jwk = (jwksCache.keys || []).find(key => key.kid === header.kid && key.kty === "RSA");
     if (!jwk) return false;
     const key = await crypto.subtle.importKey("jwk", jwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
-    return await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, signature, new TextEncoder().encode(parts[0] + "." + parts[1]));
+    const verified = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, signature, new TextEncoder().encode(parts[0] + "." + parts[1]));
+    return verified ? claims : false;
   } catch {
     return false;
   }
@@ -118,11 +122,16 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/health" && request.method === "GET") return response({ ok: true, service: "A.S. permanent APK signing key service" });
     if (url.pathname !== "/api/internal/key" || !["GET", "PUT"].includes(request.method)) return response({ error: "Not found." }, 404);
-    if (!(await verifyGitHubOidc(request))) return response({ error: "Unauthorized." }, 401);
+    const claims = await verifyGitHubOidc(request);
+    if (!claims) return response({ error: "Unauthorized." }, 401);
+    const requestedPurpose = url.searchParams.get("purpose") || "generated";
+    const allowedPurpose = claims.workflow_ref === WORKFLOW_REFS.builder ? "builder" : "generated";
+    if (!Object.hasOwn(KEY_NAMES, requestedPurpose) || requestedPurpose !== allowedPurpose) return response({ error: "This workflow is not authorized for the requested signing key." }, 403);
+    const keyName = KEY_NAMES[requestedPurpose];
     if (!env.SIGNING || !env.SIGNING_ENCRYPTION_KEY) return response({ error: "Signing key store is not configured." }, 503);
 
     if (request.method === "GET") {
-      const encrypted = await env.SIGNING.get(KEY_NAME);
+      const encrypted = await env.SIGNING.get(keyName);
       if (!encrypted) return response({ error: "Signing key has not been initialized." }, 404);
       try {
         const record = await decryptRecord(encrypted, env);
@@ -150,7 +159,7 @@ export default {
         typeof record.keyAlias !== "string" || !/^[A-Za-z0-9_-]{1,50}$/.test(record.keyAlias)) {
       return response({ error: "Invalid signing key record." }, 400);
     }
-    if (await env.SIGNING.get(KEY_NAME)) return response({ error: "A permanent signing key already exists; overwriting is forbidden." }, 409);
+    if (await env.SIGNING.get(keyName)) return response({ error: "A permanent signing key already exists; overwriting is forbidden." }, 409);
     const protectedRecord = {
       version: 1,
       keystoreBase64: record.keystoreBase64,
@@ -162,8 +171,8 @@ export default {
     };
     const encrypted = await encryptRecord(protectedRecord, env);
     // Recheck before writing so a concurrent initializer cannot silently replace the first key.
-    if (await env.SIGNING.get(KEY_NAME)) return response({ error: "A permanent signing key was initialized concurrently; fetch the existing key." }, 409);
-    await env.SIGNING.put(KEY_NAME, encrypted);
+    if (await env.SIGNING.get(keyName)) return response({ error: "A permanent signing key was initialized concurrently; fetch the existing key." }, 409);
+    await env.SIGNING.put(keyName, encrypted);
     return response({ ok: true, createdAt: protectedRecord.createdAt, algorithm: protectedRecord.algorithm }, 201);
   }
 };
