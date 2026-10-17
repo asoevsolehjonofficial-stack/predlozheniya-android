@@ -5,6 +5,13 @@ on:
     branches: [main]
     paths:
       - "app/**"
+      - "index.html"
+      - "manifest.webmanifest"
+      - "service-worker.js"
+      - "backend/src/**"
+      - "backend/test/**"
+      - ".github/scripts/auto-check.mjs"
+      - ".github/workflows/auto-check-ai.yml"
       - "build.gradle"
       - "settings.gradle"
       - "gradle.properties"
@@ -27,6 +34,67 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # A release must not be published unless source, live site/API, browser, and AI checks pass.
+  quality-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install browser test tools
+        run: |
+          npm install --no-save --no-package-lock playwright
+          npx playwright install --with-deps chromium
+
+      - name: Run backend security and regression tests
+        run: node --test backend/test/*.test.js
+
+      - name: Check JavaScript syntax, JSON, and synchronized app assets
+        run: |
+          set -euo pipefail
+          node --check backend/src/index.js
+          node --check service-worker.js
+          node -e "JSON.parse(require('fs').readFileSync('manifest.webmanifest','utf8')); JSON.parse(require('fs').readFileSync('backend/package.json','utf8')); console.log('JSON files valid')"
+          cmp --silent index.html app/src/main/assets/index.html
+          echo "Website and Android assets match."
+
+      - name: Test live website, API, and browser workflow
+        env:
+          SITE_URL: https://as-app-builder.pages.dev
+          API_URL: https://as-app-builder-api.asoev-solehjon-official.workers.dev
+        run: node .github/scripts/auto-check.mjs
+
+      - name: Test live AI code generation
+        env:
+          AI_API_URL: https://as-app-builder-ai.asoev-solehjon-official.workers.dev
+          SITE_URL: https://as-app-builder.pages.dev
+        run: |
+          node --input-type=module <<'NODE'
+          const response = await fetch(process.env.AI_API_URL + '/api/ai/generate', {
+            method: 'POST',
+            headers: { Origin: process.env.SITE_URL, 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({ prompt: 'Create a minimal complete HTML page titled A.S. Release Gate Test with body text RELEASE_GATE_AI_OK.' }),
+            signal: AbortSignal.timeout(90000)
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error('Live AI generation failed with HTTP ' + response.status + ': ' + (data.error || 'no details'));
+          const html = String(data.text || '').replace(/^\s*```(?:html)?\s*/i, '').replace(/\s*```\s*$/, '');
+          if (!/<!doctype html/i.test(html) || !/<html[\s>]/i.test(html) || !/<\/html>/i.test(html) || !html.includes('RELEASE_GATE_AI_OK')) {
+            throw new Error('Live AI endpoint did not return the expected complete HTML test page.');
+          }
+          console.log('Live AI code generation passed. No credentials or generated source were printed.');
+          NODE
+
   initialize-signing:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -51,8 +119,8 @@ jobs:
         run: bash .github/scripts/ensure-signing-key.sh
 
   build:
-    needs: initialize-signing
-    if: always() && (needs.initialize-signing.result == 'success' || needs.initialize-signing.result == 'skipped')
+    needs: [initialize-signing, quality-gate]
+    if: always() && needs.quality-gate.result == 'success' && (needs.initialize-signing.result == 'success' || needs.initialize-signing.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
