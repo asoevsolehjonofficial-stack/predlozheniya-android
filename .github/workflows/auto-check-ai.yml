@@ -8,6 +8,12 @@ on:
   schedule:
     - cron: "0 */6 * * *"
   workflow_dispatch:
+    inputs:
+      test_live_ai:
+        description: "Run one real built-in AI generation test; this consumes one shared AI request."
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -56,6 +62,7 @@ jobs:
           console.log('OpenAI API key accepted and diagnostic model is listed. The key value was not printed.');
           NODE
       - name: Test actual built-in AI code generation API
+        if: github.event_name == 'workflow_dispatch' && inputs.test_live_ai == true
         id: ai_generation
         continue-on-error: true
         env:
@@ -178,9 +185,10 @@ jobs:
           REGRESSION_OUTCOME: ${{ steps.regression.outcome }}
           LIVE_OUTCOME: ${{ steps.live.outcome }}
           AI_GENERATION_OUTCOME: ${{ steps.ai_generation.outcome }}
+          AI_TEST_REQUESTED: ${{ github.event_name == 'workflow_dispatch' && inputs.test_live_ai == true }}
         run: |
-          if [ "$AI_GENERATION_OUTCOME" != "success" ]; then
-            echo "::error::Actual AI code generation failed. The API key/model check can pass while inference is blocked by billing, credits, rate limits, or model permissions. Review the 'Test actual built-in AI code generation API' step log."
+          if [ "$AI_TEST_REQUESTED" = "true" ] && [ "$AI_GENERATION_OUTCOME" != "success" ]; then
+            echo "::error::The manually requested live AI generation test did not pass. Review the 'Test actual built-in AI code generation API' step log."
             exit 1
           fi
           if [ "$TOOLS_OUTCOME" != "success" ] || [ "$REGRESSION_OUTCOME" != "success" ] || [ "$LIVE_OUTCOME" != "success" ]; then
