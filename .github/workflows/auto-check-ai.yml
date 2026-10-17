@@ -55,6 +55,40 @@ jobs:
           }
           console.log('OpenAI API key accepted and diagnostic model is listed. The key value was not printed.');
           NODE
+      - name: Test actual OpenAI code generation API
+        id: ai_generation
+        continue-on-error: true
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_CHECK_MODEL: ${{ vars.OPENAI_CHECK_MODEL }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const model = process.env.OPENAI_CHECK_MODEL || 'gpt-4.1-mini';
+          const response = await fetch('https://api.openai.com/v1/responses', {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + process.env.OPENAI_API_KEY, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model,
+              instructions: 'You are a code generator. Return only the exact JavaScript statement requested. No markdown or explanation.',
+              input: 'Generate one valid JavaScript statement that declares a constant named sum with the value 2 + 3. Return exactly: const sum = 2 + 3;',
+              max_output_tokens: 80
+            }),
+            signal: AbortSignal.timeout(60000)
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            console.error('Real code-generation request failed with HTTP ' + response.status + ': ' + (data?.error?.message || 'no error details'));
+            process.exit(1);
+          }
+          const generated = data.output_text || (data.output || []).flatMap(item => item.content || []).filter(item => item.type === 'output_text').map(item => item.text).join('\\n');
+          if (!generated || !/const\\s+sum\\s*=\\s*2\\s*\\+\\s*3\\s*;?/.test(generated)) {
+            console.error('The model returned no usable expected JavaScript code. Response status: ' + (data.status || 'unknown'));
+            process.exit(1);
+          }
+          console.log('REAL_AI_CODE_GENERATION=PASS');
+          console.log('Model returned valid JavaScript for the controlled code-generation prompt. No API key or user data was printed.');
+          NODE
       - name: Install browser test tools
         id: tools
         continue-on-error: true
@@ -150,8 +184,9 @@ jobs:
           REGRESSION_OUTCOME: ${{ steps.regression.outcome }}
           LIVE_OUTCOME: ${{ steps.live.outcome }}
           OPENAI_KEY_CHECK_OUTCOME: ${{ steps.openai_key_check.outcome }}
+          AI_GENERATION_OUTCOME: ${{ steps.ai_generation.outcome }}
         run: |
-          if [ "$TOOLS_OUTCOME" != "success" ] || [ "$REGRESSION_OUTCOME" != "success" ] || [ "$LIVE_OUTCOME" != "success" ] || [ "$OPENAI_KEY_CHECK_OUTCOME" != "success" ]; then
+          if [ "$TOOLS_OUTCOME" != "success" ] || [ "$REGRESSION_OUTCOME" != "success" ] || [ "$LIVE_OUTCOME" != "success" ] || [ "$OPENAI_KEY_CHECK_OUTCOME" != "success" ] || [ "$AI_GENERATION_OUTCOME" != "success" ]; then
             echo "::error::A.S. AUTO CHECK AI failed. Review the report artifact and configure OPENAI_API_KEY for AI diagnostics."
             exit 1
           fi
