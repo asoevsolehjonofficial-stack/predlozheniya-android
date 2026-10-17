@@ -61,5 +61,27 @@ jobs:
           new Function(web.slice(scriptStart + '<script>'.length, scriptEnd)); // Parse-only syntax check.
           console.log('PASS: assets synchronized; manual import controls wired; sandbox and HTML checks present; JavaScript parses.');
           NODE
-      - name: Test manual HTML import in a real browser
+      - name: Check deployed backend health without consuming AI quota
+        env:
+          AI_HEALTH_URL: https://as-app-builder-ai.asoev-solehjon-official.workers.dev/api/health
+          API_HEALTH_URL: https://as-app-builder-api.asoev-solehjon-official.workers.dev/api/health
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 15 -H 'Origin: https://as-app-builder.pages.dev' "$AI_HEALTH_URL" -o /tmp/ai-health.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/ai-health.json', encoding='utf-8') as f:
+              data = json.load(f)
+          assert data.get('ok') is True, f"Built-in AI health check failed: {data}"
+          print("PASS: built-in AI Worker health endpoint is reachable; no inference request was sent.")
+          PY
+          curl --fail --silent --show-error --max-time 15 -H 'Origin: https://as-app-builder.pages.dev' "$API_HEALTH_URL" -o /tmp/api-health.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/api-health.json', encoding='utf-8') as f:
+              data = json.load(f)
+          assert data.get('ok') is True, f"Build API health check failed: {data}"
+          print("PASS: APK build API health endpoint is reachable.")
+          PY
+      - name: Test manual HTML import and prompt-to-preview flow in a real browser
         run: node .github/scripts/manual-import-browser-test.mjs
