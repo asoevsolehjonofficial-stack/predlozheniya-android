@@ -39,6 +39,7 @@ jobs:
         shell: bash
         run: |
           set +e
+          set -o pipefail
           REPORT="/tmp/auto-check-report.txt"
           : > "$REPORT"
           FAILED=0
@@ -61,7 +62,10 @@ jobs:
         env:
           SITE_URL: https://as-app-builder.pages.dev
           API_URL: https://as-app-builder-api.asoev-solehjon-official.workers.dev
-        run: node .github/scripts/auto-check.mjs 2>&1 | tee -a /tmp/auto-check-report.txt
+        shell: bash
+        run: |
+          set -euo pipefail
+          node .github/scripts/auto-check.mjs 2>&1 | tee -a /tmp/auto-check-report.txt
       - name: Diagnose failures with OpenAI API
         if: steps.tools.outcome == 'failure' || steps.regression.outcome == 'failure' || steps.live.outcome == 'failure'
         continue-on-error: true
@@ -88,8 +92,8 @@ jobs:
             'Ответь на русском: краткий итог, ошибки с доказательствами, вероятные причины, минимальное безопасное исправление, точные повторные тесты и рекомендация о блокировке релиза.',
             'Не утверждай, что изменил код. Не проси и не раскрывай ключи, токены, пароли или другие секреты. Если данных недостаточно, укажи это.',
             context,
-            'CI REPORT:\\n' + report
-          ].join('\\n\\n');
+            'CI REPORT:\n' + report
+          ].join('\n\n');
           const response = await fetch('https://api.openai.com/v1/responses', {
             method: 'POST',
             headers: { Authorization: 'Bearer ' + process.env.OPENAI_API_KEY, 'Content-Type': 'application/json' },
@@ -98,8 +102,8 @@ jobs:
           });
           const data = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(data?.error?.message || 'OpenAI API HTTP ' + response.status);
-          const text = data.output_text || (data.output || []).flatMap(x => x.content || []).filter(x => x.type === 'output_text').map(x => x.text).join('\\n');
-          fs.writeFileSync('auto-check-ai-diagnosis.txt', '# A.S. AUTO CHECK AI — диагностика\\n\\n' + (text || 'OpenAI returned no diagnostic text.'));
+          const text = data.output_text || (data.output || []).flatMap(x => x.content || []).filter(x => x.type === 'output_text').map(x => x.text).join('\n');
+          fs.writeFileSync('auto-check-ai-diagnosis.txt', '# A.S. AUTO CHECK AI — диагностика\n\n' + (text || 'OpenAI returned no diagnostic text.'));
           NODE
       - name: Upload diagnostic reports
         if: always()
