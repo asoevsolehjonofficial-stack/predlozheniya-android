@@ -121,6 +121,25 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === "/health" && request.method === "GET") return response({ ok: true, service: "A.S. permanent APK signing key service" });
+    if (url.pathname === "/api/internal/smoke-token" && request.method === "GET") {
+      const claims = await verifyGitHubOidc(request);
+      if (!claims) return response({ error: "Unauthorized." }, 401);
+      if (claims.workflow_ref !== WORKFLOW_REFS.generated) return response({ error: "This workflow cannot access smoke-test tokens." }, 403);
+      if (!env.JOBS) return response({ error: "Smoke-test job store is not configured." }, 503);
+      const requestId = url.searchParams.get("requestId") || "";
+      if (!/^[a-f0-9]{32}$/.test(requestId)) return response({ error: "Invalid request ID." }, 400);
+      const rawJob = await env.JOBS.get("job:" + requestId);
+      if (!rawJob) return response({ error: "Smoke-test job not found." }, 404);
+      let job;
+      try { job = JSON.parse(rawJob); } catch { job = null; }
+      if (!job || job.smokeTest !== true || job.status !== "success" || typeof job.testToken !== "string") {
+        return response({ error: "A completed smoke-test job token is not available." }, 404);
+      }
+      const downloadToken = job.testToken;
+      delete job.testToken;
+      await env.JOBS.put("job:" + requestId, JSON.stringify(job), { expirationTtl: 86400 });
+      return response({ downloadToken }, 200);
+    }
     if (url.pathname !== "/api/internal/key" || !["GET", "PUT"].includes(request.method)) return response({ error: "Not found." }, 404);
     const claims = await verifyGitHubOidc(request);
     if (!claims) return response({ error: "Unauthorized." }, 401);
