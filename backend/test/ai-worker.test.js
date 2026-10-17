@@ -141,7 +141,7 @@ test("DeepSeek API key is never echoed and prompts containing likely secrets are
     env: deepseekEnv()
   });
   assert.equal(response.status, 400);
-  assert.match((await response.json()).error, /contains a secret/i);
+  assert.match((await response.json()).error, /contain a secret/i);
 });
 
 test("DeepSeek endpoint rejects unapproved origins before calling the provider", async () => {
