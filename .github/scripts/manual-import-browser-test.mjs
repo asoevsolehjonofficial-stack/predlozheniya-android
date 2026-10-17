@@ -47,7 +47,7 @@ try {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      headers: { "access-control-allow-origin": "https://as-app-builder.pages.dev" },
+      headers: { "access-control-allow-origin": "*" },
       body: JSON.stringify({ text: generatedHtml, provider: "cloudflare", model: "mock-test-model" })
     });
   });
