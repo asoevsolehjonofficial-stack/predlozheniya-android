@@ -2,6 +2,7 @@ import { chromium } from "playwright";
 
 const siteUrl = (process.env.SITE_URL || "https://as-app-builder.pages.dev").replace(/\/$/, "");
 const apiUrl = (process.env.API_URL || "https://as-app-builder-api.asoev-solehjon-official.workers.dev").replace(/\/$/, "");
+const aiUrl = (process.env.AI_API_URL || "https://as-app-builder-ai.asoev-solehjon-official.workers.dev").replace(/\/$/, "");
 const failures = [];
 const checks = [];
 
@@ -28,6 +29,14 @@ try {
     fail("Cloudflare Worker health", `HTTP ${response.status}; ok=${String(body.ok)}; buildEnabled=${String(body.buildEnabled)}`);
   } else pass("Cloudflare Worker health", "API reports buildEnabled=true");
 } catch (error) { fail("Cloudflare Worker health", error.message); }
+
+try {
+  const response = await fetch(aiUrl + "/api/health", { redirect: "follow", headers: { Origin: siteUrl }, signal: AbortSignal.timeout(15000) });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok || body.ok !== true || !String(body.model || "").includes("llama")) {
+    fail("Built-in AI Worker health", `HTTP ${response.status}; ok=${String(body.ok)}; model=${String(body.model)}`);
+  } else pass("Built-in AI Worker health", "AI binding configured; model " + body.model);
+} catch (error) { fail("Built-in AI Worker health", error.message); }
 
 let browser;
 try {
@@ -67,6 +76,7 @@ const report = {
   timestamp: new Date().toISOString(),
   siteUrl,
   apiUrl,
+  aiUrl,
   passed: checks.filter(x => x.status === "PASS").length,
   failed: failures.length,
   checks,
