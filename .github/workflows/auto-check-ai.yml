@@ -1,0 +1,97 @@
+name: A.S. AUTO CHECK AI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: auto-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install browser test tools
+        run: |
+          npm install --no-save --no-package-lock playwright
+          npx playwright install --with-deps chromium
+      - name: Run repository regression tests
+        run: |
+          node --test backend/test/*.test.js
+          node --check backend/src/index.js
+          node --check service-worker.js
+          node -e "JSON.parse(require('fs').readFileSync('manifest.webmanifest','utf8')); JSON.parse(require('fs').readFileSync('backend/package.json','utf8'))"
+          cmp --silent index.html app/src/main/assets/index.html
+      - name: Test live website, API and browser
+        id: live
+        continue-on-error: true
+        env:
+          SITE_URL: https://as-app-builder.pages.dev
+          API_URL: https://as-app-builder-api.asoev-solehjon-official.workers.dev
+        run: node .github/scripts/auto-check.mjs
+      - name: Diagnose failure with OpenAI API
+        if: failure() || steps.live.outcome == 'failure'
+        continue-on-error: true
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_CHECK_MODEL: ${{ vars.OPENAI_CHECK_MODEL }}
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "AI diagnosis skipped: configure OPENAI_API_KEY in repository Actions secrets." > auto-check-ai-diagnosis.txt
+            exit 0
+          fi
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const report = [
+            'A.S. APP BUILDER automatic checks failed.',
+            'Repository tests, site/API smoke checks, and browser errors must be reviewed in the workflow logs.',
+            'Workflow: ' + process.env.GITHUB_SERVER_URL + '/' + process.env.GITHUB_REPOSITORY + '/actions/runs/' + process.env.GITHUB_RUN_ID
+          ].join('\n');
+          const response = await fetch('https://api.openai.com/v1/responses', {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + process.env.OPENAI_API_KEY, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: process.env.OPENAI_CHECK_MODEL || 'gpt-4.1-mini',
+              input: 'Ты A.S. AUTO CHECK AI. На русском языке подготовь безопасный план диагностики и исправления для следующих провалившихся проверок. Не утверждай, что изменил код. Не запрашивай и не повторяй секреты. Если данных недостаточно, укажи это.\n\n' + report,
+              max_output_tokens: 1000
+            }),
+            signal: AbortSignal.timeout(60000)
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(data?.error?.message || 'OpenAI API HTTP ' + response.status);
+          const text = data.output_text || (data.output || []).flatMap(x => x.content || []).filter(x => x.type === 'output_text').map(x => x.text).join('\n');
+          fs.writeFileSync('auto-check-ai-diagnosis.txt', text || 'OpenAI returned no diagnostic text.');
+          NODE
+      - name: Upload diagnostic report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: as-auto-check-report-${{ github.run_id }}
+          path: auto-check-ai-diagnosis.txt
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Fail if live checks failed
+        if: always()
+        env:
+          LIVE_OUTCOME: ${{ steps.live.outcome }}
+        run: |
+          if [ "$LIVE_OUTCOME" != "success" ]; then
+            echo "Live smoke tests failed. Review logs and report artifact."
+            exit 1
+          fi
