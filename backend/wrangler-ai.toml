@@ -1,0 +1,14 @@
+name = "as-app-builder-ai"
+main = "ai-worker.js"
+compatibility_date = "2026-10-15"
+workers_dev = true
+
+[vars]
+SITE_ORIGIN = "https://as-app-builder.pages.dev"
+
+[[kv_namespaces]]
+binding = "RATE_LIMITS"
+id = "f2bef20d6ba142059d46b5eed0b3c3e9"
+
+[ai]
+binding = "AI"
