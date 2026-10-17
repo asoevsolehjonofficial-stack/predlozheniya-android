@@ -38,7 +38,7 @@ try {
   // Test the prompt-to-preview frontend path without spending real AI quota.
   await page.reload({ waitUntil: "domcontentloaded" });
   const prompt = "Create a simple Russian vocabulary app with a working button.";
-  const generatedHtml = "<!doctype html><html lang=\\"en\\"><head><meta charset=\\"utf-8\\"><title>Mock AI App</title></head><body><button id=\\"demo\\">AI_GENERATION_FLOW_WORKS</button><script>document.getElementById('demo').addEventListener('click',()=>document.body.dataset.clicked='yes');</script></body></html>";
+  const generatedHtml = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Mock AI App</title></head><body><button id="demo">AI_GENERATION_FLOW_WORKS</button><script>document.getElementById("demo").addEventListener("click",()=>document.body.dataset.clicked="yes");</script></body></html>`;
   let generationRequestSeen = false;
   await page.route("https://as-app-builder-ai.asoev-solehjon-official.workers.dev/api/ai/generate", async route => {
     generationRequestSeen = true;
