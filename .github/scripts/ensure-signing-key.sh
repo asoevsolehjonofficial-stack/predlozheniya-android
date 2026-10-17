@@ -3,11 +3,13 @@ set -euo pipefail
 set +x
 
 : "${SIGNING_API_URL:?SIGNING_API_URL is required}"
+SIGNING_PURPOSE="${SIGNING_PURPOSE:-generated}"
+case "$SIGNING_PURPOSE" in generated|builder) ;; *) echo "::error::Invalid SIGNING_PURPOSE."; exit 1 ;; esac
 OIDC_TOKEN="$(curl --fail --silent --show-error --max-time 20 -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-signing-key" | jq -r '.value')"
 test -n "$OIDC_TOKEN" && test "$OIDC_TOKEN" != "null"
 echo "::add-mask::$OIDC_TOKEN"
 
-KEY_URL="${SIGNING_API_URL%/}/api/internal/key"
+KEY_URL="${SIGNING_API_URL%/}/api/internal/key?purpose=$SIGNING_PURPOSE"
 RESPONSE_FILE="$RUNNER_TEMP/as-builder-signing-response.json"
 HTTP_STATUS="$(curl --silent --show-error --max-time 30 -H "Authorization: Bearer $OIDC_TOKEN" -H "Accept: application/json" -o "$RESPONSE_FILE" -w '%{http_code}' "$KEY_URL")"
 
