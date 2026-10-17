@@ -34,17 +34,20 @@ jobs:
           assert.equal(web, android, 'Website and Android HTML assets must be identical');
 
           for (const id of ['manualHtml', 'importManualHtml', 'clearManualHtml']) {
-            assert.match(web, new RegExp('id=["\\\\']' + id + '["\\\\']'), 'Missing manual-import control: ' + id);
+            assert.ok(web.includes('id="' + id + '"') || web.includes("id='" + id + "'"),
+              'Missing manual-import control: ' + id);
           }
-          assert.match(web, /\$\(['"]importManualHtml['"]\)\.addEventListener\(['"]click['"]/,
+          assert.ok(web.includes("$('importManualHtml').addEventListener('click'"),
             'Manual import button must have a click handler');
-          assert.match(web, /setAttribute\(['"]sandbox['"],['"]allow-scripts['"]\)/,
+          assert.ok(web.includes("frame.setAttribute('sandbox','allow-scripts')"),
             'Preview must remain sandboxed without allow-same-origin');
-          assert.match(web, /function inspectGeneratedHTML\(code\)/,
+          assert.ok(web.includes('function inspectGeneratedHTML(code)'),
             'Manual import should use the existing structural HTML checks');
 
-          const scripts = [...web.matchAll(/<script\\b[^>]*>([\\s\\S]*?)<\\/script>/gi)];
-          assert.equal(scripts.length, 1, 'Expected exactly one inline application script');
-          new Function(scripts[0][1]); // Parse-only syntax check; does not execute the application.
+          const scriptStart = web.indexOf('<script>');
+          const scriptEnd = web.indexOf('</script>', scriptStart);
+          assert.ok(scriptStart >= 0 && scriptEnd > scriptStart, 'Inline application script not found');
+          assert.equal(web.indexOf('<script>', scriptStart + 1), -1, 'Expected one inline application script');
+          new Function(web.slice(scriptStart + '<script>'.length, scriptEnd)); // Parse-only syntax check.
           console.log('PASS: assets synchronized; manual import controls wired; sandbox and HTML checks present; JavaScript parses.');
           NODE
