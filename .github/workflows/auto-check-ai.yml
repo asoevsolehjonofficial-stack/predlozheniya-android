@@ -186,8 +186,12 @@ jobs:
           OPENAI_KEY_CHECK_OUTCOME: ${{ steps.openai_key_check.outcome }}
           AI_GENERATION_OUTCOME: ${{ steps.ai_generation.outcome }}
         run: |
-          if [ "$TOOLS_OUTCOME" != "success" ] || [ "$REGRESSION_OUTCOME" != "success" ] || [ "$LIVE_OUTCOME" != "success" ] || [ "$OPENAI_KEY_CHECK_OUTCOME" != "success" ] || [ "$AI_GENERATION_OUTCOME" != "success" ]; then
-            echo "::error::A.S. AUTO CHECK AI failed. Review the report artifact and configure OPENAI_API_KEY for AI diagnostics."
+          if [ "$AI_GENERATION_OUTCOME" != "success" ]; then
+            echo "::error::Actual AI code generation failed. The API key/model check can pass while inference is blocked by billing, credits, rate limits, or model permissions. Review the 'Test actual OpenAI code generation API' step log."
+            exit 1
+          fi
+          if [ "$TOOLS_OUTCOME" != "success" ] || [ "$REGRESSION_OUTCOME" != "success" ] || [ "$LIVE_OUTCOME" != "success" ] || [ "$OPENAI_KEY_CHECK_OUTCOME" != "success" ]; then
+            echo "::error::A.S. AUTO CHECK AI failed. Review the workflow report artifact and the first failed check."
             exit 1
           fi
           echo "A.S. AUTO CHECK AI passed."
