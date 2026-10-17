@@ -209,6 +209,33 @@ jobs:
           sha256sum "$APK" > "$APK.sha256"
           sha256sum -c "$APK.sha256"
 
+      - name: Install and launch APK in Android emulator (smoke tests only)
+        if: startsWith(env.PROJECT_SLUG, 'smoke-')
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            APK="app/build/outputs/apk/debug/app-debug.apk"
+            PACKAGE_SUFFIX="p_$(echo "$PROJECT_SLUG" | tr '-' '_')"
+            PACKAGE="tj.as.generated.$PACKAGE_SUFFIX"
+            adb install "$APK"
+            adb shell monkey -p "$PACKAGE" -c android.intent.category.LAUNCHER 1
+            sleep 8
+            adb shell dumpsys activity activities | grep -F "$PACKAGE" >/dev/null
+            if adb logcat -d -t 1200 | grep -E "FATAL EXCEPTION.*$PACKAGE|Process: $PACKAGE.*died"; then
+              echo "::error::The generated APK crashed after launch in the Android emulator."
+              exit 1
+            fi
+            adb shell screencap -p /sdcard/as-builder-smoke.png
+            adb pull /sdcard/as-builder-smoke.png "$RUNNER_TEMP/as-builder-smoke.png"
+            test -s "$RUNNER_TEMP/as-builder-smoke.png"
+            echo "Android emulator smoke test passed: APK installed, launcher activity started, and screenshot captured."
+
       - name: Upload APK using short-lived GitHub OIDC
         run: |
           set -euo pipefail
