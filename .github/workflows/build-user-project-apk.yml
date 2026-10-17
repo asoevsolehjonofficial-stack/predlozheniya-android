@@ -1,6 +1,6 @@
 name: Build APK for a user project
 run-name: "Free APK queue worker"
-# Keep this workflow runnable on demand; smoke-* jobs verify authenticated download end-to-end.
+# Keep this workflow runnable on demand; smoke-* jobs verify authenticated APK download and integrity.
 
 on:
   push:
