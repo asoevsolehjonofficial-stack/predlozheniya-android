@@ -56,6 +56,7 @@ jobs:
           release_workflow = Path(".github/workflows/build-apk.yml").read_text(encoding="utf-8")
           backend = Path("backend/src/index.js").read_text(encoding="utf-8")
           ai_backend = Path("backend/ai-worker.js").read_text(encoding="utf-8")
+          signing_backend = Path("backend/signing-worker.js").read_text(encoding="utf-8")
 
           assert re.search(r"<!doctype html", html, re.I), "Missing HTML doctype"
           assert re.search(r"<html\b", html, re.I), "Missing html element"
@@ -79,6 +80,7 @@ jobs:
           assert "as-app-builder-ai.asoev-solehjon-official.workers.dev" in html, "Website should use the dedicated built-in AI Worker"
           assert "MAX_PROMPT_CHARS" in ai_backend and "RATE_LIMITS" in ai_backend, "Built-in AI Worker must enforce bounded prompts and rate limits"
           assert "Origin is not allowed" in ai_backend, "Built-in AI Worker must validate website origin"
+          assert "verifyGitHubOidc" in signing_backend and "AES-GCM" in signing_backend, "Signing service must verify GitHub OIDC and encrypt key material"
           assert "x-goog-api-key" in html, "Google Gemini requests should send API keys in the header"
           assert ":generateContent?key=" not in html, "Google Gemini API keys must not be placed in the request URL"
           assert "Локальный режим не умеет реализовать такой тип приложения" in html, "Unsupported local app prompts must be routed to AI generation"
@@ -126,10 +128,12 @@ jobs:
           npm install --ignore-scripts --no-audit --no-fund
           node --check src/index.js
           node --check ai-worker.js
+          node --check signing-worker.js
           npm test
           sed '/^\[\[kv_namespaces\]\]/,/^$/d; /^\[\[r2_buckets\]\]/,/^$/d' wrangler.toml > wrangler-ci.toml
           npx wrangler deploy --dry-run --outdir /tmp/as-builder-worker-dist --config wrangler-ci.toml
           npx wrangler deploy --dry-run --outdir /tmp/as-builder-ai-worker-dist --config wrangler-ai.toml
+          npx wrangler deploy --dry-run --outdir /tmp/as-builder-signing-worker-dist --config wrangler-signing.toml
           rm -f wrangler-ci.toml
 
       - name: Check for accidentally committed credentials
