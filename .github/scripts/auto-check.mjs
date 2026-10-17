@@ -79,7 +79,7 @@ try {
       const state = await page.locator("#state").innerText().catch(() => "");
       const code = await page.locator("#code").innerText().catch(() => "");
       const previewCount = await page.locator("#previewPane iframe").count().catch(() => 0);
-      if (!/<html[\\s>]/i.test(code) || !/<\\/html>/i.test(code) || previewCount < 1) {
+      if (!/<html[\s>]/i.test(code) || !/<\/html>/i.test(code) || previewCount < 1) {
         const status = await page.locator("#aiStatus").innerText().catch(() => "");
         fail("Real AI generation through builder UI", `No complete HTML or preview. State=${state}; status=${status.slice(0, 240)}`);
       } else {
