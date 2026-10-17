@@ -76,7 +76,7 @@ jobs:
             process.exit(1);
           }
           const generated = String(data.text || '');
-          if (!/<!doctype html/i.test(generated) || !/<html[\\s>]/i.test(generated) || !/<\\/html>/i.test(generated)) {
+          if (!generated.toLowerCase().includes('<!doctype html') || !generated.toLowerCase().includes('<html') || !generated.toLowerCase().includes('</html>')) {
             console.error('Built-in AI returned no complete HTML document.');
             process.exit(1);
           }
