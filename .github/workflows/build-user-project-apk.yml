@@ -22,6 +22,12 @@ on:
     - cron: "*/5 * * * *"
     - cron: "2-59/5 * * * *"
   workflow_dispatch:
+    inputs:
+      smoke_test:
+        description: "Run a controlled smoke build through queue, emulator, signing, upload, and authenticated download."
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -56,11 +62,25 @@ jobs:
       - name: Claim one queued build using short-lived GitHub OIDC
         id: claim
         shell: bash
+        env:
+          SMOKE_TEST: ${{ inputs.smoke_test || false }}
         run: |
           set -euo pipefail
+          SMOKE_REQUEST_ID=""
+          if [[ "$SMOKE_TEST" == "true" ]]; then
+            OIDC_TOKEN="$(curl --fail --silent --show-error --max-time 20 -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-worker" | jq -r '.value')"
+            test -n "$OIDC_TOKEN" && test "$OIDC_TOKEN" != "null"
+            SMOKE_RESPONSE="$(curl --fail --silent --show-error --max-time 30 -X POST "$BUILD_API_URL/api/internal/smoke-enqueue" -H "Authorization: Bearer $OIDC_TOKEN" -H "Accept: application/json")"
+            SMOKE_REQUEST_ID="$(jq -er '.requestId' <<< "$SMOKE_RESPONSE")"
+            echo "Created a fixed, OIDC-authorized smoke-test request."
+          fi
           OIDC_TOKEN="$(curl --fail --silent --show-error -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-worker" | jq -r '.value')"
           test -n "$OIDC_TOKEN" && test "$OIDC_TOKEN" != "null"
-          RESPONSE="$(curl --fail --silent --show-error --max-time 30 -X POST "$BUILD_API_URL/api/internal/claim" -H "Authorization: Bearer $OIDC_TOKEN" -H "Accept: application/json")"
+          CLAIM_URL="$BUILD_API_URL/api/internal/claim"
+          if [[ -n "$SMOKE_REQUEST_ID" ]]; then
+            CLAIM_URL="$CLAIM_URL?requestId=$SMOKE_REQUEST_ID"
+          fi
+          RESPONSE="$(curl --fail --silent --show-error --max-time 30 -X POST "$CLAIM_URL" -H "Authorization: Bearer $OIDC_TOKEN" -H "Accept: application/json")"
           FOUND="$(jq -r '.found // false' <<< "$RESPONSE")"
           echo "found=$FOUND" >> "$GITHUB_OUTPUT"
           echo "request_id=$(jq -r '.requestId // empty' <<< "$RESPONSE")" >> "$GITHUB_OUTPUT"
