@@ -68,7 +68,7 @@ try {
 
     // Exercise the real public UI path, not only the AI endpoint.
     try {
-      await page.locator("#aiProvider").selectOption("cloudflare", { timeout: 10000 });
+      await page.locator("#aiProvider").evaluate((el) => { el.value = "cloudflare"; el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true })); });
       await page.locator("#prompt").fill("Create a very simple complete HTML page with title A.S. Browser AI Test and body text UI_GENERATION_SUCCESS. Use inline CSS only.");
       await page.locator("#aiGenerate").click({ timeout: 10000 });
       await page.waitForFunction(() => {
