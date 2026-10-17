@@ -6,3 +6,7 @@ workers_dev = true
 [[kv_namespaces]]
 binding = "SIGNING"
 id = "85e5d91027524fde87f2bfb3caf4f16f"
+
+[[kv_namespaces]]
+binding = "JOBS"
+id = "cdcfa56b6c5d433b90250fbe12cbde7c"
