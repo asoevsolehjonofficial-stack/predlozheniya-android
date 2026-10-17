@@ -11,10 +11,11 @@ try {
   page.on("pageerror", error => pageErrors.push(error.message));
   await page.goto(pathToFileURL(appPath).href, { waitUntil: "domcontentloaded" });
 
-  const manualPanel = page.locator("#manualHtml").locator("xpath=ancestor::details[1]");
-  if (!(await manualPanel.evaluate(element => element.open))) {
-    await manualPanel.locator("summary").click();
-  }
+  await page.locator("#manualHtml").evaluate(element => {
+    for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+      if (parent instanceof HTMLDetailsElement) parent.open = true;
+    }
+  });
 
   await page.locator("#manualHtml").fill("<div>not a full document</div>");
   await page.locator("#importManualHtml").click();
