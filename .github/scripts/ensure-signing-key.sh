@@ -8,6 +8,8 @@ case "$SIGNING_PURPOSE" in generated|builder) ;; *) echo "::error::Invalid SIGNI
 OIDC_TOKEN="$(curl --fail --silent --show-error --max-time 20 -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-signing-key" | jq -r '.value')"
 test -n "$OIDC_TOKEN" && test "$OIDC_TOKEN" != "null"
 echo "::add-mask::$OIDC_TOKEN"
+OIDC_CLAIMS="$(printf '%s' "$OIDC_TOKEN" | cut -d '.' -f2 | tr '_-' '/+' | base64 --decode 2>/dev/null | jq -c '{iss,aud,repository,workflow_ref,ref}' 2>/dev/null || echo '{}')"
+echo "Signing OIDC claim summary: $OIDC_CLAIMS"
 
 KEY_URL="${SIGNING_API_URL%/}/api/internal/key?purpose=$SIGNING_PURPOSE"
 RESPONSE_FILE="$RUNNER_TEMP/as-builder-signing-response.json"
