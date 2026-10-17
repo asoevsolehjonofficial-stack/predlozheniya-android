@@ -11,6 +11,16 @@ test("signing key service rejects requests without a GitHub OIDC token", async (
   assert.match((await response.json()).error, /Unauthorized/);
 });
 
+test("smoke-test download token endpoint rejects unauthenticated requests", async () => {
+  const response = await worker.fetch(new Request("https://signing.test/api/internal/smoke-token?requestId=0123456789abcdef0123456789abcdef"), {
+    SIGNING: { get: async () => null, put: async () => {} },
+    JOBS: { get: async () => null, put: async () => {} },
+    SIGNING_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64")
+  });
+  assert.equal(response.status, 401);
+  assert.match((await response.json()).error, /Unauthorized/);
+});
+
 test("permanent signing record is encrypted at rest and decrypts correctly", async () => {
   const env = { SIGNING_ENCRYPTION_KEY: Buffer.alloc(32, 19).toString("base64") };
   const record = {
