@@ -9,6 +9,9 @@ on:
       - "backend/src/index.js"
       - "backend/test/security.test.js"
       - "backend/test/worker.test.js"
+      - "backend/signing-worker.js"
+      - "backend/wrangler-signing.toml"
+      - ".github/scripts/ensure-signing-key.sh"
       - "app/build.gradle"
       - "app/src/main/AndroidManifest.xml"
       - "app/src/main/assets/index.html"
@@ -28,6 +31,7 @@ concurrency:
 
 env:
   BUILD_API_URL: https://as-app-builder-api.asoev-solehjon-official.workers.dev
+  SIGNING_API_URL: https://as-app-builder-signing.asoev-solehjon-official.workers.dev
 
 jobs:
   claim:
@@ -62,9 +66,32 @@ jobs:
           echo "project_slug=$(jq -r '.slug // empty' <<< "$RESPONSE")" >> "$GITHUB_OUTPUT"
           echo "Queue claim result: $FOUND"
 
+  initialize-signing:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout trusted signing initializer
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Set up Java for keytool
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Initialize or verify permanent signing key
+        run: bash .github/scripts/ensure-signing-key.sh
+
   build:
-    needs: claim
-    if: needs.claim.outputs.found == 'true'
+    needs: [claim, initialize-signing]
+    if: always() && needs.claim.outputs.found == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -158,32 +185,8 @@ jobs:
           sed -i "s/applicationId 'tj.as.predlozheniya'/applicationId 'tj.as.generated.$PACKAGE_SUFFIX'/" app/build.gradle
           sed -i "s/android:label=\"A.S. APP BUILDER\"/android:label=\"$PROJECT_SLUG\"/" app/src/main/AndroidManifest.xml
 
-      - name: Configure persistent APK signing (optional)
-        env:
-          KEYSTORE_BASE64: ${{ secrets.AS_BUILDER_KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.AS_BUILDER_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.AS_BUILDER_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.AS_BUILDER_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "Persistent signing is not configured; this user APK will use the temporary runner debug key."
-            exit 0
-          fi
-          test -n "$KEYSTORE_PASSWORD" || { echo "::error::Missing AS_BUILDER_KEYSTORE_PASSWORD secret"; exit 1; }
-          test -n "$KEY_ALIAS" || { echo "::error::Missing AS_BUILDER_KEY_ALIAS secret"; exit 1; }
-          test -n "$KEY_PASSWORD" || { echo "::error::Missing AS_BUILDER_KEY_PASSWORD secret"; exit 1; }
-          KEY_PATH="$RUNNER_TEMP/as-builder-signing.jks"
-          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$KEY_PATH"
-          test -s "$KEY_PATH"
-          keytool -list -keystore "$KEY_PATH" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null
-          {
-            echo "AS_BUILDER_KEYSTORE_PATH=$KEY_PATH"
-            echo "AS_BUILDER_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
-            echo "AS_BUILDER_KEY_ALIAS=$KEY_ALIAS"
-            echo "AS_BUILDER_KEY_PASSWORD=$KEY_PASSWORD"
-          } >> "$GITHUB_ENV"
-          echo "Persistent signing keystore loaded and alias verified."
+      - name: Load permanent APK signing key
+        run: bash .github/scripts/ensure-signing-key.sh
 
       - name: Build project APK
         run: gradle --no-daemon clean assembleDebug
