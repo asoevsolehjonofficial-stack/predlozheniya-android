@@ -24,6 +24,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install browser test tools
+        run: |
+          npm install --no-save --no-package-lock playwright
+          npx playwright install --with-deps chromium
       - name: Check synchronized assets and manual import wiring
         run: |
           node <<'NODE'
@@ -51,3 +59,5 @@ jobs:
           new Function(web.slice(scriptStart + '<script>'.length, scriptEnd)); // Parse-only syntax check.
           console.log('PASS: assets synchronized; manual import controls wired; sandbox and HTML checks present; JavaScript parses.');
           NODE
+      - name: Test manual HTML import in a real browser
+        run: node .github/scripts/manual-import-browser-test.mjs
