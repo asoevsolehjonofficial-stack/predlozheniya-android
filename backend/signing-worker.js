@@ -48,7 +48,7 @@ async function verifyGitHubOidc(request) {
   try {
     header = decodeJwtPart(parts[0]);
     claims = decodeJwtPart(parts[1]);
-    signature = fromBase64(decodeBase64Url(parts[2]));
+    signature = Uint8Array.from(decodeBase64Url(parts[2]), char => char.charCodeAt(0));
   } catch { return false; }
   const now = Math.floor(Date.now() / 1000);
   const audienceValid = claims.aud === OIDC_AUDIENCE || (Array.isArray(claims.aud) && claims.aud.includes(OIDC_AUDIENCE));
