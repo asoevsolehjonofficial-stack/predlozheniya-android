@@ -198,6 +198,10 @@ jobs:
           test -s "$APK"
           unzip -t "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          EXPECTED_CERT="$(keytool -list -v -keystore "$AS_BUILDER_KEYSTORE_PATH" -storetype PKCS12 -storepass "$AS_BUILDER_KEYSTORE_PASSWORD" -alias "$AS_BUILDER_KEY_ALIAS" | awk -F': ' '/SHA256:/{print $2; exit}' | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+          ACTUAL_CERT="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" | awk -F': ' '/Signer #1 certificate SHA-256 digest:/{print $2; exit}' | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+          test -n "$EXPECTED_CERT" && test -n "$ACTUAL_CERT" && test "$EXPECTED_CERT" = "$ACTUAL_CERT" || { echo "::error::APK signature does not match the permanent signing key."; exit 1; }
+          echo "APK signer certificate matches the permanent signing key."
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -q "package: name='tj.as.generated."
           HASH="$(sha256sum "$APK" | cut -d ' ' -f1)"
           echo "Verified APK SHA-256: $HASH"
