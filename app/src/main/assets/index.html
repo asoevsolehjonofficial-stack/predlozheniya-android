@@ -204,7 +204,7 @@ function extractGeminiInteractionText(data){
 $('aiTest').addEventListener('click',async()=>{
  const key=$('aiKey').value.trim(),provider=$('aiProvider').value,model=$('aiModel').value.trim(),endpoint=$('aiEndpoint').value.trim();
  if(provider==='cloudflare'){
-  const apiInputValue=(($('backendUrl')&&$('backendUrl').value.trim())||'https://as-app-builder-api.asoev-solehjon-official.workers.dev');const apiUrl=apiInputValue.endsWith('/')?apiInputValue.slice(0,-1):apiInputValue;
+  const apiUrl='https://as-app-builder-ai.asoev-solehjon-official.workers.dev';
   $('aiTest').disabled=true;$('aiStatus').textContent='Проверяю встроенный ИИ A.S.…';
   try{
    const response=await fetch(apiUrl+'/api/ai/generate',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({prompt:'Create a minimal complete HTML page with the title Test and the text AI connection works.'})});
@@ -273,7 +273,7 @@ async function runAIBuild(editInstruction=''){
    : buildAIPrompt();
   const systemText='You are a senior application engineer and coding agent. Return only one complete self-contained HTML document, from <!doctype html> through </html>. No Markdown fences or explanations. Keep all CSS and JavaScript inline. Implement functional interactions and preserve existing functionality when editing.';
   if(provider==='cloudflare'){
-   const apiInputValue=(($('backendUrl')&&$('backendUrl').value.trim())||'https://as-app-builder-api.asoev-solehjon-official.workers.dev');const apiUrl=apiInputValue.endsWith('/')?apiInputValue.slice(0,-1):apiInputValue;
+   const apiUrl='https://as-app-builder-ai.asoev-solehjon-official.workers.dev';
    $('activityLive').textContent='Встроенный ИИ A.S. генерирует приложение';
    const response=await fetch(apiUrl+'/api/ai/generate',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({prompt:instruction})});
    const data=await response.json().catch(()=>({}));
