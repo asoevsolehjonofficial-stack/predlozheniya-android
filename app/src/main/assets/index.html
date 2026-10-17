@@ -205,14 +205,14 @@ $('aiTest').addEventListener('click',async()=>{
  const key=$('aiKey').value.trim(),provider=$('aiProvider').value,model=$('aiModel').value.trim(),endpoint=$('aiEndpoint').value.trim();
  if(provider==='cloudflare'){
   const apiUrl='https://as-app-builder-ai.asoev-solehjon-official.workers.dev';
-  $('aiTest').disabled=true;$('aiStatus').textContent='Проверяю встроенный ИИ A.S.…';
+  $('aiTest').disabled=true;$('aiStatus').textContent='Проверяю доступность сервера встроенного ИИ…';
   try{
-   const response=await fetch(apiUrl+'/api/ai/generate',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({prompt:'Create a minimal complete HTML page with the title Test and the text AI connection works.'})});
+   // Health checks must not consume a billable or rate-limited generation request.
+   const response=await fetch(apiUrl+'/api/health',{method:'GET',headers:{'Accept':'application/json'},cache:'no-store'});
    const data=await response.json().catch(()=>({}));
-   if(!response.ok)throw Error(data.error||'HTTP '+response.status);
-   if(!String(data.text||'').includes('</html>'))throw Error('ИИ ответил, но не вернул полный HTML.');
-   $('aiStatus').textContent='Встроенный ИИ работает: '+(data.model||'Cloudflare Workers AI')+'. Реальная генерация HTML подтверждена.';
-  }catch(e){$('aiStatus').textContent='Ошибка встроенного ИИ: '+e.message}
+   if(!response.ok||data.ok!==true)throw Error(data.error||'Сервер не подтвердил готовность (HTTP '+response.status+').');
+   $('aiStatus').textContent='Сервер встроенного ИИ доступен ('+(data.model||'Cloudflare Workers AI')+'). Проверена конфигурация без расходования лимита генерации. Для проверки самой генерации создай короткий тестовый проект.';
+  }catch(e){$('aiStatus').textContent='Проверка сервера не прошла: '+e.message}
   finally{$('aiTest').disabled=false}
   return;
  }
