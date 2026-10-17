@@ -84,14 +84,14 @@ body:has(.studio-shell){overflow-x:hidden}
 <div class="field"><label for="complexity">Уровень разработки</label><select id="complexity"><option value="standard">Стандартный прототип</option><option value="advanced">Сложное приложение: экраны, данные, поиск, отчёты и экспорт</option></select></div>
 <div class="field"><label for="prompt">Задание для ИИ</label><textarea id="prompt" maxlength="6000" placeholder="Создай приложение для изучения английского: карточки слов, тест из 10 вопросов, подсчёт баллов и сохранение результата на телефоне."></textarea></div>
 <div class="field"><label for="features">Дополнительные пожелания</label><input id="features" maxlength="500" placeholder="Русский язык, тёмная тема, офлайн-доступ"></div>
-<details class="ai-panel" open><summary style="cursor:pointer;font-weight:800;margin-bottom:14px">🤖 Подключение ИИ-модели</summary><p class="sub">Подключи Gemini через Google AI Studio или другой совместимый API. Ключ нужен для генерации кода.</p>
-<div class="field"><label for="aiProvider">Провайдер</label><select id="aiProvider"><option value="gemini" selected>Google Gemini (Google AI Studio)</option><option value="openai">OpenAI</option><option value="openrouter">OpenRouter (единый шлюз моделей)</option><option value="compatible">OpenAI-совместимый API</option></select></div>
-<div class="field"><label for="aiEndpoint">API endpoint</label><input id="aiEndpoint" value="https://generativelanguage.googleapis.com/v1beta/interactions" autocomplete="off"></div>
+<details class="ai-panel" open><summary style="cursor:pointer;font-weight:800;margin-bottom:14px">🤖 Подключение ИИ-модели</summary><p class="sub">По умолчанию доступен встроенный ИИ A.S. без личного ключа. Для внешних провайдеров можно подключить собственный API.</p>
+<div class="field"><label for="aiProvider">Провайдер</label><select id="aiProvider"><option value="cloudflare" selected>Встроенный ИИ A.S. (без личного API-ключа)</option><option value="gemini">Google Gemini (Google AI Studio)</option><option value="openai">OpenAI</option><option value="openrouter">OpenRouter (единый шлюз моделей)</option><option value="compatible">OpenAI-совместимый API</option></select></div>
+<div class="field" id="aiEndpointField"><label for="aiEndpoint">API endpoint</label><input id="aiEndpoint" value="https://generativelanguage.googleapis.com/v1beta/interactions" autocomplete="off"></div>
 <div class="field"><label for="aiModel">Модель</label><input id="aiModel" value="gemini-3.8-flash" autocomplete="off"></div>
-<div class="field"><label for="aiKey">API-ключ</label><input id="aiKey" type="password" autocomplete="off" placeholder="Ключ не сохраняется сайтом"></div>
+<div class="field" id="aiKeyField"><label for="aiKey">API-ключ</label><input id="aiKey" type="password" autocomplete="off" placeholder="Ключ не сохраняется сайтом"></div>
 <div class="actions"><button class="btn primary" id="aiGenerate" type="button">✨ Создать приложение с ИИ</button><button class="btn secondary" id="aiTest" type="button">Проверить API</button><button class="btn secondary" id="aiPromptCopy" type="button">Копировать промпт</button></div><div id="aiStatus" class="status" role="status"></div>
 <div class="ai-links"><a target="_blank" rel="noopener noreferrer" href="https://aistudio.google.com/apikey">Google AI Studio · API key</a><a target="_blank" rel="noopener noreferrer" href="https://chatgpt.com/">ChatGPT</a><a target="_blank" rel="noopener noreferrer" href="https://claude.ai/">Claude</a><a target="_blank" rel="noopener noreferrer" href="https://chat.deepseek.com/">DeepSeek</a><a target="_blank" rel="noopener noreferrer" href="https://chat.qwen.ai/">Qwen</a><a target="_blank" rel="noopener noreferrer" href="https://openrouter.ai/">OpenRouter</a></div>
-<p class="ai-warning">Ключ доступен странице браузера и отправляется выбранному провайдеру. Не используй чужие устройства. Для публичного сервиса нужен защищённый сервер с секретами и лимитами.</p></details>
+<p class="ai-warning" id="aiProviderNotice">Встроенный ИИ работает через защищённый сервер A.S. с лимитами использования. Внешние API-ключи передаются выбранному провайдеру и не должны публиковаться.</p></details>
 <div class="actions"><button class="btn secondary" id="example">Вставить пример</button><button class="btn ghost" id="generate">Создать локальный шаблон</button></div><div id="status" class="status" aria-live="polite"></div>
 <div class="notice">Локальный шаблон — это ограниченный режим. Для создания приложения по свободному описанию используй «Создать приложение с ИИ». Предпросмотр показывает визуальный результат, а не текст HTML.</div>
 </section>
@@ -172,13 +172,50 @@ function makeSpec(name,prompt,features,kind,style){return 'РОЛЬ: Ты опы
 
 function buildAIPrompt(){return 'Ты senior-разработчик мобильных web-приложений и инженер качества. Создай НЕ описание и НЕ демонстрационную страницу с пересказом задания, а рабочее приложение «'+($('appName').value.trim()||'Моё приложение')+'». Тип проекта: '+kind+'. Идея и требования пользователя:\n'+$('prompt').value.trim()+'\nДополнительные требования: '+($('features').value.trim()||'адаптивный мобильный интерфейс')+'. Уровень: '+$('complexity').value+'.\nОБЯЗАТЕЛЬНО: 1) верни один полный HTML5-документ от <!doctype html> до </html>; 2) весь CSS и JavaScript внутри этого файла; 3) создай реальный интерфейс приложения с экранами, навигацией и рабочими обработчиками событий; 4) не выводи этот промпт, техническое задание или длинное описание вместо приложения; 5) не добавляй кнопки-заглушки и фиктивные переключатели; 6) сохраняй пользовательские данные через localStorage, если это уместно; 7) обработай пустые состояния, ошибки, узкие экраны и клавиатурную доступность; 8) не используй eval, внешние скрипты, CDN, удалённые iframe, секреты или API-ключи; 9) не заявляй, что доступны нативные Android API, MediaStore, foreground service, системные уведомления или эквалайзер — HTML/WebView сам по себе их не предоставляет; если требуются такие функции, реализуй честный web-вариант и не притворяйся нативным приложением; 10) не имитируй серверные функции без backend. Верни только код, без Markdown и пояснений.'}
 $('aiPromptCopy').addEventListener('click',()=>copyText(buildAIPrompt(),'Промпт для ИИ скопирован.'));
-$('aiProvider').addEventListener('change',()=>{if($('aiProvider').value==='gemini'){$('aiModel').value='gemini-3.8-flash';$('aiEndpoint').value='https://generativelanguage.googleapis.com/v1beta/interactions'}else if($('aiProvider').value==='openai'){$('aiModel').value='gpt-4.1-mini';$('aiEndpoint').value='https://api.openai.com/v1/chat/completions'}else if($('aiProvider').value==='openrouter'){$('aiModel').value='openrouter/auto';$('aiEndpoint').value='https://openrouter.ai/api/v1/chat/completions'}else{$('aiModel').value='deepseek-chat';$('aiEndpoint').value=''}});
+function updateAIProviderFields(){
+ const provider=$('aiProvider').value,builtIn=provider==='cloudflare';
+ $('aiEndpointField').classList.toggle('hidden',builtIn);
+ $('aiKeyField').classList.toggle('hidden',builtIn);
+ $('aiTest').textContent=builtIn?'Проверить встроенный ИИ':'Проверить API';
+ if(provider==='cloudflare'){
+  $('aiModel').value='@cf/meta/llama-3.2-3b-instruct';
+  $('aiEndpoint').value='';
+  $('aiProviderNotice').textContent='Встроенный ИИ работает через защищённый сервер A.S. и не требует личного API-ключа. Ограничение: до 2 запросов в час и 5 в день с одной сети; общий дневной лимит сервиса — 30 запросов.';
+ }else if(provider==='gemini'){
+  $('aiModel').value='gemini-3.8-flash';$('aiEndpoint').value='https://generativelanguage.googleapis.com/v1beta/interactions';
+  $('aiProviderNotice').textContent='Внешний API-ключ доступен странице браузера и отправляется выбранному провайдеру. Используй только собственный ключ и проверяй его лимиты.';
+ }else if(provider==='openai'){
+  $('aiModel').value='gpt-4.1-mini';$('aiEndpoint').value='https://api.openai.com/v1/chat/completions';
+  $('aiProviderNotice').textContent='Внешний API-ключ доступен странице браузера и отправляется выбранному провайдеру. Используй только собственный ключ и проверяй его лимиты.';
+ }else if(provider==='openrouter'){
+  $('aiModel').value='openrouter/auto';$('aiEndpoint').value='https://openrouter.ai/api/v1/chat/completions';
+  $('aiProviderNotice').textContent='Внешний API-ключ доступен странице браузера и отправляется выбранному провайдеру. Используй только собственный ключ и проверяй его лимиты.';
+ }else{
+  $('aiModel').value='deepseek-chat';$('aiEndpoint').value='';
+  $('aiProviderNotice').textContent='Внешний API-ключ доступен странице браузера и отправляется выбранному провайдеру. Используй только собственный ключ и проверяй его лимиты.';
+ }
+}
+$('aiProvider').addEventListener('change',updateAIProviderFields);
+updateAIProviderFields();
 function extractGeminiInteractionText(data){
  if(typeof data?.output_text==='string'&&data.output_text.trim())return data.output_text;
  return (data?.steps||[]).filter(step=>step.type==='model_output').flatMap(step=>step.content||[]).filter(item=>item.type==='text').map(item=>item.text||'').join('');
 }
 $('aiTest').addEventListener('click',async()=>{
  const key=$('aiKey').value.trim(),provider=$('aiProvider').value,model=$('aiModel').value.trim(),endpoint=$('aiEndpoint').value.trim();
+ if(provider==='cloudflare'){
+  const apiUrl=(($('backendUrl')&&$('backendUrl').value.trim())||'https://as-app-builder-api.asoev-solehjon-official.workers.dev').replace(/\\/$/,'');
+  $('aiTest').disabled=true;$('aiStatus').textContent='Проверяю встроенный ИИ A.S.…';
+  try{
+   const response=await fetch(apiUrl+'/api/ai/generate',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({prompt:'Create a minimal complete HTML page with the title Test and the text AI connection works.'})});
+   const data=await response.json().catch(()=>({}));
+   if(!response.ok)throw Error(data.error||'HTTP '+response.status);
+   if(!String(data.text||'').includes('</html>'))throw Error('ИИ ответил, но не вернул полный HTML.');
+   $('aiStatus').textContent='Встроенный ИИ работает: '+(data.model||'Cloudflare Workers AI')+'. Реальная генерация HTML подтверждена.';
+  }catch(e){$('aiStatus').textContent='Ошибка встроенного ИИ: '+e.message}
+  finally{$('aiTest').disabled=false}
+  return;
+ }
  if(!key){$('aiStatus').textContent='Введи API-ключ для проверки подключения.';return}
  if(!model||provider!=='gemini'&&!endpoint){$('aiStatus').textContent='Укажи модель и API endpoint.';return}
  let host='';
@@ -217,10 +254,13 @@ function inspectGeneratedHTML(code){
 async function runAIBuild(editInstruction=''){
  const prompt=$('prompt').value.trim(),key=$('aiKey').value.trim(),provider=$('aiProvider').value,model=$('aiModel').value.trim(),endpoint=$('aiEndpoint').value.trim();
  if(!prompt){$('aiStatus').textContent='Сначала опиши идею приложения.';return}
- if(!key){$('aiStatus').textContent='Введи API-ключ или скопируй промпт и открой один из внешних ИИ.';return}
- if(!model||provider!=='gemini'&&!endpoint){$('aiStatus').textContent='Укажи модель и API endpoint.';return}
- let host='';try{const u=new URL(provider==='gemini'?'https://generativelanguage.googleapis.com':endpoint);if(u.protocol!=='https:'||u.username||u.password)throw Error();host=u.host}catch(e){$('aiStatus').textContent='Используй корректный HTTPS API endpoint без логина и пароля в URL.';return}
- if(!window.confirm('API-ключ будет отправлен на '+host+'. Запрос может учитываться в лимитах/расходах. Продолжать только если доверяешь провайдеру. Продолжить?'))return;
+ const builtIn=provider==='cloudflare';
+ if(!builtIn&&!key){$('aiStatus').textContent='Введи собственный API-ключ или выбери встроенный ИИ A.S.';return}
+ if(!builtIn&&(!model||provider!=='gemini'&&!endpoint)){$('aiStatus').textContent='Укажи модель и API endpoint.';return}
+ let host='';
+ if(!builtIn){try{const u=new URL(provider==='gemini'?'https://generativelanguage.googleapis.com':endpoint);if(u.protocol!=='https:'||u.username||u.password)throw Error();host=u.host}catch(e){$('aiStatus').textContent='Используй корректный HTTPS API endpoint без логина и пароля в URL.';return}
+  if(!window.confirm('API-ключ будет отправлен на '+host+'. Запрос может учитываться в лимитах/расходах. Продолжать только если доверяешь провайдеру. Продолжить?'))return;
+ }
  const generateButton=$('aiGenerate'),editButton=$('applyEdit');generateButton.disabled=true;if(editButton)editButton.disabled=true;
  $('aiStatus').textContent=editInstruction?'ИИ вносит изменения в текущий проект…':'ИИ создаёт приложение…';
  startBuildActivity($('appName').value.trim()||'Моё приложение');
@@ -232,7 +272,15 @@ async function runAIBuild(editInstruction=''){
    ? 'Измени существующее приложение по запросу пользователя. Сохрани работающие функции, исправь указанные места и не удаляй нужные возможности. Запрос на изменение:\n'+editInstruction+'\n\nТекущий полный HTML-код приложения:\n'+generatedHTML+'\n\nВерни обновлённый полный HTML-документ целиком.'
    : buildAIPrompt();
   const systemText='You are a senior application engineer and coding agent. Return only one complete self-contained HTML document, from <!doctype html> through </html>. No Markdown fences or explanations. Keep all CSS and JavaScript inline. Implement functional interactions and preserve existing functionality when editing.';
-  if(provider==='gemini'){
+  if(provider==='cloudflare'){
+   const apiUrl=(($('backendUrl')&&$('backendUrl').value.trim())||'https://as-app-builder-api.asoev-solehjon-official.workers.dev').replace(/\\/$/,'');
+   $('activityLive').textContent='Встроенный ИИ A.S. генерирует приложение';
+   const response=await fetch(apiUrl+'/api/ai/generate',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({prompt:instruction})});
+   const data=await response.json().catch(()=>({}));
+   if(!response.ok)throw Error(data.error||'Встроенный ИИ: HTTP '+response.status);
+   received=String(data.text||'');streamBuffer=received;codeNode.textContent=received||'ИИ вернул пустой ответ.';
+   if(!received.trim())throw Error('Встроенный ИИ вернул пустой ответ. Попробуй сократить описание.');
+  }else if(provider==='gemini'){
    // Gemini 3.8 Flash uses the Interactions API.
    const url=endpoint||'https://generativelanguage.googleapis.com/v1beta/interactions';
    $('activityLive').textContent='Gemini 3.8 Flash генерирует приложение';
