@@ -12,16 +12,18 @@ try {
   await page.goto(pathToFileURL(appPath).href, { waitUntil: "domcontentloaded" });
 
   const manualPanel = page.locator("details.ai-panel").filter({ has: page.locator("#manualHtml") });
-  await manualPanel.locator("summary").click();
+  if (!(await manualPanel.evaluate(element => element.open))) {
+    await manualPanel.locator("summary").click();
+  }
 
   await page.locator("#manualHtml").fill("<div>not a full document</div>");
   await page.locator("#importManualHtml").click();
-  await page.getByRole("status").filter({ hasText: "Не найден полный HTML-документ" }).waitFor({ timeout: 3000 });
+  await page.locator("#aiStatus").filter({ hasText: "Не найден полный HTML-документ" }).waitFor({ timeout: 3000 });
 
   const validHtml = "<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\"><title>A.S. Import Test</title></head><body><main>MANUAL_IMPORT_WORKS</main></body></html>";
   await page.locator("#manualHtml").fill("```html\n" + validHtml + "\n```");
   await page.locator("#importManualHtml").click();
-  await page.getByRole("status").filter({ hasText: "HTML импортирован" }).waitFor({ timeout: 3000 });
+  await page.locator("#aiStatus").filter({ hasText: "HTML импортирован" }).waitFor({ timeout: 3000 });
 
   const preview = page.locator("#previewPane iframe");
   await preview.waitFor({ timeout: 3000 });
