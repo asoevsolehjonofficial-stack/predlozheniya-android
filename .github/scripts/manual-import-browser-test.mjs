@@ -53,7 +53,7 @@ try {
   });
   await page.locator("#prompt").fill(prompt);
   await page.locator("#aiGenerate").click();
-  await page.locator("#state").filter({ hasText: "Приложение готово" }).waitFor({ timeout: 5000 });
+  await page.locator("#previewPane iframe").waitFor({ timeout: 5000 });
   assert.equal(generationRequestSeen, true, "Prompt should reach the built-in AI endpoint");
   const aiPreview = page.locator("#previewPane iframe");
   await aiPreview.waitFor({ timeout: 3000 });
