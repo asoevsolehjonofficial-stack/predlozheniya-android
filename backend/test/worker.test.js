@@ -58,6 +58,69 @@ test("disallowed CORS preflight is rejected", async () => {
   assert.equal(response.status, 403);
 });
 
+test("built-in AI endpoint fails closed when the AI binding is missing", async () => {
+  const response = await call("/api/ai/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt: "Create a small app." }),
+    env: { SITE_ORIGIN: ORIGIN, RATE_LIMITS: { get: async () => null, put: async () => {} } }
+  });
+  assert.equal(response.status, 503);
+  assert.match((await response.json()).error, /not configured/i);
+});
+
+test("built-in AI endpoint returns generated code and applies a per-hour limit", async () => {
+  const store = new Map();
+  const env = {
+    SITE_ORIGIN: ORIGIN,
+    RATE_LIMITS: {
+      get: async key => store.get(key) ?? null,
+      put: async (key, value) => { store.set(key, value); }
+    },
+    AI: {
+      run: async (model, input) => {
+        assert.equal(model, "@cf/meta/llama-3.2-3b-instruct");
+        assert.equal(input.messages[1].content, "Create a small app.");
+        return { response: "<!doctype html><html><head></head><body>AI works</body></html>" };
+      }
+    }
+  };
+  const options = {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "CF-Connecting-IP": "192.0.2.55" },
+    body: JSON.stringify({ prompt: "Create a small app." }),
+    env
+  };
+  const first = await call("/api/ai/generate", options);
+  assert.equal(first.status, 200);
+  const data = await first.json();
+  assert.match(data.text, /AI works/);
+  assert.equal(data.provider, "cloudflare");
+
+  const second = await call("/api/ai/generate", options);
+  assert.equal(second.status, 200);
+  const third = await call("/api/ai/generate", options);
+  assert.equal(third.status, 429);
+});
+
+test("built-in AI endpoint rejects empty and oversized prompts", async () => {
+  const env = {
+    SITE_ORIGIN: ORIGIN,
+    RATE_LIMITS: { get: async () => null, put: async () => {} },
+    AI: { run: async () => ({ response: "unused" }) }
+  };
+  const empty = await call("/api/ai/generate", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt: "  " }), env
+  });
+  assert.equal(empty.status, 400);
+  const oversized = await call("/api/ai/generate", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt: "x".repeat(18001) }), env
+  });
+  assert.equal(oversized.status, 413);
+});
+
 test("unconfigured build API keeps CORS headers so the website can read the error", async () => {
   const response = await call("/api/build", {
     method: "POST",
