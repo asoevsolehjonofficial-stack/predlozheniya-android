@@ -232,10 +232,11 @@ test("queued build status reports the queue state without exposing source data",
     headers: { Authorization: "Bearer " + token }
   });
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), {
+  const responseText = await response.clone().text();
+  assert.deepEqual(JSON.parse(responseText), {
     requestId,
     status: "queued",
     message: "Waiting for the free build queue."
   });
-  assert.doesNotMatch(await response.clone().text(), /private/);
+  assert.doesNotMatch(responseText, /private/);
 });
