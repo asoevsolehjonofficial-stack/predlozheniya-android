@@ -224,6 +224,23 @@ jobs:
           grep -q '"ok":true' /tmp/upload-result.json
           echo "Verified APK stored in free Cloudflare KV for 24 hours."
 
+      - name: Verify smoke-test APK download endpoint
+        if: startsWith(env.PROJECT_SLUG, 'smoke-')
+        run: |
+          set -euo pipefail
+          OIDC_TOKEN="$(curl --fail --silent --show-error --max-time 20 -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-signing-key" | jq -r '.value')"
+          test -n "$OIDC_TOKEN" && test "$OIDC_TOKEN" != "null"
+          TOKEN_RESPONSE="$(curl --fail --silent --show-error --max-time 30 "$SIGNING_API_URL/api/internal/smoke-token?requestId=$REQUEST_ID" -H "Authorization: Bearer $OIDC_TOKEN" -H "Accept: application/json")"
+          DOWNLOAD_TOKEN="$(jq -er '.downloadToken' <<< "$TOKEN_RESPONSE")"
+          echo "::add-mask::$DOWNLOAD_TOKEN"
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          DOWNLOADED="$RUNNER_TEMP/downloaded-smoke-test.apk"
+          curl --fail --silent --show-error --max-time 120 "$BUILD_API_URL/api/download?requestId=$REQUEST_ID" -H "Authorization: Bearer $DOWNLOAD_TOKEN" -o "$DOWNLOADED"
+          ORIGINAL_HASH="$(sha256sum "$APK" | cut -d ' ' -f1)"
+          DOWNLOADED_HASH="$(sha256sum "$DOWNLOADED" | cut -d ' ' -f1)"
+          test "$ORIGINAL_HASH" = "$DOWNLOADED_HASH" || { echo "::error::Downloaded APK checksum differs from the built APK."; exit 1; }
+          echo "Full smoke-test cycle passed: queue, build, permanent signature, upload, authenticated download, and checksum match."
+
       - name: Mark failed build in the queue
         if: failure()
         continue-on-error: true
