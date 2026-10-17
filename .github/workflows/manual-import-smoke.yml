@@ -1,0 +1,50 @@
+name: Manual HTML import smoke test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "index.html"
+      - "app/src/main/assets/index.html"
+      - ".github/workflows/manual-import-smoke.yml"
+  pull_request:
+    paths:
+      - "index.html"
+      - "app/src/main/assets/index.html"
+      - ".github/workflows/manual-import-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  manual-html-import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Check synchronized assets and manual import wiring
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const assert = require('node:assert/strict');
+          const web = fs.readFileSync('index.html', 'utf8');
+          const android = fs.readFileSync('app/src/main/assets/index.html', 'utf8');
+          assert.equal(web, android, 'Website and Android HTML assets must be identical');
+
+          for (const id of ['manualHtml', 'importManualHtml', 'clearManualHtml']) {
+            assert.match(web, new RegExp('id=["\\\\']' + id + '["\\\\']'), 'Missing manual-import control: ' + id);
+          }
+          assert.match(web, /\$\(['"]importManualHtml['"]\)\.addEventListener\(['"]click['"]/,
+            'Manual import button must have a click handler');
+          assert.match(web, /setAttribute\(['"]sandbox['"],['"]allow-scripts['"]\)/,
+            'Preview must remain sandboxed without allow-same-origin');
+          assert.match(web, /function inspectGeneratedHTML\(code\)/,
+            'Manual import should use the existing structural HTML checks');
+
+          const scripts = [...web.matchAll(/<script\\b[^>]*>([\\s\\S]*?)<\\/script>/gi)];
+          assert.equal(scripts.length, 1, 'Expected exactly one inline application script');
+          new Function(scripts[0][1]); // Parse-only syntax check; does not execute the application.
+          console.log('PASS: assets synchronized; manual import controls wired; sandbox and HTML checks present; JavaScript parses.');
+          NODE
