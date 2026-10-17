@@ -226,7 +226,7 @@ async function runAIBuild(editInstruction=''){
  startBuildActivity($('appName').value.trim()||'Моё приложение');
  addActivity(editInstruction?'Подготовка изменений':'Подготовка проекта',editInstruction?'Передаю модели текущий код и запрос на изменение.':'Отправляю описание и критерии рабочего приложения.','done');
  const codeNode=$('code');codeNode.textContent=editInstruction?'Подготовка текущего кода для изменения…':'Ожидаю первые фрагменты кода…';
- let streamBuffer='',received='';
+ let streamBuffer='',received='',streamTruncated=false;
  try{
   const instruction=editInstruction
    ? 'Измени существующее приложение по запросу пользователя. Сохрани работающие функции, исправь указанные места и не удаляй нужные возможности. Запрос на изменение:\n'+editInstruction+'\n\nТекущий полный HTML-код приложения:\n'+generatedHTML+'\n\nВерни обновлённый полный HTML-документ целиком.'
@@ -239,7 +239,7 @@ async function runAIBuild(editInstruction=''){
    const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify({model,input:systemText+'\n\n'+instruction,generation_config:{max_output_tokens:32768,thinking_level:'low'}})});
    const data=await response.json().catch(()=>({}));
    if(!response.ok)throw Error(data.error?.message||data.message||'Gemini Interactions API: HTTP '+response.status);
-   if(data.status==='incomplete')throw Error('Gemini остановил ответ до завершения. Уменьши задание или раздели генерацию на этапы.');
+   if(data.status==='incomplete')throw Error('Ответ модели обрезан из-за лимита длины. Gemini остановил ответ до завершения. Уменьши задание или раздели генерацию на этапы.');
    if(data.status==='failed'||data.status==='cancelled')throw Error(data.error?.message||'Gemini завершил запрос со статусом '+data.status+'.');
    received=extractGeminiInteractionText(data);
    streamBuffer=received;
@@ -255,6 +255,8 @@ async function runAIBuild(editInstruction=''){
     const dataText=event.split(/\r?\n/).filter(line=>line.startsWith('data:')).map(line=>line.slice(5).trim()).join('\n');
     if(!dataText||dataText==='[DONE]')return;
     let packet;try{packet=JSON.parse(dataText)}catch(e){return}
+    const finishReason=packet.choices?.[0]?.finish_reason||packet.choices?.[0]?.finishReason;
+    if(finishReason==='length'||finishReason==='MAX_TOKENS'||packet.status==='incomplete')streamTruncated=true;
     const chunk=packet.choices?.[0]?.delta?.content||packet.choices?.[0]?.message?.content||'';
     if(chunk){received+=chunk;streamBuffer=received;codeNode.textContent=received;const now=Date.now();if(now-lastUpdate>500){lastUpdate=now;$('activityLive').textContent='Получен поток кода';const pending=$('activityFeed').querySelector('.activity-item.working');if(pending){const p=pending.querySelector('p');if(p)p.textContent='Получено '+received.length.toLocaleString()+' символов кода; ответ продолжается.';}}}
     if(packet.error?.message)throw Error(packet.error.message);
@@ -268,6 +270,7 @@ async function runAIBuild(editInstruction=''){
    }
    sseCarry+=decoder.decode();
    if(sseCarry.trim())consumeSSE(sseCarry);
+   if(streamTruncated)throw Error('Ответ модели обрезан из-за лимита длины. Уменьши задание или раздели генерацию на этапы; частичный ответ доступен во вкладке «Код».');
    if(!received.trim())throw Error('Провайдер вернул пустой поток. Проверь endpoint, модель и формат совместимого API.');
   }
   let code=String(received||streamBuffer).trim().replace(/^\x60{3}(?:html)?\s*/i,'').replace(/\x60{3}$/,'').trim();
