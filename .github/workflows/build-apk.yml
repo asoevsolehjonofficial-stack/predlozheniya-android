@@ -9,22 +9,55 @@ on:
       - "settings.gradle"
       - "gradle.properties"
       - ".github/workflows/build-apk.yml"
+      - ".github/scripts/ensure-signing-key.sh"
+      - "backend/signing-worker.js"
+      - "backend/wrangler-signing.toml"
   workflow_dispatch:
 
 # Build steps receive read-only repository access. Only the tiny release job gets write access.
 permissions:
   contents: read
 
+env:
+  SIGNING_API_URL: https://as-app-builder-signing.asoev-solehjon-official.workers.dev
+  SIGNING_PURPOSE: builder
+
 concurrency:
   group: latest-apk-release
   cancel-in-progress: false
 
 jobs:
+  initialize-signing:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout trusted signing initializer
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Set up Java for keytool
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Initialize or verify builder APK signing key
+        run: bash .github/scripts/ensure-signing-key.sh
+
   build:
+    needs: initialize-signing
+    if: always() && (needs.initialize-signing.result == 'success' || needs.initialize-signing.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
       contents: read
+      id-token: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -51,29 +84,8 @@ jobs:
         with:
           packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
 
-      - name: Configure stable signing key (optional)
-        env:
-          KEYSTORE_BASE64: ${{ secrets.AS_BUILDER_KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.AS_BUILDER_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.AS_BUILDER_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.AS_BUILDER_KEY_PASSWORD }}
-        run: |
-          if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "No persistent signing key configured; this build uses the temporary debug key."
-            exit 0
-          fi
-          test -n "$KEYSTORE_PASSWORD" || (echo "Missing AS_BUILDER_KEYSTORE_PASSWORD secret" && exit 1)
-          test -n "$KEY_ALIAS" || (echo "Missing AS_BUILDER_KEY_ALIAS secret" && exit 1)
-          test -n "$KEY_PASSWORD" || (echo "Missing AS_BUILDER_KEY_PASSWORD secret" && exit 1)
-          KEY_PATH="$RUNNER_TEMP/as-builder-signing.jks"
-          echo "$KEYSTORE_BASE64" | base64 --decode > "$KEY_PATH"
-          test -s "$KEY_PATH" || (echo "Signing keystore is empty or invalid" && exit 1)
-          {
-            echo "AS_BUILDER_KEYSTORE_PATH=$KEY_PATH"
-            echo "AS_BUILDER_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
-            echo "AS_BUILDER_KEY_ALIAS=$KEY_ALIAS"
-            echo "AS_BUILDER_KEY_PASSWORD=$KEY_PASSWORD"
-          } >> "$GITHUB_ENV"
+      - name: Load permanent builder APK signing key
+        run: bash .github/scripts/ensure-signing-key.sh
 
       - name: Set build version
         run: echo "APP_VERSION_CODE=$((GITHUB_RUN_NUMBER + 1))" >> "$GITHUB_ENV"
@@ -93,6 +105,10 @@ jobs:
           test -s "$APK"
           unzip -t "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          EXPECTED_CERT="$(keytool -list -v -keystore "$AS_BUILDER_KEYSTORE_PATH" -storetype PKCS12 -storepass "$AS_BUILDER_KEYSTORE_PASSWORD" -alias "$AS_BUILDER_KEY_ALIAS" | grep -m1 'SHA256:' | sed 's/.*SHA256: //' | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+          ACTUAL_CERT="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" | grep -m1 'Signer #1 certificate SHA-256 digest:' | sed 's/.*digest: //' | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+          test -n "$EXPECTED_CERT" && test -n "$ACTUAL_CERT" && test "$EXPECTED_CERT" = "$ACTUAL_CERT" || { echo "::error::Builder APK signature does not match the permanent builder signing key."; exit 1; }
+          echo "Builder APK signer certificate matches the permanent signing key."
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee /tmp/apk-badging.txt
           grep -q "package: name='tj.as.predlozheniya'" /tmp/apk-badging.txt
           mkdir -p dist
@@ -140,7 +156,7 @@ jobs:
             Latest automatically built APK for A.S. APP BUILDER.
             On Android, open the downloaded APK and confirm installation.
             If Android says the app conflicts with an installed version, uninstall the older test build first, then install this one.
-            For seamless updates, the same persistent signing key must be configured in Actions secrets.
+            The release pipeline uses a persistent signing certificate to support repeatable updates.
             This is a test/debug APK, not a Play Store production release.
           files: |
             dist/app-debug.apk
