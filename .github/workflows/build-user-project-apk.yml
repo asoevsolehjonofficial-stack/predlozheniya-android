@@ -235,7 +235,7 @@ jobs:
           echo "::add-mask::$DOWNLOAD_TOKEN"
           APK="app/build/outputs/apk/debug/app-debug.apk"
           DOWNLOADED="$RUNNER_TEMP/downloaded-smoke-test.apk"
-          curl --fail --silent --show-error --max-time 120 "$BUILD_API_URL/api/download?requestId=$REQUEST_ID" -H "Authorization: Bearer $DOWNLOAD_TOKEN" -o "$DOWNLOADED"
+          curl --fail --silent --show-error --max-time 120 "$BUILD_API_URL/api/download?requestId=$REQUEST_ID" -H "Origin: https://as-app-builder.pages.dev" -H "Authorization: Bearer $DOWNLOAD_TOKEN" -o "$DOWNLOADED"
           ORIGINAL_HASH="$(sha256sum "$APK" | cut -d ' ' -f1)"
           DOWNLOADED_HASH="$(sha256sum "$DOWNLOADED" | cut -d ' ' -f1)"
           test "$ORIGINAL_HASH" = "$DOWNLOADED_HASH" || { echo "::error::Downloaded APK checksum differs from the built APK."; exit 1; }
