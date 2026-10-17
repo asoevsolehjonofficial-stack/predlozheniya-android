@@ -77,3 +77,20 @@ node --check src/index.js
 - стабильная подпись релизных APK;
 - отдельная проверенная архитектура для приложений, которым нужен сетевой доступ;
 - полноценная генерация и изменение кода через ИИ с защитой API-ключей и лимитами.
+
+
+## DeepSeek AI provider
+
+The AI Worker is deployed separately from the build API using `backend/wrangler-ai.toml`. To enable DeepSeek:
+
+1. In Cloudflare Dashboard, open Workers & Pages → `as-app-builder-ai` → Settings → Variables and Secrets → Production.
+2. Add `DEEPSEEK_API_KEY` as a **Secret**. Never place the key in `wrangler-ai.toml`, browser code, Git, or logs.
+3. Deploy the updated AI Worker code. The secret is read server-side through `env.DEEPSEEK_API_KEY`.
+4. When `AI_PROVIDER` is unset, the Worker selects DeepSeek when the secret exists; otherwise it uses Cloudflare AI. To force a provider, set the non-secret variable `AI_PROVIDER` to `deepseek` or `cloudflare`. An explicit invalid provider or a selected-but-unconfigured provider fails closed instead of silently switching.
+5. Optional `DEEPSEEK_MODEL` accepts only `deepseek-flash` or `deepseek-v4-pro`; the default is `deepseek-flash`.
+
+DeepSeek calls use `https://api.deepseek.com/chat/completions`, server-side bearer authentication, a 25-second timeout, bounded prompt/output sizes, and sanitized error responses. Existing origin checks and shared rate limits remain active. Upstream quota errors return a clear 429 response; there is no automatic paid-provider fallback.
+
+The `/api/health` endpoint reports the selected provider/model and whether the provider is configured, without returning secret values. Automated tests mock the upstream request and do not require a real DeepSeek key or spend API credits. A successful mock test does not prove that the production secret is correct or that the provider account has available quota.
+
+Official API documentation: https://api-docs.deepseek.com/api/create-chat-completion/
