@@ -1,0 +1,8 @@
+name = "as-app-builder-signing"
+main = "signing-worker.js"
+compatibility_date = "2026-10-15"
+workers_dev = true
+
+[[kv_namespaces]]
+binding = "SIGNING"
+id = "85e5d91027524fde87f2bfb3caf4f16f"
