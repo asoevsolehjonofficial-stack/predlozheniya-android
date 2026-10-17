@@ -11,7 +11,7 @@ try {
   page.on("pageerror", error => pageErrors.push(error.message));
   await page.goto(pathToFileURL(appPath).href, { waitUntil: "domcontentloaded" });
 
-  const manualPanel = page.locator("details.ai-panel").filter({ has: page.locator("#manualHtml") });
+  const manualPanel = page.locator("#manualHtml").locator("xpath=ancestor::details[1]");
   if (!(await manualPanel.evaluate(element => element.open))) {
     await manualPanel.locator("summary").click();
   }
