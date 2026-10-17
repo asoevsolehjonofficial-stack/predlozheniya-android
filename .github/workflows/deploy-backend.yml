@@ -39,4 +39,6 @@ jobs:
 
       - name: Deploy Worker
         working-directory: backend
-        run: npx wrangler deploy --config wrangler.toml
+        run: |
+          npx wrangler deploy --config wrangler.toml
+          npx wrangler deploy --config wrangler-ai.toml
