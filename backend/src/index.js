@@ -292,8 +292,52 @@ function recoverStaleJob(job, now = Date.now()) {
   return true;
 }
 
+async function handleSmokeEnqueue(request, env) {
+  if (request.method !== "POST" || !(await verifyGitHubOidc(request))) return json({ error: "Unauthorized." }, 401);
+  if (!env.JOBS) return json({ error: "Build queue is not configured." }, 503);
+
+  const listing = await env.JOBS.list({ prefix: "job:", limit: 1000 });
+  for (const item of listing.keys || []) {
+    const existing = await getJob(env, item.name.slice(4));
+    if (existing?.smokeTest === true && ["queued", "claimed", "building"].includes(existing.status) &&
+        Date.now() - Number(existing.createdAt || 0) < 30 * 60 * 1000) {
+      return json({ error: "A smoke-test job is already active.", requestId: existing.requestId }, 409);
+    }
+  }
+
+  // Fixed, harmless fixture only. This route is authenticated by the main-branch
+  // GitHub OIDC workflow and does not accept caller-supplied HTML or tokens.
+  const html = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>A.S. APP BUILDER Smoke Test</title></head><body><main><h1 id="status">Smoke test APK installed</h1><button id="test-button" onclick="document.getElementById(\'status\').textContent=\'Button works\'">Test button</button></main></body></html>';
+  const requestId = crypto.randomUUID().replace(/-/g, "");
+  const testToken = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+  const job = {
+    requestId,
+    slug: "smoke-" + requestId.slice(0, 12),
+    createdAt: Date.now(),
+    status: "queued",
+    html,
+    smokeTest: true,
+    testToken,
+    tokenHash: await sha256(testToken)
+  };
+  await env.JOBS.put("job:" + requestId, JSON.stringify(job), { expirationTtl: 86400 });
+  return json({ found: true, requestId, slug: job.slug }, 201);
+}
+
 async function handleClaim(request, env) {
   if (request.method !== "POST" || !(await verifyGitHubOidc(request))) return json({ error: "Unauthorized." }, 401);
+  const requestedId = new URL(request.url).searchParams.get("requestId") || "";
+  if (requestedId) {
+    const job = await getJob(env, requestedId);
+    if (!job || job.smokeTest !== true || job.status !== "queued" || typeof job.html !== "string") {
+      return json({ error: "Requested smoke-test job is not available.", found: false }, 404);
+    }
+    job.status = "claimed";
+    job.claimedAt = Date.now();
+    await env.JOBS.put("job:" + requestedId, JSON.stringify(job), { expirationTtl: 86400 });
+    return json({ found: true, requestId: job.requestId, slug: job.slug });
+  }
+
   const listing = await env.JOBS.list({ prefix: "job:", limit: 1000 });
   for (const item of listing.keys || []) {
     const job = await getJob(env, item.name.slice(4));
@@ -302,7 +346,8 @@ async function handleClaim(request, env) {
     if (recoverStaleJob(job)) {
       await env.JOBS.put(item.name, JSON.stringify(job), { expirationTtl: 86400 });
     }
-    if (job.status !== "queued" || typeof job.html !== "string") continue;
+    // A smoke fixture may only be claimed by the explicitly requested test run.
+    if (job.smokeTest === true || job.status !== "queued" || typeof job.html !== "string") continue;
 
     job.status = "claimed";
     job.claimedAt = Date.now();
@@ -443,6 +488,7 @@ export default {
     const url = new URL(request.url);
     const cors = originAllowed(request, env);
     try {
+      if (url.pathname === "/api/internal/smoke-enqueue" && request.method === "POST") return await handleSmokeEnqueue(request, env);
       if (url.pathname === "/api/internal/claim" && request.method === "POST") return await handleClaim(request, env);
       if (url.pathname === "/api/internal/fail" && request.method === "POST") return await handleFail(request, url.searchParams.get("requestId") || "", env);
       if (url.pathname === "/api/internal/source" && request.method === "GET") return await handleSource(request, env, url.searchParams.get("requestId") || "");
