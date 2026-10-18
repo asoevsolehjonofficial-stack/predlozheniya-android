@@ -3,6 +3,7 @@ name: PR failure diagnostics
 # Workflow logs are available reliably after the originating run completes.
 # workflow_run avoids racing the still-running job's log archive.
 on:
+  workflow_dispatch:
   workflow_run:
     workflows:
       - Quality and security checks
