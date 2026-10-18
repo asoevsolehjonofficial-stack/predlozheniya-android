@@ -9,6 +9,7 @@ const UUID_RE = /^[a-f0-9]{32}$/;
 const HASH_RE = /^[a-f0-9]{64}$/;
 const OIDC_ISSUER = "https://token.actions.githubusercontent.com";
 const OIDC_AUDIENCE = "as-app-builder-worker";
+const NATIVE_E2E_OIDC_AUDIENCE = "as-app-builder-native-e2e";
 let oidcJwksCache = null;
 let oidcJwksExpiresAt = 0;
 
@@ -133,7 +134,7 @@ function decodeJwtPart(value) {
   const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
   return JSON.parse(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "=")));
 }
-async function verifyGitHubOidc(request) {
+async function verifyGitHubOidc(request, expectedWorkflowRef = OWNER + "/" + REPO + "/.github/workflows/" + WORKFLOW + "@refs/heads/main", expectedAudience = OIDC_AUDIENCE) {
   const token = bearer(request);
   const parts = token.split(".");
   if (parts.length !== 3) return false;
@@ -144,7 +145,7 @@ async function verifyGitHubOidc(request) {
     signature = Uint8Array.from(atob(parts[2].replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(parts[2].length / 4) * 4, "=")), c => c.charCodeAt(0));
   } catch { return false; }
   const now = Math.floor(Date.now() / 1000);
-  const audienceValid = claims.aud === OIDC_AUDIENCE || (Array.isArray(claims.aud) && claims.aud.includes(OIDC_AUDIENCE));
+  const audienceValid = claims.aud === expectedAudience || (Array.isArray(claims.aud) && claims.aud.includes(expectedAudience));
   if (header.alg !== "RS256" || claims.iss !== OIDC_ISSUER || !audienceValid ||
       claims.repository !== OWNER + "/" + REPO ||
       claims.workflow_ref !== OWNER + "/" + REPO + "/.github/workflows/build-user-project-apk.yml@refs/heads/main" ||
@@ -166,6 +167,35 @@ async function verifyGitHubOidc(request) {
     return false;
   }
 }
+async function verifyNativeE2EOidc(request) {
+  const workflowRef = OWNER + "/" + REPO + "/.github/workflows/native-ai-smoke.yml@refs/heads/main";
+  return verifyGitHubOidc(request, workflowRef, NATIVE_E2E_OIDC_AUDIENCE);
+}
+
+async function handleCiBuildFixture(request, env) {
+  if (request.headers.get("Origin")) return json({ error: "CI fixture endpoint does not accept browser origins." }, 403);
+  if (request.method !== "POST" || !(await verifyNativeE2EOidc(request))) return json({ error: "Unauthorized CI workflow." }, 401);
+  if (!(request.headers.get("Content-Type") || "").toLowerCase().startsWith("application/json")) return json({ error: "Content-Type must be application/json." }, 415);
+  if (!env.JOBS) return json({ error: "Build storage is not configured." }, 503);
+  let raw;
+  try { raw = await readBodyLimited(request, 6 * 1024 * 1024); } catch { return json({ error: "Request body must be valid UTF-8." }, 400); }
+  if (raw === null) return json({ error: "Request body is too large." }, 413);
+  let payload;
+  try { payload = JSON.parse(raw); } catch { payload = null; }
+  const problem = validNativeFiles(payload?.files);
+  if (problem) return json({ error: problem }, 400);
+  const requestId = crypto.randomUUID().replace(/-/g, "");
+  const slug = "ci-e2e-" + requestId.slice(0, 12);
+  const downloadToken = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+  const job = {
+    requestId, slug, type: "native", createdAt: Date.now(), status: "building",
+    nativeFiles: payload.files, sourceFetchedAt: Date.now(),
+    tokenHash: await sha256(downloadToken), ciFixture: true
+  };
+  await env.JOBS.put("job:" + requestId, JSON.stringify(job), { expirationTtl: 3600 });
+  return json({ requestId, downloadToken, status: "building" }, 201);
+}
+
 async function getJob(env, requestId) {
   if (!UUID_RE.test(requestId)) return null;
   const raw = await env.JOBS.get("job:" + requestId);
@@ -359,8 +389,8 @@ async function handleSource(request, env, requestId) {
   });
 }
 
-async function handleUpload(request, env, requestId) {
-  if (!(await verifyGitHubOidc(request))) return json({ error: "Unauthorized." }, 401);
+async function handleUpload(request, env, requestId, verify = verifyGitHubOidc) {
+  if (!(await verify(request))) return json({ error: "Unauthorized." }, 401);
   if (!env.JOBS) return json({ error: "Free KV build storage is not configured." }, 503);
   const job = await getJob(env, requestId);
   if (!job || !job.sourceFetchedAt || job.status === "failed") return json({ error: "Build request not found or source was not fetched." }, 404);
@@ -426,8 +456,8 @@ async function handleFail(request, requestId, env) {
   return json({ ok: true, requeued: false });
 }
 
-async function handlePreviewUpload(request, env, requestId) {
-  if (!(await verifyGitHubOidc(request))) return json({ error: "Unauthorized." }, 401);
+async function handlePreviewUpload(request, env, requestId, verify = verifyGitHubOidc) {
+  if (!(await verify(request))) return json({ error: "Unauthorized." }, 401);
   const job = await getJob(env, requestId);
   if (!job || job.type !== "native" || !job.sourceFetchedAt || job.status === "failed") return json({ error: "Native build request not found." }, 404);
   if (!(request.headers.get("Content-Type") || "").toLowerCase().startsWith("image/png")) return json({ error: "Preview must be a PNG screenshot." }, 415);
@@ -503,6 +533,9 @@ export default {
     const url = new URL(request.url);
     const cors = originAllowed(request, env);
     try {
+      if (url.pathname === "/api/ci/build-fixture" && request.method === "POST") return await handleCiBuildFixture(request, env);
+      if (url.pathname === "/api/ci/upload" && request.method === "PUT") return await handleUpload(request, env, url.searchParams.get("requestId") || "", verifyNativeE2EOidc);
+      if (url.pathname === "/api/ci/preview-upload" && request.method === "PUT") return await handlePreviewUpload(request, env, url.searchParams.get("requestId") || "", verifyNativeE2EOidc);
       if (url.pathname === "/api/internal/claim" && request.method === "POST") return await handleClaim(request, env);
       if (url.pathname === "/api/internal/fail" && request.method === "POST") return await handleFail(request, url.searchParams.get("requestId") || "", env);
       if (url.pathname === "/api/internal/source" && request.method === "GET") return await handleSource(request, env, url.searchParams.get("requestId") || "");
@@ -563,4 +596,4 @@ export default {
   }
 };
 
-export { validHtml, validNativeFiles, bytesToBase64, base64ToBytes, safeEqual, verifyGitHubOidc, readBodyLimited, recoverStaleJob, STALE_BUILD_MS };
+export { validHtml, validNativeFiles, bytesToBase64, base64ToBytes, safeEqual, verifyGitHubOidc, readBodyLimited, recoverStaleJob };

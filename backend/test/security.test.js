@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validHtml, validNativeFiles, bytesToBase64, base64ToBytes, safeEqual, verifyGitHubOidc, readBodyLimited, recoverStaleJob, STALE_BUILD_MS } from "../src/index.js";
+import { validHtml, validNativeFiles, bytesToBase64, base64ToBytes, safeEqual, verifyGitHubOidc, readBodyLimited, recoverStaleJob } from "../src/index.js";
+
+const STALE_BUILD_MS = 35 * 60 * 1000;
 
 test("accepts a complete self-contained HTML document", () => {
   assert.equal(validHtml("<!doctype html><html><head><title>Demo</title></head><body><h1>OK</h1></body></html>"), "");

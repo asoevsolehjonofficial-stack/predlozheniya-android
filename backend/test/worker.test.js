@@ -22,6 +22,64 @@ async function call(path, {
   return worker.fetch(request, env);
 }
 
+test("CI native build fixture rejects missing or invalid OIDC tokens without creating jobs", async () => {
+  const values = new Map();
+  const env = { JOBS: {
+    get: async key => values.get(key) ?? null,
+    put: async (key, value) => values.set(key, value),
+    delete: async key => values.delete(key),
+    list: async () => ({ keys: [...values.keys()].map(name => ({ name })) })
+  } };
+  const response = await call("/api/ci/build-fixture", {
+    method: "POST",
+    origin: null,
+    headers: { "Content-Type": "application/json", Authorization: "Bearer invalid.token.value" },
+    body: JSON.stringify({ files: [] }),
+    env
+  });
+  assert.equal(response.status, 401);
+  assert.equal(values.size, 0);
+});
+
+test("CI native build fixture rejects browser-origin requests", async () => {
+  const response = await call("/api/ci/build-fixture", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ files: [] }),
+    env: { JOBS: { put: async () => { throw new Error("should not write"); } } }
+  });
+  assert.equal(response.status, 403);
+});
+
+test("CI native build fixture rejects missing or invalid OIDC tokens without creating jobs", async () => {
+  const values = new Map();
+  const env = { JOBS: {
+    get: async key => values.get(key) ?? null,
+    put: async (key, value) => values.set(key, value),
+    delete: async key => values.delete(key),
+    list: async () => ({ keys: [...values.keys()].map(name => ({ name })) })
+  } };
+  const response = await call("/api/ci/build-fixture", {
+    method: "POST",
+    origin: null,
+    headers: { "Content-Type": "application/json", Authorization: "Bearer invalid.token.value" },
+    body: JSON.stringify({ files: [] }),
+    env
+  });
+  assert.equal(response.status, 401);
+  assert.equal(values.size, 0);
+});
+
+test("CI native build fixture rejects browser-origin requests", async () => {
+  const response = await call("/api/ci/build-fixture", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ files: [] }),
+    env: { JOBS: { put: async () => { throw new Error("should not write"); } } }
+  });
+  assert.equal(response.status, 403);
+});
+
 test("health reports an unconfigured backend as unavailable", async () => {
   const response = await call("/api/health");
   assert.equal(response.status, 503);
