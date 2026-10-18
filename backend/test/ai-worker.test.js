@@ -143,6 +143,37 @@ test("incorrect CI fixture secret never bypasses the limiter", async () => {
   assert.equal(env.RATE_LIMITER.store.size, 0);
 });
 
+
+test("CI fixture endpoint rejects missing or invalid GitHub OIDC tokens without using production quota", async () => {
+  let inferenceCalls = 0;
+  const env = { ...fakeEnv(async () => { inferenceCalls++; return { response: "must not run" }; }), AI_CI_TEST_SECRET: "not-used-by-this-endpoint" };
+  for (const headers of [
+    { "Content-Type": "application/json" },
+    { "Content-Type": "application/json", "Authorization": "Bearer invalid.jwt.token" }
+  ]) {
+    const response = await call("/api/ci/native-fixture", {
+      method: "POST",
+      origin: null,
+      headers,
+      body: JSON.stringify({ prompt: "Create a simple native app" }),
+      env
+    });
+    assert.equal(response.status, 401);
+  }
+  assert.equal(inferenceCalls, 0);
+  assert.equal(env.RATE_LIMITER.store.size, 0);
+});
+
+test("CI fixture endpoint rejects browser-origin requests", async () => {
+  const response = await call("/api/ci/native-fixture", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt: "Create a simple native app" }),
+    env: fakeEnv()
+  });
+  assert.equal(response.status, 403);
+});
+
 test("built-in AI rejects empty, oversized, and secret-bearing prompts", async () => {
   const env = fakeEnv();
   const empty = await call("/api/ai/generate", {
