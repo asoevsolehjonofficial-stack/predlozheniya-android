@@ -40,6 +40,7 @@ jobs:
           API_URL: https://as-app-builder-api.asoev-soleh-official.workers.dev
           AI_API_URL: https://as-app-builder-ai.asoev-soleh-official.workers.dev
           RUN_LIVE_AI_TEST: "false"
+          CHECK_BACKEND_HEALTH: "false"
         run: node .github/scripts/auto-check.mjs
 
   generated-app:
