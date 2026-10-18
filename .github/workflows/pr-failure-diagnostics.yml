@@ -82,5 +82,10 @@ jobs:
           print('_Automated diagnostic excerpt. Check the linked run for full context; credentials should never be posted in logs._')
           PY
 
-          gh api --method POST "repos/${REPO}/issues/24/comments" --input "${RUNNER_TEMP}/comment.md" >/dev/null
+          python3 - "${RUNNER_TEMP}/comment.md" "${RUNNER_TEMP}/comment.json" <<'PYJSON'
+          import json, pathlib, sys
+          body = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+          pathlib.Path(sys.argv[2]).write_text(json.dumps({"body": body}), encoding="utf-8")
+          PYJSON
+          gh api --method POST "repos/${REPO}/issues/24/comments" --input "${RUNNER_TEMP}/comment.json" >/dev/null
           echo "Posted failed-step log excerpt for workflow run ${RUN_ID} to PR #24."
