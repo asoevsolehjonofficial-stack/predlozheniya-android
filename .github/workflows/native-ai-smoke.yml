@@ -5,139 +5,139 @@ on:
     branches: [main]
     paths:
       - "backend/ai-worker.js"
+      - "backend/wrangler-ai.toml"
+      - "backend/test/ai-worker.test.js"
       - "native-builder/**"
       - ".github/workflows/native-ai-smoke.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
-  group: native-ai-generated-apk-smoke-v3
-  cancel-in-progress: true
+  group: native-ai-generated-apk-smoke-v4
+  cancel-in-progress: false
 
 jobs:
   live-ui-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
-      - name: Checkout trusted source
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           persist-credentials: false
-
-      - name: Set up Node.js for live browser smoke
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: "22"
-
-      - name: Install live browser smoke dependencies
+      - name: Install browser smoke dependencies
         run: |
           npm install --no-save playwright
           npx playwright install --with-deps chromium
-
-      - name: Verify live website UI generation end to end
+      - name: Verify live website UI without provider inference
         env:
           SITE_URL: https://as-app-builder.pages.dev
-          API_URL: https://as-app-builder-api.asoev-solehjon-official.workers.dev
-          AI_API_URL: https://as-app-builder-ai.asoev-solehjon-official.workers.dev
-          RUN_LIVE_AI_TEST: "true"
+          API_URL: https://as-app-builder-api.asoev-soleh-official.workers.dev
+          AI_API_URL: https://as-app-builder-ai.asoev-soleh-official.workers.dev
+          RUN_LIVE_AI_TEST: "false"
         run: node .github/scripts/auto-check.mjs
 
   generated-app:
     needs: live-ui-smoke
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [simple, multi-screen, storage]
+        api-level: [21, 35]
     steps:
-      - name: Checkout trusted source
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           persist-credentials: false
-
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
-
+      - name: Set up Gradle with dependency cache
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          packages: "platform-tools platforms;android-35 build-tools;35.0.0"
-
-      - name: Install Gradle 8.9
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0 system-images;android-21;default;x86 system-images;android-35;google_apis;x86_64"
+      - name: Install Worker dev dependency
+        working-directory: backend
+        run: npm install --no-save wrangler@4
+      - name: Start local fixture Worker
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --location https://services.gradle.org/distributions/gradle-8.9-bin.zip -o "$RUNNER_TEMP/gradle.zip"
-          unzip -q "$RUNNER_TEMP/gradle.zip" -d "$RUNNER_TEMP"
-          echo "$RUNNER_TEMP/gradle-8.9/bin" >> "$GITHUB_PATH"
-
-      - name: Generate native source using the live built-in AI
+          ./backend/node_modules/.bin/wrangler dev --config backend/wrangler-ai.toml --local --ip 127.0.0.1 --port 8787 > "$RUNNER_TEMP/fixture-worker.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/fixture-worker.pid"
+          for attempt in $(seq 1 40); do
+            if curl --silent --fail http://127.0.0.1:8787/api/health >/dev/null; then exit 0; fi
+            if ! kill -0 "$(cat "$RUNNER_TEMP/fixture-worker.pid")" 2>/dev/null; then cat "$RUNNER_TEMP/fixture-worker.log"; exit 1; fi
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/fixture-worker.log"
+          echo "::error::Local fixture Worker did not become ready."
+          exit 1
+      - name: Request deterministic native source with signed GitHub OIDC token
+        env:
+          EXAMPLE: ${{ matrix.example }}
         shell: bash
         run: |
           set -euo pipefail
-          AI_URL="https://as-app-builder-ai.asoev-solehjon-official.workers.dev"
-          curl --fail --silent --show-error --max-time 20 "$AI_URL/api/health" | jq -e '.ok == true' >/dev/null
-          curl --fail --silent --show-error --max-time 180 -X POST "$AI_URL/api/ai/native-generate" \
-            -H "Origin: https://as-app-builder.pages.dev" \
-            -H "Content-Type: application/json" \
-            --data '{"prompt":"Create a tiny native Android app with a centered label that says Native AI smoke test. Use only Android SDK widgets, no network, no WebView, no external libraries. Return only the required JSON source files."}' \
-            -o "$RUNNER_TEMP/native-ai-response.json"
+          OIDC_TOKEN="$(curl --fail --silent --show-error -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-ai-ci" | jq -er '.value')"
+          echo "::add-mask::$OIDC_TOKEN"
+          case "$EXAMPLE" in
+            simple) PROMPT="Create a simple native Android app with a centered title and a counter button. No network." ;;
+            multi-screen) PROMPT="Create a native Android app with multiple screens and Home to Settings navigation. No network." ;;
+            storage) PROMPT="Create a native Android notes app with persistent local storage using SharedPreferences. No network." ;;
+            *) echo "::error::Unknown fixture example"; exit 1 ;;
+          esac
+          HTTP_CODE="$(curl --silent --show-error --max-time 30 -o "$RUNNER_TEMP/native-ai-response.json" -w '%{http_code}' -X POST http://127.0.0.1:8787/api/ci/native-fixture -H "Authorization: Bearer $OIDC_TOKEN" -H "Content-Type: application/json" --data "$(jq -n --arg prompt "$PROMPT" '{prompt:$prompt}')")"
+          test "$HTTP_CODE" = "200" || { cat "$RUNNER_TEMP/native-ai-response.json"; echo "::error::Protected fixture endpoint returned HTTP $HTTP_CODE"; exit 1; }
+          jq -e '.provider == "test-fixture" and .mode == "native-android-source"' "$RUNNER_TEMP/native-ai-response.json" >/dev/null
           python3 - <<'PY'
           import json, os, re, shutil
           from pathlib import Path
-          response_path = Path(os.environ["RUNNER_TEMP"]) / "native-ai-response.json"
-          response = json.loads(response_path.read_text(encoding="utf-8"))
+          response = json.loads((Path(os.environ["RUNNER_TEMP"]) / "native-ai-response.json").read_text())
           text = response.get("text")
-          if not isinstance(text, str) or not text.strip():
-              raise SystemExit("Native AI endpoint returned no source text.")
-          text = re.sub(r"^\s*```(?:json)?\s*|\s*```\s*$", "", text.strip(), flags=re.I)
+          if not isinstance(text, str) or not text.strip(): raise SystemExit("Fixture returned no source text.")
+          text = re.sub(r"^\s*`{3}(?:json)?\s*|\s*`{3}\s*$", "", text.strip(), flags=re.I)
           data = json.loads(text)
           files = data.get("files")
-          if not isinstance(files, list) or not 1 <= len(files) <= 12:
-              raise SystemExit("Native AI returned an invalid file list.")
+          if not isinstance(files, list) or not 1 <= len(files) <= 12: raise SystemExit("Invalid fixture file list.")
           root = Path("native-builder/app/src/main")
-          java_root = root / "java/tj/as/generated"
-          template_root = root / "java/tj/as/nativebuilder/notes"
-          if java_root.exists(): shutil.rmtree(java_root)
-          if template_root.exists(): shutil.rmtree(template_root)
-          seen = set()
-          total = 0
-          main_found = False
+          for stale in (root / "java/tj/as/generated", root / "java/tj/as/nativebuilder/notes"):
+              if stale.exists(): shutil.rmtree(stale)
+          seen, total, main_found = set(), 0, False
           for item in files:
-              if not isinstance(item, dict) or not isinstance(item.get("path"), str) or not isinstance(item.get("content"), str):
-                  raise SystemExit("Malformed native AI source file.")
+              if not isinstance(item, dict) or not isinstance(item.get("path"), str) or not isinstance(item.get("content"), str): raise SystemExit("Malformed source file.")
               rel, source = item["path"], item["content"]
-              if not re.fullmatch(r"app/src/main/(?:java/tj/as/generated/[A-Za-z0-9_$]+\.java|res/values/[A-Za-z0-9_.-]+\.xml)", rel) or ".." in rel:
-                  raise SystemExit("Disallowed native AI source path: " + rel)
-              if rel in seen: raise SystemExit("Duplicate native AI source path.")
-              seen.add(rel)
-              size = len(source.encode("utf-8"))
-              total += size
-              if size > 60000 or total > 500 * 1024: raise SystemExit("Native AI source exceeded the configured size limits.")
+              if not re.fullmatch(r"app/src/main/(?:java/tj/as/generated/[A-Za-z0-9_$]+\.java|res/values/[A-Za-z0-9_.-]+\.xml)", rel) or ".." in rel: raise SystemExit("Disallowed source path: " + rel)
+              if rel in seen: raise SystemExit("Duplicate source path.")
+              seen.add(rel); size = len(source.encode()); total += size
+              if size > 60000 or total > 500 * 1024: raise SystemExit("Source size limit exceeded.")
               if rel.endswith(".java"):
-                  if re.search(r"java\.lang\.Runtime|ProcessBuilder|DexClassLoader|PathClassLoader|Class\.forName|System\.loadLibrary|WebView|java\.net\.(?:Socket|URL|URLConnection)", source):
-                      raise SystemExit("Restricted API found in native AI source.")
+                  if re.search(r"java\.lang\.Runtime|ProcessBuilder|DexClassLoader|PathClassLoader|Class\.forName|System\.loadLibrary|WebView|java\.net\.(?:Socket|URL|URLConnection)", source): raise SystemExit("Restricted API found.")
                   if rel == "app/src/main/java/tj/as/generated/MainActivity.java":
-                      if not re.search(r"package\s+tj\.as\.generated\s*;", source) or not re.search(r"class\s+MainActivity\s+extends\s+Activity\b", source):
-                          raise SystemExit("Native AI MainActivity has an invalid package or superclass.")
+                      if not re.search(r"package\s+tj\.as\.generated\s*;", source) or not re.search(r"class\s+MainActivity\s+extends\s+Activity\b", source): raise SystemExit("Invalid MainActivity.")
                       main_found = True
-              elif re.search(r"<!DOCTYPE|<!ENTITY", source, re.I):
-                  raise SystemExit("XML document types are forbidden.")
+              elif re.search(r"<!DOCTYPE|<!ENTITY", source, re.I): raise SystemExit("XML document types are forbidden.")
               destination = root / rel.removeprefix("app/src/main/")
-              destination.parent.mkdir(parents=True, exist_ok=True)
-              destination.write_text(source, encoding="utf-8")
-          if not main_found: raise SystemExit("Native AI did not return the required MainActivity.java.")
-          print("Validated native AI source files:", ", ".join(sorted(seen)))
+              destination.parent.mkdir(parents=True, exist_ok=True); destination.write_text(source)
+          if not main_found: raise SystemExit("Missing MainActivity.java.")
+          print("Validated source files:", ", ".join(sorted(seen)))
           PY
           sed -i "s/namespace 'tj.as.nativebuilder.notes'/namespace 'tj.as.generated'/" native-builder/app/build.gradle
-          sed -i "s/applicationId 'tj.as.nativebuilder.notes'/applicationId 'tj.as.generated.p_native_ai_smoke'/" native-builder/app/build.gradle
-          sed -i 's/android:label="A.S. Notes Native"/android:label="Native AI smoke"/' native-builder/app/src/main/AndroidManifest.xml
-
-      - name: Build AI-generated native APK
+          sed -i "s/applicationId 'tj.as.nativebuilder.notes'/applicationId 'tj.as.generated.p_native_$EXAMPLE_api${{ matrix.api-level }}}'/" native-builder/app/build.gradle
+          sed -i "s/android:label=\"A.S. Notes Native\"/android:label=\"Native $EXAMPLE API ${{ matrix.api-level }}}\"/" native-builder/app/src/main/AndroidManifest.xml
+      - name: Build native APK
         run: gradle --no-daemon -p native-builder clean assembleDebug
-
       - name: Verify APK package, signature, and checksum
         shell: bash
         run: |
@@ -146,16 +146,39 @@ jobs:
           test -s "$APK"
           unzip -t "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -q "package: name='tj.as.generated.p_native_ai_smoke'"
-          sha256sum "$APK"
-
-      - name: Install and launch AI-generated APK in Android 15 emulator
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -q "package: name='tj.as.generated.p_native_${{ matrix.example }}_api${{ matrix.api-level }}}'"
+          sha256sum "$APK" | tee "$RUNNER_TEMP/apk-sha256.txt"
+      - name: Install, launch, and capture a real emulator screenshot
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
-          target: default
-          arch: x86_64
+          api-level: ${{ matrix.api-level }}
+          target: ${{ matrix.api-level == 21 && 'default' || 'google_apis' }}
+          arch: ${{ matrix.api-level == 21 && 'x86' || 'x86_64' }}
           profile: pixel_2
           disable-animations: true
           script: |
-            set -eu; APK="native-builder/app/build/outputs/apk/debug/app-debug.apk"; PACKAGE="tj.as.generated.p_native_ai_smoke"; adb install "$APK"; adb shell monkey -p "$PACKAGE" -c android.intent.category.LAUNCHER 1; sleep 5; adb shell dumpsys activity activities | grep -F "$PACKAGE" >/dev/null; if adb logcat -d -t 1200 | grep -E "FATAL EXCEPTION.*$PACKAGE|Process: $PACKAGE.*died"; then echo "::error::AI-generated native app crashed after launch."; exit 1; fi; echo "AI-generated native APK installed and launched successfully."
+            set -eu
+            APK="native-builder/app/build/outputs/apk/debug/app-debug.apk"
+            PACKAGE="tj.as.generated.p_native_${{ matrix.example }}_api${{ matrix.api-level }}}"
+            adb install "$APK"
+            adb shell monkey -p "$PACKAGE" -c android.intent.category.LAUNCHER 1
+            sleep 5
+            adb shell dumpsys activity activities | grep -F "$PACKAGE" >/dev/null
+            if adb logcat -d -t 1800 | grep -E "FATAL EXCEPTION.*$PACKAGE|Process: $PACKAGE.*died"; then echo "::error::Generated app crashed."; exit 1; fi
+            adb shell screencap -p /sdcard/native-e2e.png
+            adb pull /sdcard/native-e2e.png "$RUNNER_TEMP/native-e2e.png"
+            test -s "$RUNNER_TEMP/native-e2e.png"
+            file "$RUNNER_TEMP/native-e2e.png" | grep -qi 'PNG image'
+      - name: Upload APK and screenshot evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-e2e-${{ matrix.example }}-api-${{ matrix.api-level }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            native-builder/app/build/outputs/apk/debug/app-debug.apk
+            native-builder/app/src/main/java/tj/as/generated/
+            ${{ runner.temp }}/native-e2e.png
+            ${{ runner.temp }}/apk-sha256.txt
+            ${{ runner.temp }}/native-ai-response.json
