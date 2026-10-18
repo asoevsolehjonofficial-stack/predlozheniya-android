@@ -287,7 +287,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           script: |
-            set -euo pipefail
+            set -eu
             APK="app/build/outputs/apk/debug/app-debug.apk"
             PACKAGE_SUFFIX="p_$(echo "$PROJECT_SLUG" | tr '-' '_')"
             PACKAGE="tj.as.generated.$PACKAGE_SUFFIX"
@@ -314,7 +314,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           script: |
-            set -euo pipefail
+            set -eu
             APK="native-builder/app/build/outputs/apk/debug/app-debug.apk"
             PACKAGE_SUFFIX="p_$(echo "$PROJECT_SLUG" | tr '-' '_')"
             PACKAGE="tj.as.generated.$PACKAGE_SUFFIX"
