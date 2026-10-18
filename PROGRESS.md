@@ -18,6 +18,12 @@ Pull request: #24 — https://github.com/asoevsolehjonofficial-stack/predlozheni
 - [ ] 10. PR #24 merged and production updated — PR remains open; no merge or deploy performed.
 - [ ] 11. Three production end-to-end scenarios (simple, multi-screen, persistent data) — NOT RUN.
 
+## Failure-log automation (2026-10-18)
+
+- Added `.github/workflows/pr-failure-diagnostics.yml` on branch `fix/ai-quota-native-preview`.
+- The collector runs on `workflow_run: completed`, retrieves failed-step logs with `gh run view --log-failed`, keeps the last 200 lines, applies conservative credential-pattern redaction, and posts the excerpt as a comment on PR #24 for failures associated with PR #24 or the target branch.
+- Design note: a same-run `if: failure()` step cannot reliably fetch the current run's complete GitHub-hosted step log before the job/run is finished. A completed-run collector is used to avoid this race. Because GitHub only activates `workflow_run` definitions from the default branch, this collector will not automatically execute until the workflow definition exists on the default branch. Its first real run is NOT YET VERIFIED.
+
 ## Stage 1 — CI diagnostics
 
 ### Confirmed observations
