@@ -233,3 +233,8 @@ Pull request: #27 — https://github.com/asoevsolehjonofficial-stack/predlozheni
 - The latest main matrix run [#39161397305](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39161397305) failed during SDK image installation. Exact log: `yes: standard output: Broken pipe`; the `sdkmanager` had reached 100% extraction, but `set -o pipefail` treated the `yes` process's expected SIGPIPE as failure, repeating downloads three times.
 - Removed the `yes |` pipeline because the Android setup action has already accepted SDK licenses. SDK image installation now retries the `sdkmanager` command directly, avoiding the false failure.
 - The same in-progress PR adds the protected local API job, APK upload/download checksum round-trip, and screenshot upload/download round-trip. CI must validate all of this before merge.
+
+## Stage 4 retry 5 — fix test import after runtime-safe export cleanup (2026-10-19)
+
+- The first backend validation run on an earlier PR #36 commit failed with exact log: `SyntaxError: The requested module '../src/index.js' does not provide an export named 'STALE_BUILD_MS'`. Removing this numeric constant from module exports is required for the Cloudflare runtime, so the unit test now defines the 35-minute threshold locally instead of importing a runtime-incompatible value.
+- The latest head `aba03ec15d4e2387d3c4830f4625102a024b747e` passed [Quality/security #39162034704](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39162034704) and [Validate web app #39162034716](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39162034716). AUTO CHECK AI is still pending/in progress at the time of this update.
