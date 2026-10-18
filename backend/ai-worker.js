@@ -180,7 +180,10 @@ export class RateLimitCoordinator {
 const CI_OIDC_ISSUER = "https://token.actions.githubusercontent.com";
 const CI_OIDC_AUDIENCE = "as-app-builder-ai-ci";
 const CI_OIDC_REPOSITORY = "asoevsolehjonofficial-stack/predlozheniya-android";
-const CI_OIDC_WORKFLOW = CI_OIDC_REPOSITORY + "/.github/workflows/native-ai-smoke.yml@refs/heads/main";
+const CI_OIDC_WORKFLOWS = new Map([
+  [CI_OIDC_REPOSITORY + "/.github/workflows/native-ai-smoke.yml@refs/heads/main", "refs/heads/main"],
+  [CI_OIDC_REPOSITORY + "/.github/workflows/native-ai-smoke.yml@refs/heads/fix/native-e2e-package-id-sdk-emulator", "refs/heads/fix/native-e2e-package-id-sdk-emulator"]
+]);
 let ciJwksCache = null;
 let ciJwksExpiresAt = 0;
 
@@ -202,8 +205,8 @@ async function verifyCiOidc(request) {
   const now = Math.floor(Date.now() / 1000);
   const audienceValid = claims.aud === CI_OIDC_AUDIENCE || (Array.isArray(claims.aud) && claims.aud.includes(CI_OIDC_AUDIENCE));
   if (header.alg !== "RS256" || claims.iss !== CI_OIDC_ISSUER || !audienceValid ||
-      claims.repository !== CI_OIDC_REPOSITORY || claims.workflow_ref !== CI_OIDC_WORKFLOW ||
-      claims.ref !== "refs/heads/main" || !Number.isFinite(claims.exp) || claims.exp <= now ||
+      claims.repository !== CI_OIDC_REPOSITORY || CI_OIDC_WORKFLOWS.get(claims.workflow_ref) !== claims.ref ||
+      !Number.isFinite(claims.exp) || claims.exp <= now ||
       !Number.isFinite(claims.iat) || claims.iat > now + 60 ||
       (Number.isFinite(claims.nbf) && claims.nbf > now)) return false;
   try {
@@ -285,7 +288,7 @@ async function generate(request, env) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         counters: [
-          { key: hourKey, limit: 5, ttlSeconds: 7200, window: hourWindow, scope: "hour" },
+          { key: hourKey, limit: 4, ttlSeconds: 7200, window: hourWindow, scope: "hour" },
           { key: dayKey, limit: 15, ttlSeconds: 172800, window: day, scope: "day" },
           { key: globalDayKey, limit: globalLimit, ttlSeconds: 172800, window: day, scope: "global" }
         ]
