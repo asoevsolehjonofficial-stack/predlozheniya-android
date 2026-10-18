@@ -608,6 +608,27 @@ $('buildApk').addEventListener('click',async()=>{
       await new Promise(resolve=>setTimeout(resolve,5000));
      }
     }
+    if(nativeMode){
+     if(state.previewUrl){
+      try{
+       const previewResponse=await fetch(new URL(state.previewUrl,cfg.url).href,{headers:{'Authorization':'Bearer '+downloadToken,'Accept':'image/png'}});
+       if(previewResponse.ok){
+        const previewBlob=await previewResponse.blob();
+        if(previewBlob.type==='image/png'){
+         const previewImage=document.createElement('img');
+         previewImage.alt='Снимок экрана настоящего Android-приложения, запущенного в эмуляторе Android 15';
+         previewImage.style.cssText='display:block;width:100%;height:100%;object-fit:contain;background:#111';
+         previewImage.src=URL.createObjectURL(previewBlob);
+         const pane=$('previewPane');pane.replaceChildren(previewImage);pane.dataset.previewType='native-screenshot';
+         $('activityLive').textContent='Нативное приложение проверено в Android-эмуляторе';
+         addActivity('Реальный предпросмотр Android','Снимок получен после запуска собранного APK в эмуляторе Android 15. Это не HTML-макет.','done');
+        }
+       }
+      }catch(previewError){addActivity('Снимок экрана недоступен','APK собран, но снимок экрана не удалось загрузить. Сам APK можно скачать.','error');}
+     }else{
+      addActivity('Снимок экрана недоступен','Сборка не вернула снимок Android-эмулятора. Предпросмотр не заменяется HTML-макетом.','error');
+     }
+    }
     deliverBlob(blob,'as-app-'+requestId.slice(0,8)+'.apk');
     buildStatus('Готово! APK прошёл проверку контрольной суммы. Открой файл из «Загрузок» и подтверди установку Android. Это тестовая сборка; для обычных обновлений нужна постоянная подпись.');
     return;
