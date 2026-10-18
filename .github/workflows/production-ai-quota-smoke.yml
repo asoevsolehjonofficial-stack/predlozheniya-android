@@ -1,0 +1,61 @@
+name: Production AI quota smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - ops/production-quota-smoke
+
+permissions:
+  contents: read
+
+jobs:
+  production-quota:
+    if: github.ref == 'refs/heads/ops/production-quota-smoke'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      AI_WORKER_URL: https://as-app-builder-ai.asoev-solehjon-official.workers.dev
+      SITE_ORIGIN: https://as-app-builder.pages.dev
+    steps:
+      - name: Verify production health and Durable Object binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 20 \
+            -H "Origin: $SITE_ORIGIN" \
+            "$AI_WORKER_URL/api/health" -o "$RUNNER_TEMP/ai-health.json"
+          jq -e '.ok == true and .service == "A.S. APP BUILDER AI"' "$RUNNER_TEMP/ai-health.json" >/dev/null
+          echo "Production health passed; AI Worker reports configured."
+
+      - name: Verify four real generations succeed and fifth is rate-limited
+        shell: bash
+        run: |
+          set -euo pipefail
+          for n in 1 2 3 4; do
+            code=$(curl --silent --show-error --max-time 90 \
+              -H "Origin: $SITE_ORIGIN" \
+              -H "Content-Type: application/json" \
+              -X POST "$AI_WORKER_URL/api/ai/generate" \
+              --data "{\"prompt\":\"Create a concise responsive HTML app for quota smoke test request $n.\"}" \
+              -o "$RUNNER_TEMP/ai-response-$n.json" -w '%{http_code}')
+            if [[ "$code" != "200" ]]; then
+              echo "::error::Production generation $n returned HTTP $code (expected 200)."
+              cat "$RUNNER_TEMP/ai-response-$n.json" | jq -c '{error,ok}' 2>/dev/null || true
+              exit 1
+            fi
+            jq -e '(.text | type == "string" and length > 0) or (.html | type == "string" and length > 0)' "$RUNNER_TEMP/ai-response-$n.json" >/dev/null
+          done
+          code=$(curl --silent --show-error --max-time 30 \
+            -H "Origin: $SITE_ORIGIN" \
+            -H "Content-Type: application/json" \
+            -X POST "$AI_WORKER_URL/api/ai/generate" \
+            --data '{"prompt":"Create a concise responsive HTML app for quota smoke test request five."}' \
+            -o "$RUNNER_TEMP/ai-response-5.json" -w '%{http_code}')
+          if [[ "$code" != "429" ]]; then
+            echo "::error::Production generation 5 returned HTTP $code (expected 429)."
+            cat "$RUNNER_TEMP/ai-response-5.json" | jq -c '{error,ok}' 2>/dev/null || true
+            exit 1
+          fi
+          jq -e '(.error | type == "string" and length > 0)' "$RUNNER_TEMP/ai-response-5.json" >/dev/null
+          echo "Production quota smoke passed: 4 HTTP 200 responses, then HTTP 429."
