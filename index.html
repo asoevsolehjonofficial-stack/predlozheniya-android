@@ -82,7 +82,7 @@ body:has(.studio-shell){overflow-x:hidden}
 <div class="field"><label>Что создаём?</label><div class="choices" role="group" aria-label="Тип проекта"><button class="choice" data-kind="app" aria-pressed="true">📱 Приложение</button><button class="choice" data-kind="game" aria-pressed="false">🎮 Игра</button><button class="choice" data-kind="site" aria-pressed="false">🌐 Сайт</button></div></div>
 <div class="row"><div class="field"><label for="appName">Название проекта</label><input id="appName" maxlength="45" value="Мой проект" placeholder="Например, Учись легко"></div><div class="field"><label for="style">Стиль</label><select id="style"><option value="clean">Современный</option><option value="education">Образовательный</option><option value="business">Деловой</option><option value="playful">Яркий и игровой</option></select></div></div>
 <div class="field"><label for="complexity">Уровень разработки</label><select id="complexity"><option value="standard">Стандартный прототип</option><option value="advanced">Сложное приложение: экраны, данные, поиск, отчёты и экспорт</option></select></div>
-<div class="field"><label for="appTarget">Тип приложения</label><select id="appTarget"><option value="web" selected>Веб-приложение / WebView APK</option><option value="native">Нативный Android APK (экспериментально)</option></select><p class="sub" id="appTargetNotice">Веб-режим генерирует HTML. Для нативного режима ИИ подготовит Java-файлы; автоматическая сборка APK ещё подключается.</p></div>
+<div class="field"><label for="appTarget">Тип приложения</label><select id="appTarget"><option value="web" selected>Веб-приложение / WebView APK</option><option value="native">Нативный Android APK (экспериментально)</option></select><p class="sub" id="appTargetNotice">Веб-режим генерирует HTML для WebView APK. Нативный режим создаёт Java/XML-исходники, которые можно отправить в защищённую очередь нативной сборки APK.</p></div>
 <div class="field"><label for="prompt">Задание для ИИ</label><textarea id="prompt" maxlength="6000" placeholder="Создай приложение для изучения английского: карточки слов, тест из 10 вопросов, подсчёт баллов и сохранение результата на телефоне."></textarea></div>
 <div class="field"><label for="features">Дополнительные пожелания</label><input id="features" maxlength="500" placeholder="Русский язык, тёмная тема, офлайн-доступ"></div>
 <details class="ai-panel" open><summary style="cursor:pointer;font-weight:800;margin-bottom:14px">🤖 Подключение ИИ-модели</summary><p class="sub">По умолчанию доступен встроенный ИИ A.S. без личного ключа. Для внешних провайдеров можно подключить собственный API.</p>
@@ -329,10 +329,21 @@ async function runAIBuild(editInstruction=''){
    let nativeProject;
    try{nativeProject=JSON.parse(String(received||streamBuffer).trim().replace(/^\x60{3}(?:json)?\s*/i,'').replace(/\x60{3}$/,'').trim())}catch(e){throw Error('ИИ не вернул корректный JSON с Android-файлами. Ответ оставлен во вкладке «Код».')}
    if(!Array.isArray(nativeProject.files)||nativeProject.files.length<1||nativeProject.files.length>12)throw Error('Нативный ответ должен содержать от 1 до 12 файлов.');
+   const nativePaths=new Set();let nativeBytes=0,hasMainActivity=false;
    for(const file of nativeProject.files){
     if(!file||typeof file.path!=='string'||typeof file.content!=='string'||file.content.length>60000)throw Error('Некорректная структура файла в ответе ИИ.');
-    if(!/^(app\/src\/main\/java\/tj\/as\/generated\/[A-Za-z0-9_$/.-]+\.java|app\/src\/main\/res\/values\/[A-Za-z0-9_.-]+\.xml)$/.test(file.path)||file.path.includes('..'))throw Error('ИИ вернул путь вне разрешённой папки исходников: '+file.path);
+    if(!/^(app\/src\/main\/java\/tj\/as\/generated\/[A-Za-z0-9_$]+\.java|app\/src\/main\/res\/values\/[A-Za-z0-9_.-]+\.xml)$/.test(file.path)||file.path.includes('..'))throw Error('ИИ вернул путь вне разрешённой папки исходников: '+file.path);
+    if(nativePaths.has(file.path))throw Error('ИИ вернул повторяющийся путь файла: '+file.path);
+    nativePaths.add(file.path);nativeBytes+=new TextEncoder().encode(file.content).length;
+    if(nativeBytes>512000)throw Error('Общий размер нативных исходников превышает 500 КиБ.');
+    if(file.path.endsWith('.java')&&/(java\.lang\.Runtime|ProcessBuilder|DexClassLoader|PathClassLoader|Class\.forName|System\.loadLibrary|WebView|java\.net\.(Socket|URL|URLConnection)|android\.permission\.INTERNET)/.test(file.content))throw Error('Нативный исходник содержит запрещённый динамический запуск, WebView или сетевой API.');
+    if(file.path==='app/src/main/java/tj/as/generated/MainActivity.java'){
+     if(!/package\s+tj\.as\.generated\s*;/.test(file.content)||!/class\s+MainActivity\s+extends\s+Activity\b/.test(file.content))throw Error('MainActivity должна использовать пакет tj.as.generated и наследоваться от Activity.');
+     hasMainActivity=true;
+    }
+    if(file.path.endsWith('.xml')&&/<!DOCTYPE|<!ENTITY/i.test(file.content))throw Error('XML-ресурсы не должны содержать DOCTYPE или ENTITY.');
    }
+   if(!hasMainActivity)throw Error('ИИ не создал обязательный файл MainActivity.java.');
    const pretty=JSON.stringify(nativeProject,null,2);
    $('code').textContent=pretty;$('spec').textContent=instruction;generatedHTML=pretty;
    $('copyCode').disabled=false;
