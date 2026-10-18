@@ -1,17 +1,6 @@
 name: Deploy A.S. APP BUILDER API
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "backend/ai-worker.js"
-      - "backend/src/index.js"
-      - "backend/wrangler.toml"
-      - "backend/wrangler-ai.toml"
-      - "backend/wrangler-signing.toml"
-      - "backend/package.json"
-      - "backend/package-lock.json"
-      - ".github/workflows/deploy-backend.yml"
   workflow_dispatch:
 
 permissions:
