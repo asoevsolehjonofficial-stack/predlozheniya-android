@@ -91,6 +91,17 @@ test("requeues a stale building job with preserved source for one retry", () => 
   assert.equal("sourceFetchedAt" in job, false);
 });
 
+test("requeues a stale native build once and preserves native source files", () => {
+  const now = 3_500_000;
+  const nativeFiles = [{ path: "app/src/main/java/tj/as/generated/MainActivity.java", content: "package tj.as.generated;" }];
+  const job = { status: "building", sourceFetchedAt: now - STALE_BUILD_MS - 1, nativeFiles, type: "native", retryCount: 0 };
+  assert.equal(recoverStaleJob(job, now), true);
+  assert.equal(job.status, "queued");
+  assert.equal(job.retryCount, 1);
+  assert.deepEqual(job.nativeFiles, nativeFiles);
+  assert.equal("sourceFetchedAt" in job, false);
+});
+
 test("marks a repeatedly stale job failed instead of retrying forever", () => {
   const now = 4_000_000;
   const job = { status: "building", sourceFetchedAt: now - STALE_BUILD_MS - 1, html: "<!doctype html>", retryCount: 1 };
