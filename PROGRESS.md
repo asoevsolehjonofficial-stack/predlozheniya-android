@@ -119,3 +119,20 @@ Pull request: #27 — https://github.com/asoevsolehjonofficial-stack/predlozheni
 - Stage 2 asset synchronization/browser import smoke: VERIFIED by run 39157276730.
 - Stage 3–4 Android APK/API 21/API 35 runtime proof: NOT VERIFIED; native emulator workflow has not run for this PR.
 - Release checklist: 2/11 partially supported by current evidence, 0/11 fully certified for release. Do not mark the whole release complete.
+
+
+## Stage 1 follow-up — CI confirmed and diagnostics workflow merged (2026-10-19)
+
+- Trigger recovery produced real successful runs on the feature branch: [Quality and security checks #39157261722](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39157261722) passed all listed steps on `361922c63fe4d3c9e4817f2770e0e464b6393e49`; [Manual HTML import smoke #39157276730](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39157276730) passed all steps on `a2673658e6cde2af86df419ad7d080ab1fc70fcf`, including real browser smoke and health endpoints without consuming AI inference quota.
+- Created isolated workflow-only PR [#28 — Add manual dispatch for PR failure diagnostics](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/pull/28), containing only `.github/workflows/pr-failure-diagnostics.yml`.
+- PR #28 CI on `2cbe40fe82a49730c556daf9d9f3805360dc03fb`: [Quality/security](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39157451300) SUCCESS, [A.S. AUTO CHECK AI](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39157451183) SUCCESS, Cloudflare Pages check SUCCESS. PR was clean/mergeable and was squash-merged after these checks passed. Merge commit: `63094e6fb5db94cdccde51d20a17f26b193aeab1`.
+- The 11 workflow files that already existed on `main` were verified to contain `workflow_dispatch`; PR #28 adds the missing diagnostics workflow to the default branch so its manual-dispatch entry is available from the Actions UI as well.
+- Latest change to `PROGRESS.md` is documentation-only; its resulting commit must not be mistaken for a fresh app-code test. The relevant implementation/workflow changes have the successful runs listed above.
+
+### Current status
+- Stage 1 trigger issue: RECOVERED; actual Actions runs now appear and passed.
+- Stage 2 website-to-Android asset synchronization and browser import smoke: PASSED in run 39157276730.
+- Stage 3 native generation/Android build chain: STATIC CONFIGURATION REVIEWED; real production prompt-to-APK generation is NOT VERIFIED.
+- Stage 4 APK/emulator API 21 and API 35: workflow configuration contains both API levels, build, instrumentation, signature/integrity checks and artifact upload; successful emulator evidence is NOT YET VERIFIED for PR #27.
+- AI quotas/security: source-level protections and tests are present; concurrency/abuse load testing and live provider quota validation are NOT COMPLETE. Rate-limit counters use separate reads/writes, so simultaneous requests may race; this remains a documented hardening risk, not a demonstrated failure in current CI.
+- Release acceptance checklist: 0/11 fully certified end-to-end; successful targeted CI checks do not substitute for production generation, install/launch, screenshot, download, quota, and three scenario tests.
