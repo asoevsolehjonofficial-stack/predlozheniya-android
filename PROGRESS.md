@@ -344,3 +344,9 @@ Latest native E2E run: https://github.com/asoevsolehjonofficial-stack/predlozhen
 - The prior run `39177122772` was cancelled after API 35 screenshot actions remained in progress for over 10 minutes; API 21 simple and multi-screen had already completed successfully with retained artifacts.
 - New native matrix run: [#39178042422](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39178042422), using the API 35 screenshot mitigation (legacy SwiftShader renderer, direct `adb exec-out screencap`, and bounded adb command timeouts). It is now running on the PR branch. Do not merge until this run finishes and all six jobs pass.
 - An isolated retry branch `fix/native-e2e-retry-api35` was also created to validate the same fix without force-pushing. It does not replace PR #34; PR #34's own run remains the merge evidence.
+
+
+## Isolated retry branch security result (2026-10-19)
+
+- The experimental branch `fix/native-e2e-retry-api35` was correctly rejected by the protected fixture endpoint with HTTP 401 and body `{"error":"Unauthorized CI workflow."}`; its ref is not in the explicit OIDC allowlist.
+- This is expected fail-closed behavior. I will not widen the production/CI OIDC allowlist just to make a temporary branch pass. Only the native run on the established PR branch `fix/native-e2e-package-id-sdk-emulator` is valid release evidence.
