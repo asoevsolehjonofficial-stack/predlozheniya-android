@@ -1,0 +1,21 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'tj.as.nativebuilder.notes'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'tj.as.nativebuilder.notes'
+        minSdk 23
+        targetSdk 35
+        versionCode 1
+        versionName '0.1.0'
+        testInstrumentationRunner 'android.test.InstrumentationTestRunner'
+    }
+
+    testOptions {
+        animationsDisabled = true
+    }
+}
