@@ -234,7 +234,7 @@ function ciFixture(prompt, nativeMode) {
   } else {
     content = 'package tj.as.generated;\nimport android.app.Activity;\nimport android.os.Bundle;\nimport android.view.View;\nimport android.widget.Button;\nimport android.widget.LinearLayout;\nimport android.widget.TextView;\npublic class MainActivity extends Activity {\n  int count = 0; TextView label;\n  public void onCreate(Bundle state) { super.onCreate(state); LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(24,24,24,24); label = new TextView(this); label.setTextSize(24); label.setText("Count: 0"); Button add = new Button(this); add.setText("Add one"); add.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { label.setText("Count: " + (++count)); } }); root.addView(label); root.addView(add); setContentView(root); }\n}';
   }
-  return JSON.stringify({ files: [{ path: "app/src/main/java/tj/as/generated/MainActivity.java", content }] });
+  return JSON.stringify({ files: [{ path: "app/src/main/java/tj/as/generated/MainActivity.java", content }, { path: "app/src/main/res/values/strings.xml", content: '<resources><string name="app_name">A.S. CI Fixture</string></resources>' }] });
 }
 
 async function generate(request, env) {
