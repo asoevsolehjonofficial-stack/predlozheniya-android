@@ -124,14 +124,14 @@ jobs:
           OIDC_TOKEN="$(curl --fail --silent --show-error -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-worker" | jq -r '.value')"
           test -n "$OIDC_TOKEN" && test "$OIDC_TOKEN" != "null"
           mkdir -p "projects/$PROJECT_SLUG"
-          SOURCE_EXT=html
-          if [ "$PROJECT_TYPE" = "native" ]; then SOURCE_EXT=json; fi
+          SOURCE_PATH="projects/$PROJECT_SLUG/index.html"
+          if [ "$PROJECT_TYPE" = "native" ]; then SOURCE_PATH="projects/$PROJECT_SLUG/source.json"; fi
           [[ "$PROJECT_TYPE" == "web" || "$PROJECT_TYPE" == "native" ]] || { echo "Unknown project type"; exit 1; }
           curl --fail --silent --show-error --max-time 60 \
             -H "Authorization: Bearer $OIDC_TOKEN" \
             "$BUILD_API_URL/api/internal/source?requestId=$REQUEST_ID" \
-            -o "projects/$PROJECT_SLUG/source.$SOURCE_EXT"
-          test -s "projects/$PROJECT_SLUG/source.$SOURCE_EXT"
+            -o "$SOURCE_PATH"
+          test -s "$SOURCE_PATH"
 
       - name: Validate project HTML
         if: env.PROJECT_TYPE != 'native'
