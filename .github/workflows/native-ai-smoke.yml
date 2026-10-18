@@ -48,6 +48,8 @@ jobs:
     needs: live-ui-smoke
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    env:
+      PACKAGE_NAME: tj.as.generated.p_native_${{ matrix.example == 'multi-screen' && 'multi_screen' || matrix.example }}_api${{ matrix.api_level }}
     strategy:
       fail-fast: false
       matrix:
@@ -235,18 +237,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           script: |
-            set -eu
-            APK="$GITHUB_WORKSPACE/native-builder/app/build/outputs/apk/debug/app-debug.apk"
-            PACKAGE="tj.as.generated.p_native_${{ matrix.example == 'multi-screen' && 'multi_screen' || matrix.example }}_api${{ matrix.api_level }}"
-            adb install "$APK"
-            adb shell monkey -p "$PACKAGE" -c android.intent.category.LAUNCHER 1
-            sleep 5
-            adb shell dumpsys activity activities | grep -F "$PACKAGE" >/dev/null
-            if adb logcat -d -t 1800 | grep -E "FATAL EXCEPTION.*$PACKAGE|Process: $PACKAGE.*died"; then echo "::error::Generated app crashed."; exit 1; fi
-            adb shell screencap -p /sdcard/native-e2e.png
-            adb pull /sdcard/native-e2e.png "$RUNNER_TEMP/native-e2e.png"
-            test -s "$RUNNER_TEMP/native-e2e.png"
-            file "$RUNNER_TEMP/native-e2e.png" | grep -qi 'PNG image'
+            bash -euo pipefail -c 'APK="$GITHUB_WORKSPACE/native-builder/app/build/outputs/apk/debug/app-debug.apk"; adb install "$APK"; adb shell monkey -p "$PACKAGE_NAME" -c android.intent.category.LAUNCHER 1; sleep 5; adb shell dumpsys activity activities | grep -F "$PACKAGE_NAME" >/dev/null; if adb logcat -d -t 1800 | grep -E "FATAL EXCEPTION.*$PACKAGE_NAME|Process: $PACKAGE_NAME.*died"; then echo "::error::Generated app crashed."; exit 1; fi; adb shell screencap -p /sdcard/native-e2e.png; adb pull /sdcard/native-e2e.png "$RUNNER_TEMP/native-e2e.png"; test -s "$RUNNER_TEMP/native-e2e.png"; file "$RUNNER_TEMP/native-e2e.png" | grep -qi "PNG image"'
       - name: Upload emulator screenshot to local API and download it back
         shell: bash
         run: |
