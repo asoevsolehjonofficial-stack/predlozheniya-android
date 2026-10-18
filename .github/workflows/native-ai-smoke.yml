@@ -2,7 +2,7 @@ name: Native AI generated APK smoke
 
 on:
   push:
-    branches: [main]
+    branches: [main, "fix/**"]
     paths:
       - "backend/ai-worker.js"
       - "backend/wrangler-ai.toml"
