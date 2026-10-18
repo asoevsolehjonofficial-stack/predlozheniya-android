@@ -74,7 +74,7 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in 1 2 3; do
-            if yes | sdkmanager --install "platforms;android-21" "system-images;android-21;default;x86"; then exit 0; fi
+            if sdkmanager --install "platforms;android-21" "system-images;android-21;default;x86"; then exit 0; fi
             echo "API 21 SDK install attempt $attempt failed; retrying."
             sleep $((attempt * 5))
           done
@@ -86,7 +86,7 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in 1 2 3; do
-            if yes | sdkmanager --install "system-images;android-35;google_apis;x86_64"; then exit 0; fi
+            if sdkmanager --install "system-images;android-35;google_apis;x86_64"; then exit 0; fi
             echo "API 35 SDK install attempt $attempt failed; retrying."
             sleep $((attempt * 5))
           done
@@ -108,6 +108,21 @@ jobs:
           done
           cat "$RUNNER_TEMP/fixture-worker.log"
           echo "::error::Local fixture Worker did not become ready."
+          exit 1
+      - name: Start local build API Worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./backend/node_modules/.bin/wrangler dev --config backend/wrangler.toml --local --ip 127.0.0.1 --port 8788 > "$RUNNER_TEMP/build-api-worker.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/build-api-worker.pid"
+          for attempt in $(seq 1 40); do
+            CODE="$(curl --silent --show-error -o /dev/null -w '%{http_code}' http://127.0.0.1:8788/api/health || true)"
+            if [[ "$CODE" == "200" || "$CODE" == "503" ]]; then echo "Local build API Worker is ready (health HTTP $CODE)."; exit 0; fi
+            if ! kill -0 "$(cat "$RUNNER_TEMP/build-api-worker.pid")" 2>/dev/null; then cat "$RUNNER_TEMP/build-api-worker.log"; exit 1; fi
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/build-api-worker.log"
+          echo "::error::Local build API Worker did not become ready."
           exit 1
       - name: Request deterministic native source with signed GitHub OIDC token
         env:
@@ -157,11 +172,22 @@ jobs:
               destination = root / rel.removeprefix("app/src/main/")
               destination.parent.mkdir(parents=True, exist_ok=True); destination.write_text(source)
           if not main_found: raise SystemExit("Missing MainActivity.java.")
+          Path(os.environ["RUNNER_TEMP"], "native-files.json").write_text(json.dumps({"files": files}, separators=(",", ":")), encoding="utf-8")
           print("Validated source files:", ", ".join(sorted(seen)))
           PY
           sed -i "s/namespace 'tj.as.nativebuilder.notes'/namespace 'tj.as.generated'/" native-builder/app/build.gradle
-          sed -i "s/applicationId 'tj.as.nativebuilder.notes'/applicationId 'tj.as.generated.p_native_${EXAMPLE}_api${{ matrix.api_level }}'/" native-builder/app/build.gradle
+          sed -i "s/applicationId 'tj.as.nativebuilder.notes'/applicationId 'tj.as.generated.p_native_${APP_SLUG}_api${{ matrix.api_level }}'/" native-builder/app/build.gradle
           sed -i "s/android:label=\"A.S. Notes Native\"/android:label=\"Native $EXAMPLE API ${{ matrix.api_level }}\"/" native-builder/app/src/main/AndroidManifest.xml
+      - name: Create quota-free local API build job
+        shell: bash
+        run: |
+          set -euo pipefail
+          OIDC_TOKEN="$(curl --fail --silent --show-error -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-native-e2e" | jq -er '.value')"
+          echo "::add-mask::$OIDC_TOKEN"
+          CODE="$(curl --silent --show-error --max-time 30 -o "$RUNNER_TEMP/api-job.json" -w '%{http_code}' -X POST http://127.0.0.1:8788/api/ci/build-fixture -H "Authorization: Bearer $OIDC_TOKEN" -H "Content-Type: application/json" --data-binary @"$RUNNER_TEMP/native-files.json")"
+          test "$CODE" = "201" || { cat "$RUNNER_TEMP/api-job.json"; echo "::error::Local API fixture creation returned HTTP $CODE"; exit 1; }
+          jq -e '.requestId and .downloadToken and .status == "building"' "$RUNNER_TEMP/api-job.json" >/dev/null
+          echo "::add-mask::$(jq -r '.downloadToken' "$RUNNER_TEMP/api-job.json")"
       - name: Build native APK
         run: gradle --no-daemon -p native-builder clean assembleDebug
       - name: Verify APK package, signature, and checksum
@@ -174,6 +200,23 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -q "package: name='tj.as.generated.p_native_${{ matrix.example == 'multi-screen' && 'multi_screen' || matrix.example }}_api${{ matrix.api_level }}'"
           sha256sum "$APK" | tee "$RUNNER_TEMP/apk-sha256.txt"
+      - name: Upload APK to local API and download it back with access token
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="native-builder/app/build/outputs/apk/debug/app-debug.apk"
+          REQUEST_ID="$(jq -er '.requestId' "$RUNNER_TEMP/api-job.json")"
+          DOWNLOAD_TOKEN="$(jq -er '.downloadToken' "$RUNNER_TEMP/api-job.json")"
+          echo "::add-mask::$DOWNLOAD_TOKEN"
+          APK_SHA="$(sha256sum "$APK" | awk '{print $1}')"
+          OIDC_TOKEN="$(curl --fail --silent --show-error -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-native-e2e" | jq -er '.value')"
+          echo "::add-mask::$OIDC_TOKEN"
+          CODE="$(curl --silent --show-error --max-time 60 -o "$RUNNER_TEMP/api-upload.json" -w '%{http_code}' -X PUT "http://127.0.0.1:8788/api/ci/upload?requestId=$REQUEST_ID" -H "Authorization: Bearer $OIDC_TOKEN" -H "Content-Type: application/octet-stream" -H "X-APK-SHA256: $APK_SHA" --data-binary @"$APK")"
+          test "$CODE" = "201" || { cat "$RUNNER_TEMP/api-upload.json"; echo "::error::Local API APK upload returned HTTP $CODE"; exit 1; }
+          curl --fail --silent --show-error --max-time 60 -H "Authorization: Bearer $DOWNLOAD_TOKEN" "http://127.0.0.1:8788/api/download?requestId=$REQUEST_ID" -o "$RUNNER_TEMP/downloaded.apk"
+          cmp "$APK" "$RUNNER_TEMP/downloaded.apk"
+          test "$(sha256sum "$RUNNER_TEMP/downloaded.apk" | awk '{print $1}')" = "$APK_SHA"
+          echo "Local API APK upload/download round-trip passed; SHA-256 $APK_SHA."
       - name: Install, launch, and capture a real emulator screenshot
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -195,6 +238,21 @@ jobs:
             adb pull /sdcard/native-e2e.png "$RUNNER_TEMP/native-e2e.png"
             test -s "$RUNNER_TEMP/native-e2e.png"
             file "$RUNNER_TEMP/native-e2e.png" | grep -qi 'PNG image'
+      - name: Upload emulator screenshot to local API and download it back
+        shell: bash
+        run: |
+          set -euo pipefail
+          REQUEST_ID="$(jq -er '.requestId' "$RUNNER_TEMP/api-job.json")"
+          DOWNLOAD_TOKEN="$(jq -er '.downloadToken' "$RUNNER_TEMP/api-job.json")"
+          echo "::add-mask::$DOWNLOAD_TOKEN"
+          OIDC_TOKEN="$(curl --fail --silent --show-error -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-native-e2e" | jq -er '.value')"
+          echo "::add-mask::$OIDC_TOKEN"
+          CODE="$(curl --silent --show-error --max-time 30 -o "$RUNNER_TEMP/api-preview-upload.json" -w '%{http_code}' -X PUT "http://127.0.0.1:8788/api/ci/preview-upload?requestId=$REQUEST_ID" -H "Authorization: Bearer $OIDC_TOKEN" -H "Content-Type: image/png" --data-binary @"$RUNNER_TEMP/native-e2e.png")"
+          test "$CODE" = "200" || { cat "$RUNNER_TEMP/api-preview-upload.json"; echo "::error::Local API preview upload returned HTTP $CODE"; exit 1; }
+          curl --fail --silent --show-error --max-time 30 -H "Authorization: Bearer $DOWNLOAD_TOKEN" "http://127.0.0.1:8788/api/preview?requestId=$REQUEST_ID" -o "$RUNNER_TEMP/downloaded-preview.png"
+          cmp "$RUNNER_TEMP/native-e2e.png" "$RUNNER_TEMP/downloaded-preview.png"
+          file "$RUNNER_TEMP/downloaded-preview.png" | grep -qi 'PNG image'
+          echo "Local API screenshot upload/download round-trip passed."
       - name: Upload APK and screenshot evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -206,5 +264,9 @@ jobs:
             native-builder/app/build/outputs/apk/debug/app-debug.apk
             native-builder/app/src/main/java/tj/as/generated/
             ${{ runner.temp }}/native-e2e.png
+            ${{ runner.temp }}/native-files.json
+            ${{ runner.temp }}/api-job.json
+            ${{ runner.temp }}/downloaded.apk
+            ${{ runner.temp }}/downloaded-preview.png
             ${{ runner.temp }}/apk-sha256.txt
             ${{ runner.temp }}/native-ai-response.json
