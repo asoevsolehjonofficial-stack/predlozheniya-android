@@ -1,8 +1,8 @@
 # A.S. APP BUILDER — PROGRESS
 
-Last updated: 2026-10-18
+Last updated: 2026-10-19
 Working branch: fix/ai-quota-native-preview
-Pull request: #24 — https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/pull/24
+Pull request: #27 — https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/pull/27
 
 ## Release checklist (11 acceptance criteria)
 
@@ -91,3 +91,31 @@ Pull request: #24 — https://github.com/asoevsolehjonofficial-stack/predlozheni
 - Current-head CI: BLOCKED awaiting the manual dispatch/approval action above; no current-head run exists to claim success.
 - Release acceptance checklist remains 0/11 fully confirmed.
 
+
+
+## Stage 1 follow-up — CI trigger recovery (2026-10-19)
+
+### Actions performed and evidence
+- Closed and reopened PR #27 through the connected GitHub API. PR is open and not draft afterward; no Actions run appeared immediately after this attempt.
+- Updated `.github/workflows/quality-security.yml`: push branches now include `main` and `fix/**`; PR trigger types include `opened`, `reopened`, `synchronize`, and `ready_for_review`. Commit: `361922c63fe4d3c9e4817f2770e0e464b6393e49`.
+- Checked Actions after that push: Quality and security run [39157261722](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39157261722) completed successfully on that commit. All steps passed: asset sync, HTML/security assertions, inline JS syntax, workflow YAML parsing, backend tests and Wrangler dry-runs, credential-pattern scan.
+- Updated `.github/workflows/manual-import-smoke.yml`: push branches now include `main` and `fix/**`; PR trigger types include `opened`, `reopened`, `synchronize`, and `ready_for_review`. Commit/current PR head: `a2673658e6cde2af86df419ad7d080ab1fc70fcf`.
+- Checked Actions after that push: Manual HTML import smoke run [39157276730](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39157276730) completed successfully on current PR head. All steps passed, including synchronized assets, import wiring, production health checks without an inference request, and real-browser smoke test.
+- Latest PR head confirmed via GitHub API: `a2673658e6cde2af86df419ad7d080ab1fc70fcf`. The current head has a green manual-import run; the quality/security run is green on the immediately preceding workflow-trigger commit `361922c63fe4d3c9e4817f2770e0e464b6393e49`. No current-head quality run has been observed yet.
+- Creating a diagnostic branch via the connected GitHub branch tool was attempted twice but the connector rejected the request with a branch-creation argument error. No new branch or diagnostic PR was created. This attempt did not modify repository content.
+
+### Trigger diagnosis
+- Confirmed: event/path configuration was a contributing gap because feature-branch pushes were not covered by the original `push: branches: [main]` rules. Expanding the triggers caused real runs to appear.
+- Not proven: whether any separate repository-level Actions disablement, approval requirement, or specific token suppression was also involved. Successful push-triggered runs show Actions are enabled for these workflows now; they do not establish the exact token type used by earlier commits.
+
+### Stages 2–4 — static review notes
+- Native AI worker has prompt length limit (18,000 characters), bounded request body (24 KiB), output cap (100,000 characters), provider/model allow-listing, origin validation, content-type validation, per-IP hourly/daily and global daily counters, and a secret-pattern check before inference. Limits visible in code: 5 requests/hour/IP, 15/day/IP, 100/day global web AI, 30/day global native AI. These are static-code observations, not a live abuse/load test; KV counter increments are read-then-write and are not atomic under concurrent requests.
+- Native Android template workflow uses a matrix for API 21 and API 35, Gradle build, emulator instrumentation tests, APK integrity/signature checks, package ID verification, and artifact upload. This workflow currently listens to branches `stage2/**` and `feature/native-ai-codegen-2026-10-18`, or PRs that change `native-builder/**`/the workflow. PR #27 does not modify `native-builder/**`, so this workflow is not expected to run for PR #27. No successful API 21/API 35 emulator evidence has been collected in this CI recovery step.
+- User-project APK workflow includes read-only top-level permissions, OIDC auth, source validation/build paths, authenticated download verification, checksum comparison, and queue dispatch. The YAML configuration itself is not proof of a successful native APK build or installation.
+- No production AI generation request was made during these checks; the health check explicitly does not consume AI inference quota.
+
+### Current status
+- Trigger recovery: VERIFIED by two real successful Actions runs.
+- Stage 2 asset synchronization/browser import smoke: VERIFIED by run 39157276730.
+- Stage 3–4 Android APK/API 21/API 35 runtime proof: NOT VERIFIED; native emulator workflow has not run for this PR.
+- Release checklist: 2/11 partially supported by current evidence, 0/11 fully certified for release. Do not mark the whole release complete.
