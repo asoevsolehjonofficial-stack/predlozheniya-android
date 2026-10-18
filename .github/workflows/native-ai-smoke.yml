@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: native-ai-generated-apk-smoke
+  group: native-ai-generated-apk-smoke-v2
   cancel-in-progress: true
 
 jobs:
