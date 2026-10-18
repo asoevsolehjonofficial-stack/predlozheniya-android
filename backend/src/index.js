@@ -314,6 +314,7 @@ function recoverStaleJob(job, now = Date.now()) {
   job.failedAt = now;
   job.lastError = "Build worker timed out after the automatic retry.";
   delete job.html;
+  delete job.nativeFiles;
   return true;
 }
 
