@@ -119,7 +119,7 @@ body:has(.studio-shell){overflow-x:hidden}
 
 <section class="section" id="androidBuildSection">
   <h2>05 / Сборка APK проекта</h2>
-  <p class="sub">Отправляет готовый HTML в отдельный сервер сборки, создаёт изолированный временный проект, проверяет APK и возвращает файл для скачивания. Сборка доступна в веб-версии по HTTPS: локальный HTML-файл и Android-оболочка не могут пройти проверку Turnstile из-за ограничений происхождения. Не отправляй пароли, личные данные или секретные ключи.</p>
+  <p class="sub">Отправляет готовый веб-прототип или нативные Android-исходники в защищённый сервер сборки. Сервер создаёт изолированный временный проект, собирает и проверяет APK, затем возвращает файл для скачивания. Для нативного APK сначала выбери «Нативный Android APK» и создай исходники встроенным ИИ. Сборка доступна в веб-версии по HTTPS: локальный HTML-файл и Android-оболочка не могут пройти проверку Turnstile из-за ограничений происхождения. Не отправляй пароли, личные данные или секретные ключи.</p>
   <div class="field"><label for="backendUrl">Адрес защищённого сервера сборки</label><input id="backendUrl" type="url" inputmode="url" value="https://as-app-builder-api.asoev-solehjon-official.workers.dev" placeholder="https://твой-сервис.workers.dev" autocomplete="url"></div>
   <div class="field"><label for="turnstileSiteKey">Публичный ключ Cloudflare Turnstile</label><input id="turnstileSiteKey" type="text" value="0x4AAAAAAFXyrsPUlWHILpXf" placeholder="Ключ сайта Turnstile" autocomplete="off"></div>
   <div id="turnstileWidget" style="margin:12px 0"></div>
