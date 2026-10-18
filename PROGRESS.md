@@ -203,3 +203,12 @@ Pull request: #27 — https://github.com/asoevsolehjonofficial-stack/predlozheni
 - Removed plain constants from the Worker module named-export list (the exact cause of the previous Wrangler startup error). Added a valid XML `strings.xml` resource alongside generated Java fixture source.
 - New main validation is queued: [Native AI generated APK smoke #39160916274](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39160916274), [Quality/security #39160916311](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39160916311), and [Validate web app #39160916264](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39160916264). Wait for these before accepting the E2E chain.
 - Previous failed run remains [#39160499339](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39160499339); it did not produce accepted APK/screenshot evidence because the local Worker failed before source generation.
+
+
+## Stage 4 retry 2 — repair Android matrix package and SDK setup (2026-10-19)
+
+- Native matrix [run #39160916274](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39160916274) passed UI preflight and started six fixture jobs, but uncovered three workflow issues:
+  1. Build log: `Android resource linking failed ... package ... 'tj.as.generated.p_native_multi-screen_api35' is not a valid Android package name` — hyphen in applicationId.
+  2. Emulator action warning: `Unexpected input(s) 'api_level', valid inputs are ['api-level', ...]` — the matrix key was mistakenly used as an action input name.
+  3. API 21 setup log: `Warning: An error occurred while preparing SDK package Google APIs Intel x86_64 Atom System Image: Error on ZipFile unknown archive`, followed by `sdkmanager failed with exit code 1` — each job was downloading both system images, including an irrelevant one.
+- Branch `fix/native-e2e-matrix-api-levels` sanitizes the package slug, restores the action input name `api-level`, installs only the selected API image per job, and retries SDK image installation up to three times. Awaiting CI before merge.
