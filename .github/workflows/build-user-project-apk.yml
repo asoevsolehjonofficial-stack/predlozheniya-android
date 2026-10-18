@@ -349,7 +349,11 @@ jobs:
           TOKEN_RESPONSE="$(curl --fail --silent --show-error --max-time 30 "$SIGNING_API_URL/api/internal/smoke-token?requestId=$REQUEST_ID" -H "Authorization: Bearer $OIDC_TOKEN" -H "Accept: application/json")"
           DOWNLOAD_TOKEN="$(jq -er '.downloadToken' <<< "$TOKEN_RESPONSE")"
           echo "::add-mask::$DOWNLOAD_TOKEN"
-          APK="app/build/outputs/apk/debug/app-debug.apk"
+          if [[ "$PROJECT_TYPE" == "native" ]]; then
+            APK="native-builder/app/build/outputs/apk/debug/app-debug.apk"
+          else
+            APK="app/build/outputs/apk/debug/app-debug.apk"
+          fi
           DOWNLOADED="$RUNNER_TEMP/downloaded-smoke-test.apk"
           curl --fail --silent --show-error --max-time 120 "$BUILD_API_URL/api/download?requestId=$REQUEST_ID" -H "Origin: https://as-app-builder.pages.dev" -H "Authorization: Bearer $DOWNLOAD_TOKEN" -o "$DOWNLOADED"
           ORIGINAL_HASH="$(sha256sum "$APK" | cut -d ' ' -f1)"
