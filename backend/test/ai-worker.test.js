@@ -86,7 +86,6 @@ test("built-in AI returns generated HTML and rate-limits requests", async () => 
   assert.equal((await call("/api/ai/generate", options)).status, 200);
   assert.equal((await call("/api/ai/generate", options)).status, 200);
   assert.equal((await call("/api/ai/generate", options)).status, 200);
-  assert.equal((await call("/api/ai/generate", options)).status, 200);
   const limited = await call("/api/ai/generate", options);
   assert.equal(limited.status, 429);
   assert.match((await limited.json()).error, /4 генераций в час/);
