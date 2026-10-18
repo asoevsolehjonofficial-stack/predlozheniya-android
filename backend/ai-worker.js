@@ -240,6 +240,15 @@ function ciFixture(prompt, nativeMode) {
   return JSON.stringify({ files: [{ path: "app/src/main/java/tj/as/generated/MainActivity.java", content }, { path: "app/src/main/res/values/strings.xml", content: '<resources><string name="app_name">A.S. CI Fixture</string></resources>' }] });
 }
 
+function hasValidCiQuotaBypass(request, env) {
+  const expected = env.CI_QUOTA_BYPASS_SECRET;
+  const supplied = request.headers.get("X-CI-Quota-Bypass") || "";
+  if (typeof expected !== "string" || expected.length < 32 || supplied.length !== expected.length) return false;
+  let mismatch = 0;
+  for (let index = 0; index < expected.length; index++) mismatch |= expected.charCodeAt(index) ^ supplied.charCodeAt(index);
+  return mismatch === 0;
+}
+
 async function generate(request, env) {
   const nativeMode = new URL(request.url).pathname === "/api/ai/native-generate";
   const origin = request.headers.get("Origin") || "";
@@ -279,30 +288,35 @@ async function generate(request, env) {
     return json({ error: "The prompt appears to contain a secret. Remove API keys or private keys first." }, 400, origin);
   }
 
-  // A single Durable Object transaction checks and reserves all three counters atomically.
-  let quota;
-  try {
-    const limiter = env.RATE_LIMITER.get(env.RATE_LIMITER.idFromName("ai-rate-limits-v1"));
-    const response = await limiter.fetch("https://rate-limit.internal/consume", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        counters: [
-          { key: hourKey, limit: 4, ttlSeconds: 7200, window: hourWindow, scope: "hour" },
-          { key: dayKey, limit: 15, ttlSeconds: 172800, window: day, scope: "day" },
-          { key: globalDayKey, limit: globalLimit, ttlSeconds: 172800, window: day, scope: "global" }
-        ]
-      })
-    });
-    if (!response.ok) throw new Error("rate limiter rejected the request");
-    quota = await response.json();
-  } catch {
-    return json({ error: "AI rate limiting is temporarily unavailable. Try again later." }, 503, origin);
-  }
-  if (!quota.allowed) {
-    if (quota.scope === "hour") return json({ error: "Лимит встроенного ИИ: не более 4 генераций в час с одной сети. Попробуй после начала следующего часа.", retryAfterSeconds: 3600 - (now.getUTCMinutes() * 60 + now.getUTCSeconds()) }, 429, origin);
-    if (quota.scope === "day") return json({ error: "Лимит встроенного ИИ: не более 15 генераций в день с одной сети. Попробуй завтра.", retryAfterSeconds: 86400 - (now.getUTCHours() * 3600 + now.getUTCMinutes() * 60 + now.getUTCSeconds()) }, 429, origin);
-    return json({ error: nativeMode ? "The shared daily native AI capacity is used up. Try tomorrow." : "The shared daily AI capacity is used up. Try tomorrow or connect your own API key." }, 429, origin);
+  // CI may skip quota only when a separately provisioned secret is present and matches.
+  // With no secret configured, the header has no effect and normal atomic limits always apply.
+  const ciQuotaBypass = hasValidCiQuotaBypass(request, env);
+  if (!ciQuotaBypass) {
+    // A single Durable Object transaction checks and reserves all three counters atomically.
+    let quota;
+    try {
+      const limiter = env.RATE_LIMITER.get(env.RATE_LIMITER.idFromName("ai-rate-limits-v1"));
+      const response = await limiter.fetch("https://rate-limit.internal/consume", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          counters: [
+            { key: hourKey, limit: 4, ttlSeconds: 7200, window: hourWindow, scope: "hour" },
+            { key: dayKey, limit: 15, ttlSeconds: 172800, window: day, scope: "day" },
+            { key: globalDayKey, limit: globalLimit, ttlSeconds: 172800, window: day, scope: "global" }
+          ]
+        })
+      });
+      if (!response.ok) throw new Error("rate limiter rejected the request");
+      quota = await response.json();
+    } catch {
+      return json({ error: "AI rate limiting is temporarily unavailable. Try again later." }, 503, origin);
+    }
+    if (!quota.allowed) {
+      if (quota.scope === "hour") return json({ error: "Лимит встроенного ИИ: не более 4 генераций в час с одной сети. Попробуй после начала следующего часа.", retryAfterSeconds: 3600 - (now.getUTCMinutes() * 60 + now.getUTCSeconds()) }, 429, origin);
+      if (quota.scope === "day") return json({ error: "Лимит встроенного ИИ: не более 15 генераций в день с одной сети. Попробуй завтра.", retryAfterSeconds: 86400 - (now.getUTCHours() * 3600 + now.getUTCMinutes() * 60 + now.getUTCSeconds()) }, 429, origin);
+      return json({ error: nativeMode ? "The shared daily native AI capacity is used up. Try tomorrow." : "The shared daily AI capacity is used up. Try tomorrow or connect your own API key." }, 429, origin);
+    }
   }
 
   try {
