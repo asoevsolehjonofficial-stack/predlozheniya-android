@@ -16,7 +16,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: native-ai-generated-apk-smoke-v4
+  group: native-ai-generated-apk-smoke-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
