@@ -391,4 +391,4 @@ export default {
   }
 };
 
-export { generate, getProvider, generateWithDeepSeek, CLOUDFLARE_MODEL, NATIVE_MODEL, DEEPSEEK_DEFAULT_MODEL, MAX_PROMPT_CHARS };
+export { generate, getProvider, generateWithDeepSeek };
