@@ -8,6 +8,7 @@ const checks = [];
 
 function pass(name, detail = "") { checks.push({ name, status: "PASS", detail }); console.log(`PASS: ${name}${detail ? " — " + detail : ""}`); }
 function fail(name, detail = "") { failures.push({ name, detail }); checks.push({ name, status: "FAIL", detail }); console.error(`FAIL: ${name}${detail ? " — " + detail : ""}`); }
+function skip(name, detail = "") { checks.push({ name, status: "SKIP", detail }); console.log(`SKIP: ${name}${detail ? " — " + detail : ""}`); }
 
 async function checkHttpAsset(path) {
   const url = siteUrl + path;
@@ -66,28 +67,33 @@ try {
     if (pageErrors.length) fail("Browser JavaScript runtime", pageErrors.slice(0, 8).join(" | "));
     else pass("Browser JavaScript runtime", "No uncaught page errors");
 
-    // Exercise the real public UI path, not only the AI endpoint.
-    try {
-      await page.locator("#aiProvider").evaluate((el) => { el.value = "cloudflare"; el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true })); });
-      await page.locator("#prompt").fill("Create a very simple complete HTML page with title A.S. Browser AI Test and body text UI_GENERATION_SUCCESS. Use inline CSS only.");
-      await page.locator("#aiGenerate").click({ timeout: 10000 });
-      await page.waitForFunction(() => {
-        const state = document.querySelector("#state")?.textContent || "";
-        const status = document.querySelector("#aiStatus")?.textContent || "";
-        return state.includes("готово") || state.includes("Готово") || status.startsWith("Ошибка:");
-      }, { timeout: 90000 });
-      const state = await page.locator("#state").innerText().catch(() => "");
-      const code = await page.locator("#code").innerText().catch(() => "");
-      const previewCount = await page.locator("#previewPane iframe").count().catch(() => 0);
-      if (!/<html[\s>]/i.test(code) || !/<\/html>/i.test(code) || previewCount < 1) {
-        const status = await page.locator("#aiStatus").innerText().catch(() => "");
-        fail("Real AI generation through builder UI", `No complete HTML or preview. State=${state}; status=${status.slice(0, 240)}`);
-      } else {
-        pass("Real AI generation through builder UI", `Generated complete HTML and rendered preview; ${code.length} characters`);
-        console.log("REAL_BUILDER_UI_AI_GENERATION=PASS");
+    if (process.env.RUN_LIVE_AI_TEST === "true") {
+  
+      try {
+        await page.locator("#aiProvider").evaluate((el) => { el.value = "cloudflare"; el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true })); });
+        await page.locator("#prompt").fill("Create a very simple complete HTML page with title A.S. Browser AI Test and body text UI_GENERATION_SUCCESS. Use inline CSS only.");
+        await page.locator("#aiGenerate").click({ timeout: 10000 });
+        await page.waitForFunction(() => {
+          const state = document.querySelector("#state")?.textContent || "";
+          const status = document.querySelector("#aiStatus")?.textContent || "";
+          return state.includes("готово") || state.includes("Готово") || status.startsWith("Ошибка:");
+        }, { timeout: 90000 });
+        const state = await page.locator("#state").innerText().catch(() => "");
+        const code = await page.locator("#code").innerText().catch(() => "");
+        const previewCount = await page.locator("#previewPane iframe").count().catch(() => 0);
+        if (!/<html[\s>]/i.test(code) || !/<\/html>/i.test(code) || previewCount < 1) {
+          const status = await page.locator("#aiStatus").innerText().catch(() => "");
+          fail("Real AI generation through builder UI", `No complete HTML or preview. State=${state}; status=${status.slice(0, 240)}`);
+        } else {
+          pass("Real AI generation through builder UI", `Generated complete HTML and rendered preview; ${code.length} characters`);
+          console.log("REAL_BUILDER_UI_AI_GENERATION=PASS");
+        }
+  
+      } catch (error) {
+        fail("Real AI generation through builder UI", error.message);
       }
-    } catch (error) {
-      fail("Real AI generation through builder UI", error.message);
+    } else {
+      skip("Real AI generation through builder UI", "Skipped on routine push/PR to protect the shared daily AI quota; run manually with test_live_ai=true.");
     }
   }
 } catch (error) {
