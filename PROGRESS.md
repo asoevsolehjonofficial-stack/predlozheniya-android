@@ -1,0 +1,138 @@
+# A.S. APP BUILDER — PROGRESS
+
+Last updated: 2026-10-19
+Working branch: fix/ai-quota-native-preview
+Pull request: #27 — https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/pull/27
+
+## Release checklist (11 acceptance criteria)
+
+- [ ] 1. Production site works without console/network errors — NOT VERIFIED in this session.
+- [ ] 2. Required GitHub Actions are green with no cancelled/skipped required checks — recent run 39152068438 and 39152068311 failed; fix is pushed to branch but new CI results are pending.
+- [ ] 3. Real prompt → AI native Java/XML project → source validation — implementation path exists; real production generation and compiler validation NOT VERIFIED.
+- [ ] 4. APK builds and passes integrity checks — workflow contains build/signature/checksum steps; successful run NOT VERIFIED.
+- [ ] 5. APK installs and launches on Android 5/API 21 and Android 15/API 35 — API 35 workflow path exists; API 21 emulator run and successful run evidence NOT VERIFIED.
+- [ ] 6. Preview uses an actual screenshot from the running APK — workflow contains Android 15 screenshot capture/upload; production proof NOT VERIFIED.
+- [ ] 7. User can download APK and source from the site — authenticated download flow exists in code; production end-to-end proof NOT VERIFIED.
+- [ ] 8. Production AI quotas verified with real requests — unit test covers the fifth request returning 429; live quota test NOT RUN.
+- [ ] 9. Security audit of dependencies, secrets/history, input validation, rate limits, request size and CORS — partial static checks exist; full audit NOT COMPLETE.
+- [ ] 10. PR #24 merged and production updated — PR #24 was merged at 2026-10-18T18:01:00Z; production deployment and health verification are NOT CONFIRMED. Follow-up fix must go through a new PR because #24 is already merged.
+- [ ] 11. Three production end-to-end scenarios (simple, multi-screen, persistent data) — NOT RUN.
+
+## Failure-log automation (2026-10-18)
+
+- Added `.github/workflows/pr-failure-diagnostics.yml` on branch `fix/ai-quota-native-preview`.
+- The collector runs on `workflow_run: completed`, retrieves failed-step logs with `gh run view --log-failed`, keeps the last 200 lines, applies conservative credential-pattern redaction, and posts the excerpt as a comment on PR #24 for failures associated with PR #24 or the target branch.
+- Design note: a same-run `if: failure()` step cannot reliably fetch the current run's complete GitHub-hosted step log before the job/run is finished. A completed-run collector is used to avoid this race. Because GitHub only activates `workflow_run` definitions from the default branch, this collector will not automatically execute until the workflow definition exists on the default branch. Its first real run is NOT YET VERIFIED.
+
+## Stage 1 — CI diagnostics
+
+### Confirmed observations
+- PROGRESS.md was absent on the inspected PR branch before this file was created.
+- index.html and app/src/main/assets/index.html are byte-identical on fix/ai-quota-native-preview (both 115,097 characters; Git blob SHA 35f2b0f6fdc039afab8c8e1cae939dc191bfab59). Therefore the reported synchronization failure is not reproducible from the current branch contents; the failing run's exact commit/log is needed to determine whether it used an older checkout or another cause.
+- The manual import workflow is .github/workflows/manual-import-smoke.yml; it invokes .github/scripts/manual-import-browser-test.mjs and tests invalid HTML rejection, valid HTML import, sandboxed preview, exports and a mocked AI request. The exact failing job log is not available from the currently exposed GitHub tools, so its failure line is not yet confirmed.
+- .github/workflows/quality-security.yml includes source synchronization, HTML/manifest/security assertions, inline JS syntax, workflow YAML parsing, backend tests and Wrangler dry-runs.
+- .github/workflows/auto-check-ai.yml intentionally skips real AI generation on routine push/PR to protect shared quota; the live AI check requires manual dispatch with test_live_ai=true. Its tools/regression/live steps use continue-on-error: true and a final gate. A run marked cancelled is not proof of a code failure; the exact run status and logs are still required.
+- Native build workflow contains a native-source branch, Gradle build, APK signature/checksum validation, Android 15 emulator launch and screenshot capture/upload. This configuration is not proof those steps have succeeded.
+
+### Current status
+- Stage 1: IN PROGRESS. Do not weaken or remove checks.
+- No production deploy or merge performed.
+- Next action: retrieve failed workflow run IDs and job logs; reproduce exact failures against their commit; fix only demonstrated root causes; push small commits and inspect each resulting CI run.
+
+## Known constraints
+- Do not force-push, delete branches/history/data, or expose secrets.
+- Do not claim completion without CI logs, APK artifacts, emulator screenshots and production evidence.
+- Do not merge PR #24 until required checks and release criteria pass.
+
+## Stage 2 — Canonical HTML source and CI drift prevention
+
+### Changes pushed to `fix/ai-quota-native-preview`
+- Added `scripts/sync-assets.sh`: default mode copies root `index.html` to `app/src/main/assets/index.html`; `--check` verifies byte-for-byte identity and prints a diff plus repair command on drift.
+- Updated `.github/workflows/quality-security.yml` to run the shared script in `--check` mode and include the script in path filters.
+- Updated `.github/workflows/manual-import-smoke.yml` to use the same canonical sync check before browser smoke tests and include the script in path filters.
+- The real Android screenshot-preview block remains in the canonical root HTML; current branch copies of both HTML files are identical (blob SHA `35f2b0f6fdc039afab8c8e1cae939dc191bfab59`).
+- Root cause in the failed run is proven by its diff: that PR merge checkout had the native screenshot-preview block in root `index.html` but not in the Android asset. The latest inspected branch version already had both files identical; the new script makes the source-of-truth and guard explicit.
+
+### CI status and PR handling
+- Follow-up PR opened: [#27 — Prevent website and Android HTML asset drift](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/pull/27). PR #24 had already been merged before this repair was prepared, so GitHub does not permit adding commits to that closed/merged PR.
+- Confirmed failed run IDs: [39152068311](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39152068311) and [39152068438](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39152068438).
+- Failure evidence: manual import workflow's asset equality assertion failed; quality workflow's `cmp` failed and showed the missing native screenshot-preview block in the Android asset.
+- PR #24 is already merged (merge timestamp `2026-10-18T18:01:00Z`), so it cannot be updated as an open PR. The follow-up fix is committed to the same head branch; a new follow-up PR is required to run pull-request CI for these changes.
+- No workflow runs for PR #27's head commit `3075d876b9d63a075e590565fd3373aeed861a9b` were present in the Actions run list at the time of this update; only the Cloudflare Pages check reported success. Therefore CI is NOT YET VERIFIED on this follow-up commit. The connector-created commits did not produce new PR workflow runs, so I cannot truthfully report that the checks have completed. Earlier run `39152115773` (quality/security) and `39152115572` (manual HTML import) succeeded on the earlier PR #24 merge checkout, but they do not validate this new script/workflow revision. Checks skipped after the early synchronization failure still need a fresh run.
+
+### Current status
+- Stage 2: IMPLEMENTED IN BRANCH and follow-up PR #27 opened; CI validation is blocked pending a new workflow run on the latest head.
+- No claim that all 11 release acceptance criteria are complete.
+
+## Stage 3 — Why PR #27 CI did not start (2026-10-18)
+
+### Confirmed checks
+- PR #27 is open, not Draft, base `main`, head branch `fix/ai-quota-native-preview`.
+- Commit `30a2784905ad66fa0e4694417460b6eb20f652f4` added manual dispatch to the diagnostics workflow; the subsequent progress-recording commit moved the branch head to `270b050b8aa9f4fac68426d44b569226fe76ec28`.
+- `quality-security.yml` has `pull_request: branches: [main]` and no path filter. The PR base matches; its changed files are not excluded by a path filter.
+- `manual-import-smoke.yml` has a PR path filter. Its list previously omitted `scripts/sync-assets.sh`; added that path. The workflow file itself is also included in the path list.
+- Push triggers for quality/security and manual import are restricted to `main`, so a push to the feature branch does not satisfy those push triggers. Their PR triggers should still match PR #27.
+- Checked all 12 workflow files on the branch: each now has `workflow_dispatch`. The previously missing manual dispatch was added to `pr-failure-diagnostics.yml`.
+- Confirmed current branch/PR head SHA: `270b050b8aa9f4fac68426d44b569226fe76ec28`. Its check-runs API response contains only a successful Cloudflare Pages check; GitHub Actions run search contains no Actions run for this SHA. Thus there is still no real Actions run to inspect and no green CI claim is justified.
+
+### Token diagnosis — evidence limit
+- The commits were created through the connected GitHub integration's file/contents update operations; commit metadata shows the repository account as author/committer.
+- GitHub commit metadata does not expose which credential authenticated the API write. The available connector does not expose the token type or a POST workflow-dispatch action. Therefore I cannot prove from available evidence that the credential was specifically `GITHUB_TOKEN`; missing runs are consistent with workflow-event suppression by an automation token, but that exact token identity is NOT CONFIRMED.
+- The connected GitHub tools expose read operations and rerun-existing-run actions, but no workflow-dispatch action; no existing Actions run belongs to the current SHA to rerun. This is a tooling limitation, not evidence of a code test failure.
+
+### User action required to create the first authoritative run
+1. Open [PR #27](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/pull/27) and verify the latest head is `270b050b8aa9f4fac68426d44b569226fe76ec28`.
+2. Open [Quality and security checks](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/workflows/quality-security.yml), choose **Run workflow**, select branch `fix/ai-quota-native-preview`, and start it.
+3. Repeat for [Manual HTML import smoke test](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/workflows/manual-import-smoke.yml).
+4. If GitHub displays **Approve and run workflows**, click it. Then send the resulting run links/IDs here so I can read the job logs and fix demonstrated failures.
+
+### Current status
+- Trigger configuration: UPDATED; every workflow supports manual dispatch.
+- Current-head CI: BLOCKED awaiting the manual dispatch/approval action above; no current-head run exists to claim success.
+- Release acceptance checklist remains 0/11 fully confirmed.
+
+
+
+## Stage 1 follow-up — CI trigger recovery (2026-10-19)
+
+### Actions performed and evidence
+- Closed and reopened PR #27 through the connected GitHub API. PR is open and not draft afterward; no Actions run appeared immediately after this attempt.
+- Updated `.github/workflows/quality-security.yml`: push branches now include `main` and `fix/**`; PR trigger types include `opened`, `reopened`, `synchronize`, and `ready_for_review`. Commit: `361922c63fe4d3c9e4817f2770e0e464b6393e49`.
+- Checked Actions after that push: Quality and security run [39157261722](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39157261722) completed successfully on that commit. All steps passed: asset sync, HTML/security assertions, inline JS syntax, workflow YAML parsing, backend tests and Wrangler dry-runs, credential-pattern scan.
+- Updated `.github/workflows/manual-import-smoke.yml`: push branches now include `main` and `fix/**`; PR trigger types include `opened`, `reopened`, `synchronize`, and `ready_for_review`. Commit/current PR head: `a2673658e6cde2af86df419ad7d080ab1fc70fcf`.
+- Checked Actions after that push: Manual HTML import smoke run [39157276730](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39157276730) completed successfully on current PR head. All steps passed, including synchronized assets, import wiring, production health checks without an inference request, and real-browser smoke test.
+- Latest PR head confirmed via GitHub API: `a2673658e6cde2af86df419ad7d080ab1fc70fcf`. The current head has a green manual-import run; the quality/security run is green on the immediately preceding workflow-trigger commit `361922c63fe4d3c9e4817f2770e0e464b6393e49`. No current-head quality run has been observed yet.
+- Creating a diagnostic branch via the connected GitHub branch tool was attempted twice but the connector rejected the request with a branch-creation argument error. No new branch or diagnostic PR was created. This attempt did not modify repository content.
+
+### Trigger diagnosis
+- Confirmed: event/path configuration was a contributing gap because feature-branch pushes were not covered by the original `push: branches: [main]` rules. Expanding the triggers caused real runs to appear.
+- Not proven: whether any separate repository-level Actions disablement, approval requirement, or specific token suppression was also involved. Successful push-triggered runs show Actions are enabled for these workflows now; they do not establish the exact token type used by earlier commits.
+
+### Stages 2–4 — static review notes
+- Native AI worker has prompt length limit (18,000 characters), bounded request body (24 KiB), output cap (100,000 characters), provider/model allow-listing, origin validation, content-type validation, per-IP hourly/daily and global daily counters, and a secret-pattern check before inference. Limits visible in code: 5 requests/hour/IP, 15/day/IP, 100/day global web AI, 30/day global native AI. These are static-code observations, not a live abuse/load test; KV counter increments are read-then-write and are not atomic under concurrent requests.
+- Native Android template workflow uses a matrix for API 21 and API 35, Gradle build, emulator instrumentation tests, APK integrity/signature checks, package ID verification, and artifact upload. This workflow currently listens to branches `stage2/**` and `feature/native-ai-codegen-2026-10-18`, or PRs that change `native-builder/**`/the workflow. PR #27 does not modify `native-builder/**`, so this workflow is not expected to run for PR #27. No successful API 21/API 35 emulator evidence has been collected in this CI recovery step.
+- User-project APK workflow includes read-only top-level permissions, OIDC auth, source validation/build paths, authenticated download verification, checksum comparison, and queue dispatch. The YAML configuration itself is not proof of a successful native APK build or installation.
+- No production AI generation request was made during these checks; the health check explicitly does not consume AI inference quota.
+
+### Current status
+- Trigger recovery: VERIFIED by two real successful Actions runs.
+- Stage 2 asset synchronization/browser import smoke: VERIFIED by run 39157276730.
+- Stage 3–4 Android APK/API 21/API 35 runtime proof: NOT VERIFIED; native emulator workflow has not run for this PR.
+- Release checklist: 2/11 partially supported by current evidence, 0/11 fully certified for release. Do not mark the whole release complete.
+
+
+## Stage 1 follow-up — CI confirmed and diagnostics workflow merged (2026-10-19)
+
+- Trigger recovery produced real successful runs on the feature branch: [Quality and security checks #39157261722](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39157261722) passed all listed steps on `361922c63fe4d3c9e4817f2770e0e464b6393e49`; [Manual HTML import smoke #39157276730](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39157276730) passed all steps on `a2673658e6cde2af86df419ad7d080ab1fc70fcf`, including real browser smoke and health endpoints without consuming AI inference quota.
+- Created isolated workflow-only PR [#28 — Add manual dispatch for PR failure diagnostics](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/pull/28), containing only `.github/workflows/pr-failure-diagnostics.yml`.
+- PR #28 CI on `2cbe40fe82a49730c556daf9d9f3805360dc03fb`: [Quality/security](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39157451300) SUCCESS, [A.S. AUTO CHECK AI](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39157451183) SUCCESS, Cloudflare Pages check SUCCESS. PR was clean/mergeable and was squash-merged after these checks passed. Merge commit: `63094e6fb5db94cdccde51d20a17f26b193aeab1`.
+- The 11 workflow files that already existed on `main` were verified to contain `workflow_dispatch`; PR #28 adds the missing diagnostics workflow to the default branch so its manual-dispatch entry is available from the Actions UI as well.
+- Latest change to `PROGRESS.md` is documentation-only; its resulting commit must not be mistaken for a fresh app-code test. The relevant implementation/workflow changes have the successful runs listed above.
+
+### Current status
+- Stage 1 trigger issue: RECOVERED; actual Actions runs now appear and passed.
+- Stage 2 website-to-Android asset synchronization and browser import smoke: PASSED in run 39157276730.
+- Stage 3 native generation/Android build chain: STATIC CONFIGURATION REVIEWED; real production prompt-to-APK generation is NOT VERIFIED.
+- Stage 4 APK/emulator API 21 and API 35: workflow configuration contains both API levels, build, instrumentation, signature/integrity checks and artifact upload; successful emulator evidence is NOT YET VERIFIED for PR #27.
+- AI quotas/security: source-level protections and tests are present; concurrency/abuse load testing and live provider quota validation are NOT COMPLETE. Rate-limit counters use separate reads/writes, so simultaneous requests may race; this remains a documented hardening risk, not a demonstrated failure in current CI.
+- Release acceptance checklist: 0/11 fully certified end-to-end; successful targeted CI checks do not substitute for production generation, install/launch, screenshot, download, quota, and three scenario tests.

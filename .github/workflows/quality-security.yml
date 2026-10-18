@@ -2,10 +2,11 @@ name: Quality and security checks
 
 on:
   push:
-    branches: [main]
+    branches: [main, "fix/**"]
     paths:
       - "index.html"
       - "app/src/main/assets/index.html"
+      - "scripts/sync-assets.sh"
       - "app/src/main/AndroidManifest.xml"
       - "app/src/main/java/**"
       - "app/build.gradle"
@@ -16,6 +17,7 @@ on:
       - ".github/workflows/deploy-backend.yml"
   pull_request:
     branches: [main]
+    types: [opened, reopened, synchronize, ready_for_review]
   workflow_dispatch:
 
 permissions:
@@ -33,13 +35,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check website and Android asset stay synchronized
-        run: |
-          cmp --silent index.html app/src/main/assets/index.html || {
-            echo "::error::Website HTML and Android WebView asset differ."
-            diff -u index.html app/src/main/assets/index.html || true
-            exit 1
-          }
+      - name: Check canonical website-to-Android asset synchronization
+        run: bash scripts/sync-assets.sh --check
 
       - name: Validate HTML, manifest, and security settings
         run: |
