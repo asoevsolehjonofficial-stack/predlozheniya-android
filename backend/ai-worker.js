@@ -70,13 +70,14 @@ async function generate(request, env) {
   const hourKey = "asai:ip-hour:" + ipHash + ":" + now.toISOString().slice(0, 13);
   const day = now.toISOString().slice(0, 10);
   const dayKey = "asai:ip-day:" + ipHash + ":" + day;
-  const globalDayKey = "asai:global-day:" + day;
+  const globalDayKey = (nativeMode ? "asai:global-native-day:" : "asai:global-day:") + day;
+  const globalLimit = nativeMode ? 10 : 30;
   const hourCount = Number(await env.RATE_LIMITS.get(hourKey) || "0");
   const dayCount = Number(await env.RATE_LIMITS.get(dayKey) || "0");
   const globalCount = Number(await env.RATE_LIMITS.get(globalDayKey) || "0");
   if (hourCount >= 2) return json({ error: "Limit reached: maximum 2 built-in AI generations per hour from this network." }, 429, origin);
   if (dayCount >= 5) return json({ error: "Limit reached: maximum 5 built-in AI generations per day from this network." }, 429, origin);
-  if (globalCount >= 30) return json({ error: "The shared daily AI capacity is used up. Try tomorrow or connect your own API key." }, 429, origin);
+  if (globalCount >= globalLimit) return json({ error: nativeMode ? "The shared daily native AI capacity is used up. Try tomorrow." : "The shared daily AI capacity is used up. Try tomorrow or connect your own API key." }, 429, origin);
 
   const declaredLength = Number(request.headers.get("Content-Length") || "0");
   if (declaredLength > 24 * 1024) return json({ error: "Prompt is too large. Keep it under 18,000 characters." }, 413, origin);
