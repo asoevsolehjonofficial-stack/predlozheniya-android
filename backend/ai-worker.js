@@ -300,7 +300,7 @@ async function generate(request, env) {
     return json({ error: "AI rate limiting is temporarily unavailable. Try again later." }, 503, origin);
   }
   if (!quota.allowed) {
-    if (quota.scope === "hour") return json({ error: "Лимит встроенного ИИ: не более 5 генераций в час с одной сети. Попробуй после начала следующего часа.", retryAfterSeconds: 3600 - (now.getUTCMinutes() * 60 + now.getUTCSeconds()) }, 429, origin);
+    if (quota.scope === "hour") return json({ error: "Лимит встроенного ИИ: не более 4 генераций в час с одной сети. Попробуй после начала следующего часа.", retryAfterSeconds: 3600 - (now.getUTCMinutes() * 60 + now.getUTCSeconds()) }, 429, origin);
     if (quota.scope === "day") return json({ error: "Лимит встроенного ИИ: не более 15 генераций в день с одной сети. Попробуй завтра.", retryAfterSeconds: 86400 - (now.getUTCHours() * 3600 + now.getUTCMinutes() * 60 + now.getUTCSeconds()) }, 429, origin);
     return json({ error: nativeMode ? "The shared daily native AI capacity is used up. Try tomorrow." : "The shared daily AI capacity is used up. Try tomorrow or connect your own API key." }, 429, origin);
   }
