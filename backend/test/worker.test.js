@@ -303,3 +303,22 @@ test("queued build status reports the queue state without exposing source data",
   });
   assert.doesNotMatch(responseText, /private/);
 });
+
+
+test("internal smoke enqueue refuses requests without a trusted GitHub OIDC token", async () => {
+  const response = await call("/api/internal/smoke-enqueue", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}"
+  });
+  assert.equal(response.status, 401);
+  assert.match((await response.json()).error, /Unauthorized/);
+});
+
+test("internal smoke claim refuses a request without a trusted GitHub OIDC token", async () => {
+  const response = await call("/api/internal/claim?requestId=0123456789abcdef0123456789abcdef", {
+    method: "POST"
+  });
+  assert.equal(response.status, 401);
+  assert.match((await response.json()).error, /Unauthorized/);
+});
