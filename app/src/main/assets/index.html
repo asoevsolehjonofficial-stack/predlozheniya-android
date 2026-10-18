@@ -336,7 +336,7 @@ async function runAIBuild(editInstruction=''){
    const pretty=JSON.stringify(nativeProject,null,2);
    $('code').textContent=pretty;$('spec').textContent=instruction;generatedHTML=pretty;
    $('copyCode').disabled=false;
-   $('download').disabled=true;$('downloadPwa').disabled=true;$('downloadAndroidProject').disabled=true;
+   $('download').disabled=true;$('downloadPwa').disabled=true;$('downloadAndroidProject').disabled=true;$('saveProject').disabled=true;if(editButton)editButton.disabled=true;
    $('state').textContent='Нативный исходный код создан';
    finishBuildActivity(pretty);addActivity('Получены Android-файлы',nativeProject.files.map(f=>f.path).join(', '),'done');
    addActivity('APK ещё не собран','Нативные исходники готовы. Нажми «Собрать APK проекта», чтобы отправить их в защищённую очередь. Успех подтвердится только после сборки и проверки APK.','error');
