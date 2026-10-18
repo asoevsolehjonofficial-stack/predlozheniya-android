@@ -74,7 +74,7 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in 1 2 3; do
-            if yes | sdkmanager --install "platforms;android-21" "system-images;android-21;default;x86"; then exit 0; fi
+            if sdkmanager --install "platforms;android-21" "system-images;android-21;default;x86"; then exit 0; fi
             echo "API 21 SDK install attempt $attempt failed; retrying."
             sleep $((attempt * 5))
           done
@@ -86,7 +86,7 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in 1 2 3; do
-            if yes | sdkmanager --install "system-images;android-35;google_apis;x86_64"; then exit 0; fi
+            if sdkmanager --install "system-images;android-35;google_apis;x86_64"; then exit 0; fi
             echo "API 35 SDK install attempt $attempt failed; retrying."
             sleep $((attempt * 5))
           done
