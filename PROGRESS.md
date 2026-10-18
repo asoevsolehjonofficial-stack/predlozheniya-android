@@ -227,3 +227,9 @@ Pull request: #27 — https://github.com/asoevsolehjonofficial-stack/predlozheni
 - Each matrix job is intended to create a local API job from the validated Java/XML source, build and verify the APK, upload it to the local API, download it with the per-job download token, compare byte-for-byte and SHA-256, install and launch it on its target emulator, capture a real PNG, upload that screenshot through the API, and download/compare the PNG.
 - Security tests added for rejected missing/invalid OIDC tokens and browser-origin requests. Plain numeric STALE_BUILD_MS was removed from the API Worker's named-export list to prevent Wrangler module startup rejection.
 - This work is in branch feat/local-api-download-e2e and has not yet passed CI or been merged. Production deployment and live production API round-trip remain separate gates.
+
+## Stage 4 retry 4 — correct SDK install retries (2026-10-19)
+
+- The latest main matrix run [#39161397305](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39161397305) failed during SDK image installation. Exact log: `yes: standard output: Broken pipe`; the `sdkmanager` had reached 100% extraction, but `set -o pipefail` treated the `yes` process's expected SIGPIPE as failure, repeating downloads three times.
+- Removed the `yes |` pipeline because the Android setup action has already accepted SDK licenses. SDK image installation now retries the `sdkmanager` command directly, avoiding the false failure.
+- The same in-progress PR adds the protected local API job, APK upload/download checksum round-trip, and screenshot upload/download round-trip. CI must validate all of this before merge.
