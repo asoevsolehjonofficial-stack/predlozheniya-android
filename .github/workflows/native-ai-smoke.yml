@@ -13,13 +13,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: native-ai-generated-apk-smoke-v2
+  group: native-ai-generated-apk-smoke-v3
   cancel-in-progress: true
 
 jobs:
-  generated-app:
+  live-ui-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 20
     steps:
       - name: Checkout trusted source
         uses: actions/checkout@v4
@@ -43,6 +43,16 @@ jobs:
           AI_API_URL: https://as-app-builder-ai.asoev-solehjon-official.workers.dev
           RUN_LIVE_AI_TEST: "true"
         run: node .github/scripts/auto-check.mjs
+
+  generated-app:
+    needs: live-ui-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout trusted source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
