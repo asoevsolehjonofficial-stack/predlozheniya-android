@@ -92,6 +92,27 @@ test("built-in AI returns generated HTML and rate-limits requests", async () => 
 });
 
 
+test("quota bypass requires a configured high-entropy secret header", async () => {
+  const options = {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "CF-Connecting-IP": "203.0.113.91", "X-CI-Quota-Bypass": "a".repeat(40) },
+    body: JSON.stringify({ prompt: "Create a small app." })
+  };
+  const noSecretEnv = fakeEnv();
+  for (let i = 0; i < 4; i++) assert.equal((await call("/api/ai/generate", { ...options, env: noSecretEnv })).status, 200);
+  assert.equal((await call("/api/ai/generate", { ...options, env: noSecretEnv })).status, 429);
+
+  const wrongSecretEnv = fakeEnv();
+  wrongSecretEnv.CI_QUOTA_BYPASS_SECRET = "b".repeat(40);
+  for (let i = 0; i < 4; i++) assert.equal((await call("/api/ai/generate", { ...options, env: wrongSecretEnv })).status, 200);
+  assert.equal((await call("/api/ai/generate", { ...options, env: wrongSecretEnv })).status, 429);
+
+  const matchingEnv = fakeEnv();
+  matchingEnv.CI_QUOTA_BYPASS_SECRET = "a".repeat(40);
+  for (let i = 0; i < 5; i++) assert.equal((await call("/api/ai/generate", { ...options, env: matchingEnv })).status, 200);
+  assert.equal(matchingEnv.RATE_LIMITER.store.size, 0);
+});
+
 test("Durable Object atomically limits concurrent AI requests", async () => {
   let inferenceCalls = 0;
   const env = fakeEnv(async () => {
