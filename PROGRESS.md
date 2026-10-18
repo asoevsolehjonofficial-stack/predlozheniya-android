@@ -188,3 +188,10 @@ Pull request: #27 — https://github.com/asoevsolehjonofficial-stack/predlozheni
 - The app-builder release workflow [#39160499380](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39160499380) is still in progress; it is a separate builder APK artifact, not proof that generated project APKs passed E2E.
 - Production deploy remains blocked by missing GitHub Actions secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`; do not place their values in source or chat. The Durable Object code/config and parallel-counter regression test are present in main and quality/security is green, but the new DO has not been proven deployed to production.
 - Production queue/download round-trip and Lighthouse before/after measurements remain unverified.
+
+
+## Stage 4 retry 1 — fix local Worker runtime startup (2026-10-19)
+
+- Native matrix [run 39160499339](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39160499339) passed its website UI preflight after PR #32, but all six fixture jobs failed before generation/build because Wrangler could not start the local Worker.
+- Exact runtime log: `Uncaught TypeError: Incorrect type for map entry 'CLOUDFLARE_MODEL': the provided value is not of type 'function or ExportedHandler'.`
+- Root cause confirmed in `backend/ai-worker.js`: module exports included plain string/number constants alongside function exports. Cloudflare Worker module runtime rejects plain values in the named-export map. The fix branch `fix/wrangler-runtime-export-values` removes constants from the export list while retaining function exports used by tests. Waiting for CI before merge.
