@@ -272,3 +272,10 @@ Pull request: #27 — https://github.com/asoevsolehjonofficial-stack/predlozheni
 - Fixed the verifier to compare the token's `workflow_ref` and `ref` as a strict pair. The regular build API audience remains restricted to its configured main workflow. The native E2E audience allows only the main workflow/ref and the exact repair-branch workflow/ref. Signature, issuer, repository, audience, expiry, and not-before checks remain in place.
 - Native AI source fixture already passed OIDC in that run; the failure was the separate local Build API fixture. The run also showed the absolute APK path correction is now needed for screenshot stage; the next CI run will validate both fixes.
 - Latest change is awaiting quality/security and native six-job matrix. No production Worker deployment has occurred.
+
+
+## Stage 5 continuation — local APK download CORS fix (2026-10-19)
+
+- Native E2E [run #39163074448](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39163074448) confirmed native source OIDC, local API job creation, APK build, package/signature/checksum validation, and APK upload all passed for the `multi-screen / API 21` scenario.
+- The APK download-back request then returned HTTP 403 because the local Build API enforces its allowed Origin for public `/api/download` and `/api/preview` routes, while the CI curl requests omitted the `Origin: https://as-app-builder.pages.dev` header. Added that exact allowed Origin header to both download round-trips. The same run's local API fixture creation passed after fixing the OIDC verifier.
+- The latest workflow update is running a new native matrix; do not count the round-trip/screenshot criterion complete until all six jobs pass and artifacts are present.
