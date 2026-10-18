@@ -199,7 +199,7 @@ test("native Android source endpoint retains origin protection", async () => {
 test("native AI has an independent daily quota when web AI capacity is exhausted", async () => {
   const day = new Date().toISOString().slice(0, 10);
   const env = fakeEnv(async () => ({ response: { files: [{ path: "app/src/main/java/tj/as/generated/MainActivity.java", content: "public class MainActivity extends Activity {}" }] } }), new Map([
-    ["asai:global-day", { count: 100, expiresAt: Date.now() + 86400000 }]
+    ["asai:global-day", { count: 100, window: new Date().toISOString().slice(0, 10), expiresAt: Date.now() + 86400000 }]
   ]));
   const response = await call("/api/ai/native-generate", {
     method: "POST",
