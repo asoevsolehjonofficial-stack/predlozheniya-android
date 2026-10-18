@@ -133,7 +133,7 @@ function decodeJwtPart(value) {
   const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
   return JSON.parse(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "=")));
 }
-async function verifyGitHubOidc(request) {
+async function verifyGitHubOidc(request, workflow = WORKFLOW) {
   const token = bearer(request);
   const parts = token.split(".");
   if (parts.length !== 3) return false;
@@ -147,7 +147,7 @@ async function verifyGitHubOidc(request) {
   const audienceValid = claims.aud === OIDC_AUDIENCE || (Array.isArray(claims.aud) && claims.aud.includes(OIDC_AUDIENCE));
   if (header.alg !== "RS256" || claims.iss !== OIDC_ISSUER || !audienceValid ||
       claims.repository !== OWNER + "/" + REPO ||
-      claims.workflow_ref !== OWNER + "/" + REPO + "/.github/workflows/build-user-project-apk.yml@refs/heads/main" ||
+      !(Array.isArray(workflow) ? workflow : [workflow]).some(name => claims.workflow_ref === OWNER + "/" + REPO + "/.github/workflows/" + name + "@refs/heads/main") ||
       claims.ref !== "refs/heads/main" || !Number.isFinite(claims.exp) || claims.exp <= now ||
       !Number.isFinite(claims.iat) || claims.iat > now + 60 ||
       (Number.isFinite(claims.nbf) && claims.nbf > now)) return false;
@@ -166,6 +166,15 @@ async function verifyGitHubOidc(request) {
     return false;
   }
 }
+
+function verifiedWorkflowRef(request) {
+  try {
+    const token = bearer(request);
+    const parts = token.split(".");
+    return parts.length === 3 ? decodeJwtPart(parts[1]).workflow_ref || "" : "";
+  } catch { return ""; }
+}
+
 async function getJob(env, requestId) {
   if (!UUID_RE.test(requestId)) return null;
   const raw = await env.JOBS.get("job:" + requestId);
@@ -359,11 +368,47 @@ async function handleSource(request, env, requestId) {
   });
 }
 
-async function handleUpload(request, env, requestId) {
-  if (!(await verifyGitHubOidc(request))) return json({ error: "Unauthorized." }, 401);
+
+async function handleCiRegister(request, env) {
+  if (request.headers.get("Origin")) return json({ error: "CI registration does not accept browser origins." }, 403);
+  if (request.method !== "POST" || !(await verifyGitHubOidc(request, "native-ai-smoke.yml"))) return json({ error: "Unauthorized." }, 401);
+  if (!env.JOBS) return json({ error: "Free KV build storage is not configured." }, 503);
+  const raw = await readBodyLimited(request, 4096);
+  if (raw === null) return json({ error: "Request body is too large." }, 413);
+  let payload;
+  try { payload = JSON.parse(raw); } catch { payload = null; }
+  const examples = new Set(["simple", "multi-screen", "storage"]);
+  const apiLevel = Number(payload?.apiLevel);
+  if (!payload || !examples.has(payload.example) || ![21, 35].includes(apiLevel)) {
+    return json({ error: "A valid native CI example and Android API level are required." }, 400);
+  }
+  const requestId = crypto.randomUUID().replace(/-/g, "");
+  const downloadToken = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+  const job = {
+    requestId,
+    slug: "smoke-e2e-" + payload.example + "-api" + apiLevel + "-" + requestId.slice(0, 8),
+    type: "native",
+    createdAt: Date.now(),
+    status: "building",
+    sourceFetchedAt: Date.now(),
+    ciFixture: true,
+    example: payload.example,
+    apiLevel,
+    tokenHash: await sha256(downloadToken)
+  };
+  await env.JOBS.put("job:" + requestId, JSON.stringify(job), { expirationTtl: 86400 });
+  return json({ requestId, downloadToken, status: "building" }, 201);
+}
+
+async function handleUpload(request, env, requestId, allowNativeE2E = false) {
+  if (!(await verifyGitHubOidc(request, allowNativeE2E ? [WORKFLOW, "native-ai-smoke.yml"] : WORKFLOW))) return json({ error: "Unauthorized." }, 401);
   if (!env.JOBS) return json({ error: "Free KV build storage is not configured." }, 503);
   const job = await getJob(env, requestId);
   if (!job || !job.sourceFetchedAt || job.status === "failed") return json({ error: "Build request not found or source was not fetched." }, 404);
+  if (allowNativeE2E) {
+    const nativeWorkflow = verifiedWorkflowRef(request).endsWith("/.github/workflows/native-ai-smoke.yml@refs/heads/main");
+    if (nativeWorkflow !== Boolean(job.ciFixture)) return json({ error: "Workflow is not authorized for this build request." }, 403);
+  }
   if (job.apkUploadedAt) return json({ error: "APK was already uploaded." }, 409);
   if (!(request.headers.get("Content-Type") || "").toLowerCase().startsWith("application/octet-stream")) return json({ error: "Content-Type must be application/octet-stream." }, 415);
   const declaredLength = Number(request.headers.get("Content-Length") || "0");
@@ -426,10 +471,14 @@ async function handleFail(request, requestId, env) {
   return json({ ok: true, requeued: false });
 }
 
-async function handlePreviewUpload(request, env, requestId) {
-  if (!(await verifyGitHubOidc(request))) return json({ error: "Unauthorized." }, 401);
+async function handlePreviewUpload(request, env, requestId, allowNativeE2E = false) {
+  if (!(await verifyGitHubOidc(request, allowNativeE2E ? [WORKFLOW, "native-ai-smoke.yml"] : WORKFLOW))) return json({ error: "Unauthorized." }, 401);
   const job = await getJob(env, requestId);
   if (!job || job.type !== "native" || !job.sourceFetchedAt || job.status === "failed") return json({ error: "Native build request not found." }, 404);
+  if (allowNativeE2E) {
+    const nativeWorkflow = verifiedWorkflowRef(request).endsWith("/.github/workflows/native-ai-smoke.yml@refs/heads/main");
+    if (nativeWorkflow !== Boolean(job.ciFixture)) return json({ error: "Workflow is not authorized for this preview." }, 403);
+  }
   if (!(request.headers.get("Content-Type") || "").toLowerCase().startsWith("image/png")) return json({ error: "Preview must be a PNG screenshot." }, 415);
   const declaredLength = Number(request.headers.get("Content-Length") || "0");
   if (declaredLength > 4 * 1024 * 1024) return json({ error: "Preview screenshot is too large." }, 413);
@@ -503,11 +552,12 @@ export default {
     const url = new URL(request.url);
     const cors = originAllowed(request, env);
     try {
+      if (url.pathname === "/api/internal/ci/register" && request.method === "POST") return await handleCiRegister(request, env);
       if (url.pathname === "/api/internal/claim" && request.method === "POST") return await handleClaim(request, env);
       if (url.pathname === "/api/internal/fail" && request.method === "POST") return await handleFail(request, url.searchParams.get("requestId") || "", env);
       if (url.pathname === "/api/internal/source" && request.method === "GET") return await handleSource(request, env, url.searchParams.get("requestId") || "");
-      if (url.pathname === "/api/internal/upload" && request.method === "PUT") return await handleUpload(request, env, url.searchParams.get("requestId") || "");
-      if (url.pathname === "/api/internal/preview" && request.method === "PUT") return await handlePreviewUpload(request, env, url.searchParams.get("requestId") || "");
+      if (url.pathname === "/api/internal/upload" && request.method === "PUT") return await handleUpload(request, env, url.searchParams.get("requestId") || "", true);
+      if (url.pathname === "/api/internal/preview" && request.method === "PUT") return await handlePreviewUpload(request, env, url.searchParams.get("requestId") || "", true);
       if (request.method === "OPTIONS") {
         if (!cors.ok) return new Response(null, { status: 403 });
         return new Response(null, {

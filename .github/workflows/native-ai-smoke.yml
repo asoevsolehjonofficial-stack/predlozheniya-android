@@ -45,6 +45,8 @@ jobs:
   generated-app:
     needs: live-ui-smoke
     runs-on: ubuntu-latest
+    env:
+      BUILD_API_URL: https://as-app-builder-api.asoev-solehjon-official.workers.dev
     timeout-minutes: 40
     strategy:
       fail-fast: false
@@ -169,6 +171,34 @@ jobs:
             adb pull /sdcard/native-e2e.png "$RUNNER_TEMP/native-e2e.png"
             test -s "$RUNNER_TEMP/native-e2e.png"
             file "$RUNNER_TEMP/native-e2e.png" | grep -qi 'PNG image'
+
+      - name: Upload generated APK and screenshot to authenticated build API, then download it back
+        shell: bash
+        env:
+          EXAMPLE: ${{ matrix.example }}
+          API_LEVEL: ${{ matrix.api_level }}
+        run: |
+          set -euo pipefail
+          APK="native-builder/app/build/outputs/apk/debug/app-debug.apk"
+          SCREENSHOT="$RUNNER_TEMP/native-e2e.png"
+          ORIGINAL_HASH="$(sha256sum "$APK" | cut -d ' ' -f1)"
+          OIDC_TOKEN="$(curl --fail --silent --show-error -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-worker" | jq -er '.value')"
+          echo "::add-mask::$OIDC_TOKEN"
+          REGISTRATION="$(curl --fail --silent --show-error --max-time 30 -X POST "$BUILD_API_URL/api/internal/ci/register" -H "Authorization: Bearer $OIDC_TOKEN" -H "Content-Type: application/json" --data "$(jq -n --arg example "$EXAMPLE" --argjson apiLevel "$API_LEVEL" '{example:$example,apiLevel:$apiLevel}')")"
+          REQUEST_ID="$(jq -er '.requestId' <<< "$REGISTRATION")"
+          DOWNLOAD_TOKEN="$(jq -er '.downloadToken' <<< "$REGISTRATION")"
+          echo "::add-mask::$DOWNLOAD_TOKEN"
+          [[ "$REQUEST_ID" =~ ^[a-f0-9]{32}$ ]] || { echo "::error::Invalid CI request ID"; exit 1; }
+          curl --fail --silent --show-error --max-time 30 -X PUT "$BUILD_API_URL/api/internal/preview?requestId=$REQUEST_ID" -H "Authorization: Bearer $OIDC_TOKEN" -H "Content-Type: image/png" --data-binary @"$SCREENSHOT" | jq -e '.ok == true' >/dev/null
+          curl --fail --silent --show-error --max-time 120 -X PUT "$BUILD_API_URL/api/internal/upload?requestId=$REQUEST_ID" -H "Authorization: Bearer $OIDC_TOKEN" -H "Content-Type: application/octet-stream" -H "X-APK-SHA256: $ORIGINAL_HASH" --data-binary @"$APK" | jq -e --arg hash "$ORIGINAL_HASH" '.ok == true and .sha256 == $hash' >/dev/null
+          STATUS="$(curl --fail --silent --show-error --max-time 30 "$BUILD_API_URL/api/status?requestId=$REQUEST_ID" -H "Origin: https://as-app-builder.pages.dev" -H "Authorization: Bearer $DOWNLOAD_TOKEN")"
+          jq -e '.status == "success" and (.previewUrl | type == "string") and (.downloadUrl | type == "string")' <<< "$STATUS" >/dev/null
+          curl --fail --silent --show-error --max-time 120 "$BUILD_API_URL/api/download?requestId=$REQUEST_ID" -H "Origin: https://as-app-builder.pages.dev" -H "Authorization: Bearer $DOWNLOAD_TOKEN" -o "$RUNNER_TEMP/downloaded-native-e2e.apk"
+          DOWNLOADED_HASH="$(sha256sum "$RUNNER_TEMP/downloaded-native-e2e.apk" | cut -d ' ' -f1)"
+          test "$ORIGINAL_HASH" = "$DOWNLOADED_HASH" || { echo "::error::APK downloaded from the API does not match the built APK"; exit 1; }
+          unzip -t "$RUNNER_TEMP/downloaded-native-e2e.apk" >/dev/null
+          echo "Authenticated API upload/download round-trip passed for $EXAMPLE on API $API_LEVEL; SHA-256=$ORIGINAL_HASH"
+
       - name: Upload APK and screenshot evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -182,3 +212,4 @@ jobs:
             ${{ runner.temp }}/native-e2e.png
             ${{ runner.temp }}/apk-sha256.txt
             ${{ runner.temp }}/native-ai-response.json
+            ${{ runner.temp }}/downloaded-native-e2e.apk
