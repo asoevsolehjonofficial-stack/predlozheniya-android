@@ -334,7 +334,7 @@ async function runAIBuild(editInstruction=''){
     if(!/^(app\/src\/main\/java\/tj\/as\/generated\/[A-Za-z0-9_$/.-]+\.java|app\/src\/main\/res\/values\/[A-Za-z0-9_.-]+\.xml)$/.test(file.path)||file.path.includes('..'))throw Error('ИИ вернул путь вне разрешённой папки исходников: '+file.path);
    }
    const pretty=JSON.stringify(nativeProject,null,2);
-   $('code').textContent=pretty;$('spec').textContent=instruction;
+   $('code').textContent=pretty;$('spec').textContent=instruction;generatedHTML='';
    $('copyCode').disabled=false;
    $('download').disabled=true;$('downloadPwa').disabled=true;$('downloadAndroidProject').disabled=true;
    $('state').textContent='Нативный исходный код создан';
@@ -359,7 +359,7 @@ async function runAIBuild(editInstruction=''){
   $('activityLive').textContent='Предпросмотр обновлён';showTab('activity');
   $('aiStatus').textContent='Поток генерации завершён. Код обновлён, предпросмотр перезапущен. Это веб-версия; APK и нативные функции требуют отдельной сборки и проверки.';
  }catch(e){failBuildActivity(e.message);$('state').textContent='Ошибка генерации';$('aiStatus').textContent='Ошибка: '+e.message+' Проверь ключ, модель, лимиты и поддержку потоковых запросов/CORS. Частичный ответ остался во вкладке «Код».';addActivity('Генерация остановлена',e.message,'error');}
- finally{generateButton.disabled=false;if(editButton)editButton.disabled=!generatedHTML}
+ finally{generateButton.disabled=false;if(editButton)editButton.disabled=nativeMode||!generatedHTML}
 }
 $('aiGenerate').addEventListener('click',()=>runAIBuild());
 $('applyEdit').addEventListener('click',()=>{const change=$('editPrompt').value.trim();if(!generatedHTML){$('aiStatus').textContent='Сначала создай приложение.';return}if(!change){$('editPrompt').focus();$('aiStatus').textContent='Напиши, что именно изменить.';return}runAIBuild(change)});
