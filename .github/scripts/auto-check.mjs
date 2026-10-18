@@ -23,21 +23,26 @@ for (const path of ["/", "/manifest.webmanifest", "/service-worker.js", "/icon.s
   await checkHttpAsset(path);
 }
 
-try {
-  const response = await fetch(apiUrl + "/api/health", { redirect: "follow", signal: AbortSignal.timeout(15000) });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok || body.ok !== true || body.buildEnabled !== true) {
-    fail("Cloudflare Worker health", `HTTP ${response.status}; ok=${String(body.ok)}; buildEnabled=${String(body.buildEnabled)}`);
-  } else pass("Cloudflare Worker health", "API reports buildEnabled=true");
-} catch (error) { fail("Cloudflare Worker health", error.message); }
-
-try {
-  const response = await fetch(aiUrl + "/api/health", { redirect: "follow", headers: { Origin: siteUrl }, signal: AbortSignal.timeout(15000) });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok || body.ok !== true || !String(body.model || "").includes("llama")) {
-    fail("Built-in AI Worker health", `HTTP ${response.status}; ok=${String(body.ok)}; model=${String(body.model)}`);
-  } else pass("Built-in AI Worker health", "AI binding configured; model " + body.model);
-} catch (error) { fail("Built-in AI Worker health", error.message); }
+if (process.env.CHECK_BACKEND_HEALTH === "false") {
+  skip("Production backend health", "Not part of quota-free native fixture E2E; production health is checked by separate release smoke.");
+} else {
+  try {
+    const response = await fetch(apiUrl + "/api/health", { redirect: "follow", signal: AbortSignal.timeout(15000) });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok || body.ok !== true || body.buildEnabled !== true) {
+      fail("Cloudflare Worker health", `HTTP ${response.status}; ok=${String(body.ok)}; buildEnabled=${String(body.buildEnabled)}`);
+    } else pass("Cloudflare Worker health", "API reports buildEnabled=true");
+  } catch (error) { fail("Cloudflare Worker health", error.message); }
+  
+  try {
+    const response = await fetch(aiUrl + "/api/health", { redirect: "follow", headers: { Origin: siteUrl }, signal: AbortSignal.timeout(15000) });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok || body.ok !== true || !String(body.model || "").includes("llama")) {
+      fail("Built-in AI Worker health", `HTTP ${response.status}; ok=${String(body.ok)}; model=${String(body.model)}`);
+    } else pass("Built-in AI Worker health", "AI binding configured; model " + body.model);
+  } catch (error) { fail("Built-in AI Worker health", error.message); }
+  
+}
 
 let browser;
 try {

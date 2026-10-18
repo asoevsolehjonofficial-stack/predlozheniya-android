@@ -169,3 +169,12 @@ Pull request: #27 — https://github.com/asoevsolehjonofficial-stack/predlozheni
 - Remaining E2E acceptance gap: the current new matrix workflow builds and launches generated APKs locally and captures screenshots, but it still needs a queue/API download round-trip integrated into the same test path. The backend unit suite already tests authenticated download/checksum behavior; that is not equivalent to a live generated APK download.
 - Remaining release gates: production Durable Object migration, production CI fixture endpoint, live APK download round-trip, Lighthouse before/after baseline, and full 11-point production checklist.
 
+
+
+## Stage 4 follow-up — unblock quota-free native E2E from unrelated production health failures (2026-10-19)
+
+- Latest native matrix run [39159778662](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39159778662) failed before any APK jobs started: its prerequisite UI smoke logged `FAIL: Cloudflare Worker health — fetch failed` and `FAIL: Built-in AI Worker health — fetch failed`. The website itself returned HTTP 200 for its assets and the browser UI checks passed; the generated-app matrix was skipped due to the job dependency.
+- The separate deploy workflow [39159778677](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39159778677) failed before deployment because repository Actions secrets are empty: `Add CLOUDFLARE_API_TOKEN in repository Actions secrets to use this optional redeploy workflow.` Its log also showed `CLOUDFLARE_API_TOKEN:` and `CLOUDFLARE_ACCOUNT_ID:` blank. No production deployment is claimed.
+- Confirmed `main` contains `RateLimitCoordinator`, the `RATE_LIMITER` Durable Object binding, and the SQLite migration in `backend/wrangler-ai.toml`; this is code/config evidence, not evidence the DO is deployed to production. Parallel-request regression is included in the green quality run [39160205127](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39160205127).
+- In branch `fix/e2e-production-health-gate`, routine native fixture E2E now skips external production backend-health checks in the UI prerequisite while preserving those checks as a separate release smoke; this lets the quota-free native matrix proceed independently of the unavailable production Worker endpoints. Awaiting PR checks and main workflow execution before marking it passed.
+- Still not proven: APK matrix completion, API 21/35 installation and launch, screenshots, or download-through-API round-trip.
