@@ -77,3 +77,12 @@ node --check src/index.js
 - стабильная подпись релизных APK;
 - отдельная проверенная архитектура для приложений, которым нужен сетевой доступ;
 - полноценная генерация и изменение кода через ИИ с защитой API-ключей и лимитами.
+
+
+## Optional DeepSeek provider
+
+The AI Worker can use DeepSeek without changing the browser code. To enable it, configure `DEEPSEEK_API_KEY` as a **Worker secret** on `as-app-builder-ai`; never commit the value or expose it in the website. When `AI_PROVIDER` is unset, DeepSeek is selected only when that secret exists; otherwise the existing Cloudflare Workers AI provider remains the default. Set `AI_PROVIDER=cloudflare` or `AI_PROVIDER=deepseek` to select explicitly. Invalid or unconfigured explicit selections fail closed.
+
+Optional `DEEPSEEK_MODEL` supports `deepseek-flash` and `deepseek-v4-pro`; the default is `deepseek-flash`. Both web HTML generation and native Android source generation use the same provider selection while retaining their separate system prompts, output limits, and model selection. Upstream requests have a 25-second timeout, bounded output, and sanitized error responses. Provider errors never return the upstream response body.
+
+Automated tests mock the DeepSeek API and do not require a production key or consume paid credits. A green CI run verifies code behavior, not the production secret or account quota. After deployment, check `/api/health` on the AI Worker and run the existing real-generation smoke workflow.
