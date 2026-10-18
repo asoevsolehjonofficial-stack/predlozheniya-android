@@ -5,7 +5,7 @@ Active engineering branch: `fix/native-e2e-package-id-sdk-emulator`
 Canonical progress branch: `fix/ai-quota-native-preview`
 PR #27: MERGED — https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/pull/27
 PR #34: OPEN — https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/pull/34
-Latest native E2E run: https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39177122772
+Latest native E2E run: https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39178042422
 
 ## Release checklist (11 acceptance criteria)
 
@@ -325,15 +325,22 @@ Latest native E2E run: https://github.com/asoevsolehjonofficial-stack/predlozhen
 
 ## Native E2E partial result update (2026-10-19)
 
-- Run [#39177122772](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39177122772) now has two fully successful scenario/API jobs:
-  - `simple / API 21`: APK build, package/signature/SHA-256 validation, local API upload/download round-trip, install/launch, real 1080×1920 PNG screenshot, screenshot upload/download round-trip, and artifact upload all passed. Artifact: [native-e2e-simple-api-21](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39177122772/artifacts/12154298586).
-  - `multi-screen / API 21`: same end-to-end CI chain passed. Artifact: [native-e2e-multi-screen-api-21](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39177122772/artifacts/12154826833).
+- Run [#39177122772](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39178042422) now has two fully successful scenario/API jobs:
+  - `simple / API 21`: APK build, package/signature/SHA-256 validation, local API upload/download round-trip, install/launch, real 1080×1920 PNG screenshot, screenshot upload/download round-trip, and artifact upload all passed. Artifact: [native-e2e-simple-api-21](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39178042422/artifacts/12154298586).
+  - `multi-screen / API 21`: same end-to-end CI chain passed. Artifact: [native-e2e-multi-screen-api-21](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39178042422/artifacts/12154826833).
 - The latest artifact ZIPs contain the actual APK, generated Java source, downloaded APK, SHA-256 record, and actual emulator screenshot. The screenshot files were inspected as PNG images.
 - At this update, `simple / API 35` has passed APK build/signature/checksum and local API APK round-trip; emulator screenshot step is running. `multi-screen / API 35` has started, and both storage/persistent-data jobs remain queued. Do not mark the full native matrix green until all six jobs pass.
 
 
 ## API 35 emulator screenshot hang mitigation (2026-10-19)
 
-- In native run [#39177122772](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39177122772), API 21 simple and multi-screen completed with artifacts. API 35 simple remained in the emulator screenshot action step for over 10 minutes without a completed log; API 35 multi-screen reached the same step and also remained running. Because the step log was not yet available, the precise hanging command is not proven.
+- In native run [#39177122772](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39178042422), API 21 simple and multi-screen completed with artifacts. API 35 simple remained in the emulator screenshot action step for over 10 minutes without a completed log; API 35 multi-screen reached the same step and also remained running. Because the step log was not yet available, the precise hanging command is not proven.
 - Updated the next run to use the non-indirect `swiftshader` renderer, capture PNG directly with `adb exec-out screencap -p` (no remote-file write/pull), and bound install, launch, activity, logcat, and screenshot commands with explicit timeouts. This should convert a silent hang into a bounded, diagnosable result.
 - The full native matrix is still NOT green. The new workflow commit is `619713bc667a7f6713441491c7c84a3ed5c2ddbe`; wait for its six-job run before merging PR #34.
+
+
+## Latest native matrix rerun (2026-10-19)
+
+- The prior run `39177122772` was cancelled after API 35 screenshot actions remained in progress for over 10 minutes; API 21 simple and multi-screen had already completed successfully with retained artifacts.
+- New native matrix run: [#39178042422](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39178042422), using the API 35 screenshot mitigation (legacy SwiftShader renderer, direct `adb exec-out screencap`, and bounded adb command timeouts). It is now running on the PR branch. Do not merge until this run finishes and all six jobs pass.
+- An isolated retry branch `fix/native-e2e-retry-api35` was also created to validate the same fix without force-pushing. It does not replace PR #34; PR #34's own run remains the merge evidence.
