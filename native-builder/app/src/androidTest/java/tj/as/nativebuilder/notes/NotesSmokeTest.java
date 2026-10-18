@@ -1,43 +1,47 @@
 package tj.as.nativebuilder.notes;
 
-import android.test.ActivityInstrumentationTestCase2;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+
+import android.content.Context;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ListView;
 
+import androidx.test.core.app.ActivityScenario;
+import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.test.platform.app.InstrumentationRegistry;
+
 import org.json.JSONArray;
+import org.junit.Test;
+import org.junit.runner.RunWith;
 
-public final class NotesSmokeTest extends ActivityInstrumentationTestCase2<MainActivity> {
-    public NotesSmokeTest() {
-        super(MainActivity.class);
-    }
+@RunWith(AndroidJUnit4.class)
+public final class NotesSmokeTest {
+    @Test
+    public void addNoteIsDisplayedAndPersistedLocally() throws Exception {
+        Context target = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        target.getSharedPreferences("as_native_notes", Context.MODE_PRIVATE).edit().clear().commit();
 
-    @Override
-    protected void setUp() throws Exception {
-        super.setUp();
-        getInstrumentation().getTargetContext()
-                .getSharedPreferences("as_native_notes", 0)
-                .edit().clear().commit();
-    }
+        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+            scenario.onActivity(activity -> {
+                EditText input = activity.findViewById(R.id.note_input);
+                Button add = activity.findViewById(R.id.note_add_button);
+                assertNotNull("Native note input must exist", input);
+                assertNotNull("Native add button must exist", add);
+                input.setText("Native persistence works");
+                add.performClick();
 
-    public void testAddNoteIsDisplayedAndPersistedLocally() throws Throwable {
-        final MainActivity activity = getActivity();
-        runTestOnUiThread(() -> {
-            EditText input = activity.findViewById(R.id.note_input);
-            Button add = activity.findViewById(R.id.note_add_button);
-            input.setText("Native persistence works");
-            add.performClick();
-        });
-        getInstrumentation().waitForIdleSync();
+                ListView list = activity.findViewById(R.id.note_list);
+                assertEquals("New note should appear in native list", 1, list.getAdapter().getCount());
+                assertEquals("Native persistence works", list.getAdapter().getItem(0));
+            });
+        }
 
-        ListView list = activity.findViewById(R.id.note_list);
-        assertEquals("A newly added note should appear in the native list", 1, list.getAdapter().getCount());
-        assertEquals("Native persistence works", list.getAdapter().getItem(0));
-
-        String stored = activity.getSharedPreferences("as_native_notes", 0)
+        String stored = target.getSharedPreferences("as_native_notes", Context.MODE_PRIVATE)
                 .getString("notes_json", "[]");
         JSONArray notes = new JSONArray(stored);
-        assertEquals("The note must be saved to app-private storage", 1, notes.length());
+        assertEquals("Note must persist in app-private storage", 1, notes.length());
         assertEquals("Native persistence works", notes.getString(0));
     }
 }
