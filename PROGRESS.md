@@ -151,3 +151,12 @@ Implementation fixes currently live on PR #34 branch `fix/native-e2e-package-id-
 - Consequently, direct production deployment, DO migration, binding updates, and Worker secret creation are not currently executable through this connection. Do not claim a deployment occurred. The recorded rollback target remains previous version `b6678b0e-9ad0-46ba-8b1c-8718297127b4`.
 - GitHub connector exposes no action for creating/updating repository Actions secrets, and there is no permitted way here to mint a least-privilege Cloudflare API token. Do not attempt to bypass this limitation or ask the user to paste a token into chat.
 - A production quota smoke workflow was added at `.github/workflows/production-ai-quota-smoke.yml`. After deployment access is restored, push a small progress-only commit to branch `ops/production-quota-smoke` to run the real production health + four-200/fifth-429 test. This workflow intentionally does not run on routine PRs.
+
+
+## Native E2E partial result update (2026-10-19)
+
+- Run [#39177122772](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39177122772) now has two fully successful scenario/API jobs:
+  - `simple / API 21`: APK build, package/signature/SHA-256 validation, local API upload/download round-trip, install/launch, real 1080×1920 PNG screenshot, screenshot upload/download round-trip, and artifact upload all passed. Artifact: [native-e2e-simple-api-21](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39177122772/artifacts/12154298586).
+  - `multi-screen / API 21`: same end-to-end CI chain passed. Artifact: [native-e2e-multi-screen-api-21](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39177122772/artifacts/12154826833).
+- The latest artifact ZIPs contain the actual APK, generated Java source, downloaded APK, SHA-256 record, and actual emulator screenshot. The screenshot files were inspected as PNG images.
+- At this update, `simple / API 35` has passed APK build/signature/checksum and local API APK round-trip; emulator screenshot step is running. `multi-screen / API 35` has started, and both storage/persistent-data jobs remain queued. Do not mark the full native matrix green until all six jobs pass.
