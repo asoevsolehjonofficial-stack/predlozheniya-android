@@ -190,7 +190,7 @@ jobs:
           echo "::add-mask::$DOWNLOAD_TOKEN"
           [[ "$REQUEST_ID" =~ ^[a-f0-9]{32}$ ]] || { echo "::error::Invalid CI request ID"; exit 1; }
           curl --fail --silent --show-error --max-time 30 -X PUT "$BUILD_API_URL/api/internal/preview?requestId=$REQUEST_ID" -H "Authorization: Bearer $OIDC_TOKEN" -H "Content-Type: image/png" --data-binary @"$SCREENSHOT" | jq -e '.ok == true' >/dev/null
-          curl --fail --silent --show-error --max-time 120 -X PUT "$BUILD_API_URL/api/internal/upload?requestId=$REQUEST_ID" -H "Authorization: Bearer $OIDC_TOKEN" -H "Content-Type: application/octet-stream" -H "X-APK-SHA256: $ORIGINAL_HASH" --data-binary @"$APK" | jq -e '.ok == true and .sha256 == "'"$ORIGINAL_HASH"'"' >/dev/null
+          curl --fail --silent --show-error --max-time 120 -X PUT "$BUILD_API_URL/api/internal/upload?requestId=$REQUEST_ID" -H "Authorization: Bearer $OIDC_TOKEN" -H "Content-Type: application/octet-stream" -H "X-APK-SHA256: $ORIGINAL_HASH" --data-binary @"$APK" | jq -e --arg hash "$ORIGINAL_HASH" '.ok == true and .sha256 == $hash' >/dev/null
           STATUS="$(curl --fail --silent --show-error --max-time 30 "$BUILD_API_URL/api/status?requestId=$REQUEST_ID" -H "Origin: https://as-app-builder.pages.dev" -H "Authorization: Bearer $DOWNLOAD_TOKEN")"
           jq -e '.status == "success" and (.previewUrl | type == "string") and (.downloadUrl | type == "string")' <<< "$STATUS" >/dev/null
           curl --fail --silent --show-error --max-time 120 "$BUILD_API_URL/api/download?requestId=$REQUEST_ID" -H "Origin: https://as-app-builder.pages.dev" -H "Authorization: Bearer $DOWNLOAD_TOKEN" -o "$RUNNER_TEMP/downloaded-native-e2e.apk"
