@@ -140,12 +140,12 @@ async function generate(request, env) {
   const day = now.toISOString().slice(0, 10);
   const dayKey = "asai:ip-day:" + ipHash + ":" + day;
   const globalDayKey = (nativeMode ? "asai:global-native-day:" : "asai:global-day:") + day;
-  const globalLimit = nativeMode ? 10 : 30;
+  const globalLimit = nativeMode ? 30 : 100;
   const hourCount = Number(await env.RATE_LIMITS.get(hourKey) || "0");
   const dayCount = Number(await env.RATE_LIMITS.get(dayKey) || "0");
   const globalCount = Number(await env.RATE_LIMITS.get(globalDayKey) || "0");
-  if (hourCount >= 2) return json({ error: "Limit reached: maximum 2 built-in AI generations per hour from this network." }, 429, origin);
-  if (dayCount >= 5) return json({ error: "Limit reached: maximum 5 built-in AI generations per day from this network." }, 429, origin);
+  if (hourCount >= 5) return json({ error: "Лимит встроенного ИИ: не более 5 генераций в час с одной сети. Попробуй после начала следующего часа.", retryAfterSeconds: 3600 - (now.getUTCMinutes() * 60 + now.getUTCSeconds()) }, 429, origin);
+  if (dayCount >= 15) return json({ error: "Лимит встроенного ИИ: не более 15 генераций в день с одной сети. Попробуй завтра.", retryAfterSeconds: 86400 - (now.getUTCHours() * 3600 + now.getUTCMinutes() * 60 + now.getUTCSeconds()) }, 429, origin);
   if (globalCount >= globalLimit) return json({ error: nativeMode ? "The shared daily native AI capacity is used up. Try tomorrow." : "The shared daily AI capacity is used up. Try tomorrow or connect your own API key." }, 429, origin);
 
   const declaredLength = Number(request.headers.get("Content-Length") || "0");
