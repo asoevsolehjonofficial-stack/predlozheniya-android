@@ -8,7 +8,7 @@ This directory is a **real Android application project**, separate from the exis
 - Add notes, edit a note by tapping it, and delete a note by long-pressing it.
 - Persist notes locally in app-private SharedPreferences as JSON.
 - No network permission, account, paid API, or personal-data upload.
-- Minimum Android API 23 (Android 6.0); compile/target SDK 35.
+- Minimum Android API 21 (Android 5.0); compile/target SDK 35. The same APK is intended to run on Android 5.0+; features that depend on newer platform APIs must be guarded at runtime.
 
 ## Build locally
 
