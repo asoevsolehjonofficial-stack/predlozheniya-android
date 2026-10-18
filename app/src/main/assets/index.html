@@ -334,7 +334,7 @@ async function runAIBuild(editInstruction=''){
     if(!/^(app\/src\/main\/java\/tj\/as\/generated\/[A-Za-z0-9_$/.-]+\.java|app\/src\/main\/res\/values\/[A-Za-z0-9_.-]+\.xml)$/.test(file.path)||file.path.includes('..'))throw Error('ИИ вернул путь вне разрешённой папки исходников: '+file.path);
    }
    const pretty=JSON.stringify(nativeProject,null,2);
-   $('code').textContent=pretty;$('spec').textContent=instruction;generatedHTML='';
+   $('code').textContent=pretty;$('spec').textContent=instruction;generatedHTML=pretty;
    $('copyCode').disabled=false;
    $('download').disabled=true;$('downloadPwa').disabled=true;$('downloadAndroidProject').disabled=true;
    $('state').textContent='Нативный исходный код создан';
