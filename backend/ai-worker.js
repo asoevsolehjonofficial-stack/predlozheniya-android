@@ -139,6 +139,7 @@ export class RateLimitCoordinator {
       if (!item || typeof item.key !== "string" || item.key.length > 180 ||
           !Number.isInteger(item.limit) || item.limit < 1 ||
           !Number.isInteger(item.ttlSeconds) || item.ttlSeconds < 1 || item.ttlSeconds > 172800 ||
+          typeof item.window !== "string" || item.window.length > 16 ||
           !["hour", "day", "global"].includes(item.scope)) {
         return Response.json({ error: "Invalid rate-limit counter." }, { status: 400 });
       }
@@ -149,7 +150,7 @@ export class RateLimitCoordinator {
       const rows = [];
       for (const item of counters) {
         const stored = await txn.get(item.key);
-        const active = stored && Number.isFinite(stored.expiresAt) && stored.expiresAt > now;
+        const active = stored && stored.window === item.window && Number.isFinite(stored.expiresAt) && stored.expiresAt > now;
         const current = active ? stored : { count: 0, expiresAt: 0 };
         if (current.count >= item.limit) {
           return {
@@ -165,6 +166,7 @@ export class RateLimitCoordinator {
       for (const row of rows) {
         await txn.put(row.item.key, {
           count: row.current.count + 1,
+          window: row.item.window,
           expiresAt: row.active ? row.current.expiresAt : now + row.item.ttlSeconds * 1000
         });
       }
@@ -214,6 +216,8 @@ async function generate(request, env) {
   const now = new Date();
   const hourKey = "asai:ip-hour:" + ipHash;
   const dayKey = "asai:ip-day:" + ipHash;
+  const hourWindow = now.toISOString().slice(0, 13);
+  const day = now.toISOString().slice(0, 10);
   const globalDayKey = nativeMode ? "asai:global-native-day" : "asai:global-day";
   const globalLimit = nativeMode ? 30 : 100;
 
@@ -255,9 +259,9 @@ async function generate(request, env) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         counters: [
-          { key: hourKey, limit: 5, ttlSeconds: 7200, scope: "hour" },
-          { key: dayKey, limit: 15, ttlSeconds: 172800, scope: "day" },
-          { key: globalDayKey, limit: globalLimit, ttlSeconds: 172800, scope: "global" }
+          { key: hourKey, limit: 5, ttlSeconds: 7200, window: hourWindow, scope: "hour" },
+          { key: dayKey, limit: 15, ttlSeconds: 172800, window: day, scope: "day" },
+          { key: globalDayKey, limit: globalLimit, ttlSeconds: 172800, window: day, scope: "global" }
         ]
       })
     });
@@ -267,8 +271,8 @@ async function generate(request, env) {
     return json({ error: "AI rate limiting is temporarily unavailable. Try again later." }, 503, origin);
   }
   if (!quota.allowed) {
-    if (quota.scope === "hour") return json({ error: "Лимит встроенного ИИ: не более 5 генераций в час с одной сети. Попробуй после начала следующего часа.", retryAfterSeconds: quota.retryAfterSeconds }, 429, origin);
-    if (quota.scope === "day") return json({ error: "Лимит встроенного ИИ: не более 15 генераций в день с одной сети. Попробуй завтра.", retryAfterSeconds: quota.retryAfterSeconds }, 429, origin);
+    if (quota.scope === "hour") return json({ error: "Лимит встроенного ИИ: не более 5 генераций в час с одной сети. Попробуй после начала следующего часа.", retryAfterSeconds: 3600 - (now.getUTCMinutes() * 60 + now.getUTCSeconds()) }, 429, origin);
+    if (quota.scope === "day") return json({ error: "Лимит встроенного ИИ: не более 15 генераций в день с одной сети. Попробуй завтра.", retryAfterSeconds: 86400 - (now.getUTCHours() * 3600 + now.getUTCMinutes() * 60 + now.getUTCSeconds()) }, 429, origin);
     return json({ error: nativeMode ? "The shared daily native AI capacity is used up. Try tomorrow." : "The shared daily AI capacity is used up. Try tomorrow or connect your own API key." }, 429, origin);
   }
 
