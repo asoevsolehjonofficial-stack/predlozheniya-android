@@ -426,6 +426,34 @@ async function handleFail(request, requestId, env) {
   return json({ ok: true, requeued: false });
 }
 
+async function readBytesLimited(request, maxBytes) {
+  const reader = request.body?.getReader();
+  if (!reader) return new Uint8Array();
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel();
+        return null;
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
 async function handlePreviewUpload(request, env, requestId) {
   if (!(await verifyGitHubOidc(request))) return json({ error: "Unauthorized." }, 401);
   const job = await getJob(env, requestId);
@@ -433,8 +461,9 @@ async function handlePreviewUpload(request, env, requestId) {
   if (!(request.headers.get("Content-Type") || "").toLowerCase().startsWith("image/png")) return json({ error: "Preview must be a PNG screenshot." }, 415);
   const declaredLength = Number(request.headers.get("Content-Length") || "0");
   if (declaredLength > 4 * 1024 * 1024) return json({ error: "Preview screenshot is too large." }, 413);
-  const bytes = new Uint8Array(await request.arrayBuffer());
-  if (bytes.length < 8 || bytes.length > 4 * 1024 * 1024 || bytes[0] !== 137 || bytes[1] !== 80 || bytes[2] !== 78 || bytes[3] !== 71 || bytes[4] !== 13 || bytes[5] !== 10 || bytes[6] !== 26 || bytes[7] !== 10) return json({ error: "Invalid PNG screenshot." }, 400);
+  const bytes = await readBytesLimited(request, 4 * 1024 * 1024);
+  if (!bytes) return json({ error: "Preview screenshot is too large." }, 413);
+  if (bytes.length < 8 || bytes[0] !== 137 || bytes[1] !== 80 || bytes[2] !== 78 || bytes[3] !== 71 || bytes[4] !== 13 || bytes[5] !== 10 || bytes[6] !== 26 || bytes[7] !== 10) return json({ error: "Invalid PNG screenshot." }, 400);
   const record = JSON.stringify({ base64: bytesToBase64(bytes), createdAt: Date.now() });
   if (new TextEncoder().encode(record).byteLength > 6 * 1024 * 1024) return json({ error: "Preview screenshot exceeds the storage limit." }, 413);
   await env.JOBS.put("preview:" + requestId, record, { expirationTtl: 86400 });
