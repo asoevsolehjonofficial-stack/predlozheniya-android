@@ -75,7 +75,7 @@ jobs:
           assert "connect-src 'none'" in build_workflow, "Generated APK CSP should block network calls by default"
           assert 'id="aiTest"' in html, "Website should expose a real AI API connection test"
           assert "as-app-builder-ai.asoev-solehjon-official.workers.dev" in html, "Website should use the dedicated built-in AI Worker"
-          assert "MAX_PROMPT_CHARS" in ai_backend and "RATE_LIMITS" in ai_backend, "Built-in AI Worker must enforce bounded prompts and rate limits"
+          assert "MAX_PROMPT_CHARS" in ai_backend and "RATE_LIMITER" in ai_backend and "RateLimitCoordinator" in ai_backend and "storage.transaction" in ai_backend, "Built-in AI Worker must use atomic Durable Object quotas and bounded prompts"
           assert "Origin is not allowed" in ai_backend, "Built-in AI Worker must validate website origin"
           assert "verifyGitHubOidc" in signing_backend and "AES-GCM" in signing_backend, "Signing service must verify GitHub OIDC and encrypt key material"
           assert "x-goog-api-key" in html, "Google Gemini requests should send API keys in the header"
