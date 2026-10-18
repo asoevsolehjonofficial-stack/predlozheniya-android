@@ -238,3 +238,8 @@ Pull request: #27 — https://github.com/asoevsolehjonofficial-stack/predlozheni
 
 - The first backend validation run on an earlier PR #36 commit failed with exact log: `SyntaxError: The requested module '../src/index.js' does not provide an export named 'STALE_BUILD_MS'`. Removing this numeric constant from module exports is required for the Cloudflare runtime, so the unit test now defines the 35-minute threshold locally instead of importing a runtime-incompatible value.
 - The latest head `aba03ec15d4e2387d3c4830f4625102a024b747e` passed [Quality/security #39162034704](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39162034704) and [Validate web app #39162034716](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39162034716). AUTO CHECK AI is still pending/in progress at the time of this update.
+
+## Stage 4 concurrency correction (2026-10-19)
+
+- The main E2E run [#39162205302](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39162205302) was cancelled while the feature-branch E2E run queued under the same concurrency group. GitHub keeps only one pending run per concurrency group, so the branch's push replaced the main run even though cancel-in-progress was false.
+- Changed the native E2E concurrency key to include `github.ref`, preventing feature-branch runs from replacing the required main-branch production-path run. The workflow still serializes runs within the same ref.
