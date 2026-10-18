@@ -7,7 +7,7 @@ Pull request: #24 — https://github.com/asoevsolehjonofficial-stack/predlozheni
 ## Release checklist (11 acceptance criteria)
 
 - [ ] 1. Production site works without console/network errors — NOT VERIFIED in this session.
-- [ ] 2. Required GitHub Actions are green with no cancelled/skipped required checks — NOT VERIFIED; workflow-run listing/log retrieval is unavailable in the currently exposed GitHub tool set.
+- [ ] 2. Required GitHub Actions are green with no cancelled/skipped required checks — recent run 39152068438 and 39152068311 failed; fix is pushed to branch but new CI results are pending.
 - [ ] 3. Real prompt → AI native Java/XML project → source validation — implementation path exists; real production generation and compiler validation NOT VERIFIED.
 - [ ] 4. APK builds and passes integrity checks — workflow contains build/signature/checksum steps; successful run NOT VERIFIED.
 - [ ] 5. APK installs and launches on Android 5/API 21 and Android 15/API 35 — API 35 workflow path exists; API 21 emulator run and successful run evidence NOT VERIFIED.
@@ -15,7 +15,7 @@ Pull request: #24 — https://github.com/asoevsolehjonofficial-stack/predlozheni
 - [ ] 7. User can download APK and source from the site — authenticated download flow exists in code; production end-to-end proof NOT VERIFIED.
 - [ ] 8. Production AI quotas verified with real requests — unit test covers the fifth request returning 429; live quota test NOT RUN.
 - [ ] 9. Security audit of dependencies, secrets/history, input validation, rate limits, request size and CORS — partial static checks exist; full audit NOT COMPLETE.
-- [ ] 10. PR #24 merged and production updated — PR remains open; no merge or deploy performed.
+- [ ] 10. PR #24 merged and production updated — PR #24 was merged at 2026-10-18T18:01:00Z; production deployment and health verification are NOT CONFIRMED. Follow-up fix must go through a new PR because #24 is already merged.
 - [ ] 11. Three production end-to-end scenarios (simple, multi-screen, persistent data) — NOT RUN.
 
 ## Failure-log automation (2026-10-18)
@@ -43,3 +43,22 @@ Pull request: #24 — https://github.com/asoevsolehjonofficial-stack/predlozheni
 - Do not force-push, delete branches/history/data, or expose secrets.
 - Do not claim completion without CI logs, APK artifacts, emulator screenshots and production evidence.
 - Do not merge PR #24 until required checks and release criteria pass.
+
+## Stage 2 — Canonical HTML source and CI drift prevention
+
+### Changes pushed to `fix/ai-quota-native-preview`
+- Added `scripts/sync-assets.sh`: default mode copies root `index.html` to `app/src/main/assets/index.html`; `--check` verifies byte-for-byte identity and prints a diff plus repair command on drift.
+- Updated `.github/workflows/quality-security.yml` to run the shared script in `--check` mode and include the script in path filters.
+- Updated `.github/workflows/manual-import-smoke.yml` to use the same canonical sync check before browser smoke tests and include the script in path filters.
+- The real Android screenshot-preview block remains in the canonical root HTML; current branch copies of both HTML files are identical (blob SHA `35f2b0f6fdc039afab8c8e1cae939dc191bfab59`).
+- Root cause in the failed run is proven by its diff: that PR merge checkout had the native screenshot-preview block in root `index.html` but not in the Android asset. The latest inspected branch version already had both files identical; the new script makes the source-of-truth and guard explicit.
+
+### CI status and PR handling
+- Confirmed failed run IDs: [39152068311](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39152068311) and [39152068438](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39152068438).
+- Failure evidence: manual import workflow's asset equality assertion failed; quality workflow's `cmp` failed and showed the missing native screenshot-preview block in the Android asset.
+- PR #24 is already merged (merge timestamp `2026-10-18T18:01:00Z`), so it cannot be updated as an open PR. The follow-up fix is committed to the same head branch; a new follow-up PR is required to run pull-request CI for these changes.
+- The new CI results are pending/not yet confirmed. Checks skipped after the early synchronization failure must be inspected after the new workflow run completes.
+
+### Current status
+- Stage 2: IMPLEMENTED IN BRANCH; awaiting follow-up PR CI evidence.
+- No claim that all 11 release acceptance criteria are complete.
