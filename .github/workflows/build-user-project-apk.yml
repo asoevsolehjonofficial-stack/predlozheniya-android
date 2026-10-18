@@ -16,6 +16,7 @@ on:
       - "app/build.gradle"
       - "app/src/main/AndroidManifest.xml"
       - "app/src/main/assets/index.html"
+      - "native-builder/**"
   schedule:
     # Primary poll every five minutes plus an offset fallback. GitHub may delay
     # scheduled events under load; the worker chain drains additional jobs.
