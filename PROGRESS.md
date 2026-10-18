@@ -286,3 +286,10 @@ Pull request: #27 — https://github.com/asoevsolehjonofficial-stack/predlozheni
 - Latest native matrix [#39163318356](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39163318356) verified the Origin-header fix: APK upload/download round-trip passed for all six jobs that reached it, and real APK build/signature/checksum validation passed.
 - The screenshot step then failed with `adb: need APK file on command line` even though the APK exists and its SHA-256/signature checks passed. The log showed the emulator action executing each script line as a separate `/usr/bin/sh -c` process; variables assigned on previous lines (`APK`, `PACKAGE`) were therefore empty in the `adb install` process.
 - Reworked the emulator script to execute as one `bash -euo pipefail -c` command and moved the normalized package ID to a matrix-derived job environment variable `PACKAGE_NAME`. This preserves the absolute APK path and package name in the same shell. Latest native rerun is pending; screenshot criteria remain unverified until all six jobs and artifacts pass.
+
+
+## Stage 5 continuation — Android screenshot filesystem fix (2026-10-19)
+
+- Native E2E [run #39163723547](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39163723547) confirmed the one-shell fix: APK install succeeded, the app launched, and the activity check passed. The next exact failure was `Error opening file: /sdcard/native-e2e.png (Read-only file system)`, followed by `adb: error: remote object '/sdcard/native-e2e.png' does not exist`.
+- Changed the screenshot path to writable `/data/local/tmp/native-e2e.png` for both `screencap` and `adb pull`. Removed Bash nounset from the nested shell to avoid a runner `PS1: unbound variable` startup warning while retaining `-e` and `pipefail`.
+- Latest native matrix rerun is pending. APK build, signature/checksum validation, local API APK upload/download, app installation and launch are proven for the jobs that reached those steps; screenshot upload/download still requires a fully green rerun.
