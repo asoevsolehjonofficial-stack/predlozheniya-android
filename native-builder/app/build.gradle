@@ -12,11 +12,6 @@ android {
         targetSdk 35
         versionCode 1
         versionName '0.1.0'
-        testInstrumentationRunner 'android.test.InstrumentationTestRunner'
-    }
-
-    defaultConfig {
-        // AndroidX instrumentation runner supports modern SDKs and API 21 emulators.
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 
