@@ -56,7 +56,12 @@ test("built-in AI returns generated HTML and rate-limits requests", async () => 
   assert.match(result.text, /AI works/);
   assert.equal(result.provider, "cloudflare");
   assert.equal((await call("/api/ai/generate", options)).status, 200);
-  assert.equal((await call("/api/ai/generate", options)).status, 429);
+  assert.equal((await call("/api/ai/generate", options)).status, 200);
+  assert.equal((await call("/api/ai/generate", options)).status, 200);
+  assert.equal((await call("/api/ai/generate", options)).status, 200);
+  const limited = await call("/api/ai/generate", options);
+  assert.equal(limited.status, 429);
+  assert.match((await limited.json()).error, /5 генераций в час/);
 });
 
 test("built-in AI rejects empty, oversized, and secret-bearing prompts", async () => {

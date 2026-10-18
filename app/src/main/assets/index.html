@@ -346,6 +346,15 @@ async function runAIBuild(editInstruction=''){
    if(!hasMainActivity)throw Error('ИИ не создал обязательный файл MainActivity.java.');
    const pretty=JSON.stringify(nativeProject,null,2);
    $('code').textContent=pretty;$('spec').textContent=instruction;generatedHTML=pretty;
+   // Never render a native Android source bundle as if it were a running app.
+   // A faithful preview must come from the compiled APK/emulator, not HTML.
+   const preview=$('previewPane');
+   preview.replaceChildren();
+   const nativeNotice=document.createElement('div');
+   nativeNotice.className='empty native-preview-notice';
+   nativeNotice.innerHTML='<div style="font-size:34px;margin-bottom:12px">🤖</div><strong>Нативный Android-проект создан</strong><p style="max-width:240px;margin:10px auto">Это Java-код настоящего Android-приложения. HTML-макет не подменяет его внешний вид. Собери APK, чтобы проверить приложение на устройстве.</p><p style="font-size:11px;opacity:.8">После сборки здесь должен отображаться снимок экрана запущенного APK.</p>';
+   preview.append(nativeNotice);
+   preview.dataset.previewType='native-source';
    $('copyCode').disabled=false;
    $('download').disabled=true;$('downloadPwa').disabled=true;$('downloadAndroidProject').disabled=true;$('saveProject').disabled=true;if(editButton)editButton.disabled=true;
    $('state').textContent='Нативный исходный код создан';
@@ -361,7 +370,7 @@ async function runAIBuild(editInstruction=''){
   const staticIssues=inspectGeneratedHTML(code);
   generatedHTML=code;generatedSpec=instruction;
   $('code').textContent=code;$('spec').textContent=generatedSpec;
-  $('previewPane').replaceChildren();const frame=document.createElement('iframe');frame.title='Живой предпросмотр приложения';frame.setAttribute('sandbox','allow-scripts');frame.srcdoc=code;$('previewPane').append(frame);
+  $('previewPane').replaceChildren();delete $('previewPane').dataset.previewType;const frame=document.createElement('iframe');frame.title='Живой предпросмотр веб-приложения';frame.setAttribute('sandbox','allow-scripts');frame.srcdoc=code;$('previewPane').append(frame);
   $('download').disabled=false;$('downloadPwa').disabled=false;$('downloadAndroidProject').disabled=false;$('saveProject').disabled=false;$('copyCode').disabled=false;
   if(editButton)editButton.disabled=false;
   $('state').textContent=editInstruction?'Изменения применены':'Приложение готово';
@@ -597,6 +606,27 @@ $('buildApk').addEventListener('click',async()=>{
      }catch(e){
       buildStatus('Связь прервалась во время скачивания APK. Повторяю загрузку автоматически; не запускай новую сборку.');
       await new Promise(resolve=>setTimeout(resolve,5000));
+     }
+    }
+    if(nativeMode){
+     if(state.previewUrl){
+      try{
+       const previewResponse=await fetch(new URL(state.previewUrl,cfg.url).href,{headers:{'Authorization':'Bearer '+downloadToken,'Accept':'image/png'}});
+       if(previewResponse.ok){
+        const previewBlob=await previewResponse.blob();
+        if(previewBlob.type==='image/png'){
+         const previewImage=document.createElement('img');
+         previewImage.alt='Снимок экрана настоящего Android-приложения, запущенного в эмуляторе Android 15';
+         previewImage.style.cssText='display:block;width:100%;height:100%;object-fit:contain;background:#111';
+         previewImage.src=URL.createObjectURL(previewBlob);
+         const pane=$('previewPane');pane.replaceChildren(previewImage);pane.dataset.previewType='native-screenshot';
+         $('activityLive').textContent='Нативное приложение проверено в Android-эмуляторе';
+         addActivity('Реальный предпросмотр Android','Снимок получен после запуска собранного APK в эмуляторе Android 15. Это не HTML-макет.','done');
+        }
+       }
+      }catch(previewError){addActivity('Снимок экрана недоступен','APK собран, но снимок экрана не удалось загрузить. Сам APK можно скачать.','error');}
+     }else{
+      addActivity('Снимок экрана недоступен','Сборка не вернула снимок Android-эмулятора. Предпросмотр не заменяется HTML-макетом.','error');
      }
     }
     deliverBlob(blob,'as-app-'+requestId.slice(0,8)+'.apk');

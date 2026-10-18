@@ -391,7 +391,7 @@ async function handleStatus(request, env, cors, requestId) {
   const job = await authorizedJob(request, env, requestId);
   if (!job) return json({ error: "Build request not found or access token is invalid." }, 404, cors.origin);
   if (job.status === "success" && job.apkUploadedAt) {
-    return json({ requestId, status: "success", message: "APK is ready.", downloadUrl: "/api/download?requestId=" + requestId, logs: null }, 200, cors.origin);
+    return json({ requestId, status: "success", message: "APK is ready.", downloadUrl: "/api/download?requestId=" + requestId, ...(job.previewUploadedAt ? { previewUrl: "/api/preview?requestId=" + requestId } : {}), logs: null }, 200, cors.origin);
   }
   if (job.status === "failed") return json({ requestId, status: "failed", message: "Build failed. Please submit the project again." }, 200, cors.origin);
   const messages = { queued: "Waiting for the free build queue.", claimed: "Build worker accepted the request.", building: "Building and verifying the APK." };
@@ -424,6 +424,37 @@ async function handleFail(request, requestId, env) {
   await env.JOBS.put("job:" + requestId, JSON.stringify(job), { expirationTtl: 86400 });
   await env.JOBS.delete("apk:" + requestId);
   return json({ ok: true, requeued: false });
+}
+
+async function handlePreviewUpload(request, env, requestId) {
+  if (!(await verifyGitHubOidc(request))) return json({ error: "Unauthorized." }, 401);
+  const job = await getJob(env, requestId);
+  if (!job || job.type !== "native" || !job.sourceFetchedAt || job.status === "failed") return json({ error: "Native build request not found." }, 404);
+  if (!(request.headers.get("Content-Type") || "").toLowerCase().startsWith("image/png")) return json({ error: "Preview must be a PNG screenshot." }, 415);
+  const declaredLength = Number(request.headers.get("Content-Length") || "0");
+  if (declaredLength > 4 * 1024 * 1024) return json({ error: "Preview screenshot is too large." }, 413);
+  const bytes = new Uint8Array(await request.arrayBuffer());
+  if (bytes.length < 8 || bytes.length > 4 * 1024 * 1024 || bytes[0] !== 137 || bytes[1] !== 80 || bytes[2] !== 78 || bytes[3] !== 71 || bytes[4] !== 13 || bytes[5] !== 10 || bytes[6] !== 26 || bytes[7] !== 10) return json({ error: "Invalid PNG screenshot." }, 400);
+  const record = JSON.stringify({ base64: bytesToBase64(bytes), createdAt: Date.now() });
+  if (new TextEncoder().encode(record).byteLength > 6 * 1024 * 1024) return json({ error: "Preview screenshot exceeds the storage limit." }, 413);
+  await env.JOBS.put("preview:" + requestId, record, { expirationTtl: 86400 });
+  job.previewUploadedAt = Date.now();
+  await env.JOBS.put("job:" + requestId, JSON.stringify(job), { expirationTtl: 86400 });
+  return json({ ok: true });
+}
+
+async function handlePreview(request, env, cors, requestId) {
+  const job = await authorizedJob(request, env, requestId);
+  if (!job || job.type !== "native" || !job.previewUploadedAt) return json({ error: "Native app preview is not available yet." }, 404, cors.origin);
+  const raw = await env.JOBS.get("preview:" + requestId);
+  if (!raw) return json({ error: "Preview screenshot expired." }, 410, cors.origin);
+  let record;
+  try { record = JSON.parse(raw); } catch { record = null; }
+  if (!record || typeof record.base64 !== "string") return json({ error: "Stored preview is invalid." }, 502, cors.origin);
+  let bytes;
+  try { bytes = base64ToBytes(record.base64); } catch { bytes = null; }
+  if (!bytes || bytes.length < 8 || bytes.length > 4 * 1024 * 1024 || bytes[0] !== 137 || bytes[1] !== 80 || bytes[2] !== 78 || bytes[3] !== 71) return json({ error: "Stored preview screenshot failed validation." }, 502, cors.origin);
+  return new Response(bytes, { status: 200, headers: { "content-type": "image/png", "content-length": String(bytes.length), "cache-control": "no-store", "x-content-type-options": "nosniff", "content-security-policy": "default-src 'none'; frame-ancestors 'none'; base-uri 'none'", "access-control-allow-origin": cors.origin, "vary": "Origin" } });
 }
 
 async function handleDownload(request, env, cors, requestId) {
@@ -476,6 +507,7 @@ export default {
       if (url.pathname === "/api/internal/fail" && request.method === "POST") return await handleFail(request, url.searchParams.get("requestId") || "", env);
       if (url.pathname === "/api/internal/source" && request.method === "GET") return await handleSource(request, env, url.searchParams.get("requestId") || "");
       if (url.pathname === "/api/internal/upload" && request.method === "PUT") return await handleUpload(request, env, url.searchParams.get("requestId") || "");
+      if (url.pathname === "/api/internal/preview" && request.method === "PUT") return await handlePreviewUpload(request, env, url.searchParams.get("requestId") || "");
       if (request.method === "OPTIONS") {
         if (!cors.ok) return new Response(null, { status: 403 });
         return new Response(null, {
@@ -505,6 +537,7 @@ export default {
         return await handleBuild(request, env, cors);
       }
       if (url.pathname === "/api/status" && request.method === "GET") return await handleStatus(request, env, cors, url.searchParams.get("requestId") || "");
+      if (url.pathname === "/api/preview" && request.method === "GET") return await handlePreview(request, env, cors, url.searchParams.get("requestId") || "");
       if (url.pathname === "/api/download" && request.method === "GET") return await handleDownload(request, env, cors, url.searchParams.get("requestId") || "");
       return json({ error: "Not found." }, 404, cors.origin);
     } catch (error) {
