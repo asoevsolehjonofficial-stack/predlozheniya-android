@@ -55,6 +55,12 @@ jobs:
       - name: Verify live backend health
         run: |
           set -euo pipefail
+          # The production Worker validates GitHub OIDC claims for refs/heads/main only.
+          # Fail before contacting production if someone dispatches this workflow from an audit/feature branch.
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "::error::Production APK queue workflow must be dispatched from main; current ref is $GITHUB_REF."
+            exit 1
+          fi
           HEALTH="$(curl --fail --silent --show-error --max-time 20 "$BUILD_API_URL/api/health")"
           jq -e '.ok == true and .buildEnabled == true' <<< "$HEALTH" >/dev/null
           echo "Backend health is OK and APK builds are enabled."
