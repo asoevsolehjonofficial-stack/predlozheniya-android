@@ -6,6 +6,7 @@ on:
     paths:
       - "index.html"
       - "app/src/main/assets/index.html"
+      - "scripts/sync-assets.sh"
       - ".github/workflows/manual-import-smoke.yml"
       - ".github/scripts/manual-import-browser-test.mjs"
   pull_request:
@@ -33,14 +34,14 @@ jobs:
         run: |
           npm install --no-save --no-package-lock playwright
           npx playwright install --with-deps chromium
-      - name: Check synchronized assets and manual import wiring
+      - name: Check canonical website-to-Android asset synchronization
+        run: bash scripts/sync-assets.sh --check
+      - name: Check manual import wiring
         run: |
           node <<'NODE'
           const fs = require('node:fs');
           const assert = require('node:assert/strict');
           const web = fs.readFileSync('index.html', 'utf8');
-          const android = fs.readFileSync('app/src/main/assets/index.html', 'utf8');
-          assert.equal(web, android, 'Website and Android HTML assets must be identical');
 
           for (const id of ['manualHtml', 'importManualHtml', 'clearManualHtml']) {
             assert.ok(web.includes('id="' + id + '"') || web.includes("id='" + id + "'"),
