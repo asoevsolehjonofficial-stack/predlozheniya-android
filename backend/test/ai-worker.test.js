@@ -84,7 +84,7 @@ test("native Android source generation uses the dedicated code model", async () 
   const env = fakeEnv(async (model, input) => {
     calledModel = model;
     assert.match(input.messages[0].content, /no WebView/i);
-    return { response: JSON.stringify({ files: [{ path: "app/src/main/java/tj/as/generated/MainActivity.java", content: "public class MainActivity {}" }] }) };
+    return { response: { files: [{ path: "app/src/main/java/tj/as/generated/MainActivity.java", content: "public class MainActivity {}" }] } };
   });
   const response = await call("/api/ai/native-generate", {
     method: "POST",
