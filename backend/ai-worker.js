@@ -176,6 +176,52 @@ export class RateLimitCoordinator {
   }
 }
 
+
+const CI_OIDC_ISSUER = "https://token.actions.githubusercontent.com";
+const CI_OIDC_AUDIENCE = "as-app-builder-ai-ci";
+const CI_OIDC_REPOSITORY = "asoevsolehjonofficial-stack/predlozheniya-android";
+const CI_OIDC_WORKFLOW = CI_OIDC_REPOSITORY + "/.github/workflows/native-ai-smoke.yml@refs/heads/main";
+let ciJwksCache = null;
+let ciJwksExpiresAt = 0;
+
+function decodeCiJwtPart(part) {
+  return JSON.parse(atob(part.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(part.length / 4) * 4, "=")));
+}
+
+async function verifyCiOidc(request) {
+  const authorization = request.headers.get("Authorization") || "";
+  const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+  const parts = token.split(".");
+  if (parts.length !== 3) return false;
+  let header, claims, signature;
+  try {
+    header = decodeCiJwtPart(parts[0]);
+    claims = decodeCiJwtPart(parts[1]);
+    signature = Uint8Array.from(atob(parts[2].replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(parts[2].length / 4) * 4, "=")), c => c.charCodeAt(0));
+  } catch { return false; }
+  const now = Math.floor(Date.now() / 1000);
+  const audienceValid = claims.aud === CI_OIDC_AUDIENCE || (Array.isArray(claims.aud) && claims.aud.includes(CI_OIDC_AUDIENCE));
+  if (header.alg !== "RS256" || claims.iss !== CI_OIDC_ISSUER || !audienceValid ||
+      claims.repository !== CI_OIDC_REPOSITORY || claims.workflow_ref !== CI_OIDC_WORKFLOW ||
+      claims.ref !== "refs/heads/main" || !Number.isFinite(claims.exp) || claims.exp <= now ||
+      !Number.isFinite(claims.iat) || claims.iat > now + 60 ||
+      (Number.isFinite(claims.nbf) && claims.nbf > now)) return false;
+  try {
+    if (!ciJwksCache || Date.now() >= ciJwksExpiresAt) {
+      const response = await fetch(CI_OIDC_ISSUER + "/.well-known/jwks");
+      if (!response.ok) return false;
+      ciJwksCache = await response.json();
+      ciJwksExpiresAt = Date.now() + 60 * 60 * 1000;
+    }
+    const jwk = (ciJwksCache.keys || []).find(key => key.kid === header.kid && key.kty === "RSA");
+    if (!jwk) return false;
+    const key = await crypto.subtle.importKey("jwk", jwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
+    return await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, signature, new TextEncoder().encode(parts[0] + "." + parts[1]));
+  } catch {
+    return false;
+  }
+}
+
 function safeSecretEqual(provided, expected) {
   if (typeof provided !== "string" || typeof expected !== "string" || provided.length !== expected.length || !expected.length) return false;
   let diff = 0;
@@ -328,6 +374,26 @@ export default {
         }
       });
     }
+
+    if (url.pathname === "/api/ci/native-fixture" && request.method === "POST") {
+      // Dedicated CI-only fixture endpoint. It uses a short-lived, signed GitHub
+      // OIDC token bound to this repository and this exact workflow on main.
+      // It never invokes inference and never reads or increments production quotas.
+      if (origin) return json({ error: "CI fixture endpoint does not accept browser origins." }, 403, "");
+      if (!(await verifyCiOidc(request))) return json({ error: "Unauthorized CI workflow." }, 401, "");
+      if (!(request.headers.get("Content-Type") || "").toLowerCase().startsWith("application/json")) {
+        return json({ error: "Content-Type must be application/json." }, 415, "");
+      }
+      const raw = await readLimited(request, 24 * 1024);
+      if (raw === null) return json({ error: "Request body is too large." }, 413, "");
+      let payload;
+      try { payload = JSON.parse(raw); } catch { payload = null; }
+      if (!payload || typeof payload.prompt !== "string" || !payload.prompt.trim() || payload.prompt.length > MAX_PROMPT_CHARS) {
+        return json({ error: "A valid bounded prompt is required." }, 400, "");
+      }
+      return json({ text: ciFixture(payload.prompt, true), model: "ci-fixture-v1", provider: "test-fixture", mode: "native-android-source" }, 200, "");
+    }
+
     if (url.pathname === "/api/health" && request.method === "GET") {
       if (origin && origin !== ALLOWED_ORIGIN) return json({ error: "Origin is not allowed." }, 403, "");
       const providerConfig = getProvider(env, false);
