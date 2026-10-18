@@ -68,20 +68,20 @@ Pull request: #24 — https://github.com/asoevsolehjonofficial-stack/predlozheni
 
 ### Confirmed checks
 - PR #27 is open, not Draft, base `main`, head branch `fix/ai-quota-native-preview`.
-- Current head after workflow updates: `30a2784905ad66fa0e4694417460b6eb20f652f4`.
+- Commit `30a2784905ad66fa0e4694417460b6eb20f652f4` added manual dispatch to the diagnostics workflow; the subsequent progress-recording commit moved the branch head to `270b050b8aa9f4fac68426d44b569226fe76ec28`.
 - `quality-security.yml` has `pull_request: branches: [main]` and no path filter. The PR base matches; its changed files are not excluded by a path filter.
 - `manual-import-smoke.yml` has a PR path filter. Its list previously omitted `scripts/sync-assets.sh`; added that path. The workflow file itself is also included in the path list.
 - Push triggers for quality/security and manual import are restricted to `main`, so a push to the feature branch does not satisfy those push triggers. Their PR triggers should still match PR #27.
 - Checked all 12 workflow files on the branch: each now has `workflow_dispatch`. The previously missing manual dispatch was added to `pr-failure-diagnostics.yml`.
-- GitHub Actions API query for branch `fix/ai-quota-native-preview` returned no run associated with the current head SHA. Thus there is still no real run to inspect and no green CI claim is justified.
+- Confirmed current branch/PR head SHA: `270b050b8aa9f4fac68426d44b569226fe76ec28`. Its check-runs API response contains only a successful Cloudflare Pages check; GitHub Actions run search contains no Actions run for this SHA. Thus there is still no real Actions run to inspect and no green CI claim is justified.
 
 ### Token diagnosis — evidence limit
 - The commits were created through the connected GitHub integration's file/contents update operations; commit metadata shows the repository account as author/committer.
 - GitHub commit metadata does not expose which credential authenticated the API write. The available connector does not expose the token type or a POST workflow-dispatch action. Therefore I cannot prove from available evidence that the credential was specifically `GITHUB_TOKEN`; missing runs are consistent with workflow-event suppression by an automation token, but that exact token identity is NOT CONFIRMED.
-- No manual run can be launched from the current connector because it exposes workflow-run reads/reruns but not the Actions `workflow_dispatch` endpoint. This is a tooling limitation, not evidence of a code test failure.
+- The connected GitHub tools expose read operations and rerun-existing-run actions, but no workflow-dispatch action; no existing Actions run belongs to the current SHA to rerun. This is a tooling limitation, not evidence of a code test failure.
 
 ### User action required to create the first authoritative run
-1. Open [PR #27](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/pull/27) and verify the latest head is `30a2784905ad66fa0e4694417460b6eb20f652f4`.
+1. Open [PR #27](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/pull/27) and verify the latest head is `270b050b8aa9f4fac68426d44b569226fe76ec28`.
 2. Open [Quality and security checks](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/workflows/quality-security.yml), choose **Run workflow**, select branch `fix/ai-quota-native-preview`, and start it.
 3. Repeat for [Manual HTML import smoke test](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/workflows/manual-import-smoke.yml).
 4. If GitHub displays **Approve and run workflows**, click it. Then send the resulting run links/IDs here so I can read the job logs and fix demonstrated failures.
