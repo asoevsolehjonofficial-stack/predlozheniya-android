@@ -2,7 +2,7 @@ name: Quality and security checks
 
 on:
   push:
-    branches: [main]
+    branches: [main, "fix/**"]
     paths:
       - "index.html"
       - "app/src/main/assets/index.html"
@@ -17,6 +17,7 @@ on:
       - ".github/workflows/deploy-backend.yml"
   pull_request:
     branches: [main]
+    types: [opened, reopened, synchronize, ready_for_review]
   workflow_dispatch:
 
 permissions:
