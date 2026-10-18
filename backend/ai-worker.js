@@ -112,8 +112,9 @@ async function generate(request, env) {
       temperature: 0.2
     });
     const text = typeof result?.response === "string" ? result.response :
-      (result?.choices || []).map(choice => choice?.message?.content || "").join("\n") ||
-      (typeof result?.output_text === "string" ? result.output_text : "");
+      (result?.response && typeof result.response === "object" ? JSON.stringify(result.response) :
+        (result?.choices || []).map(choice => choice?.message?.content || "").join("\n") ||
+        (typeof result?.output_text === "string" ? result.output_text : ""));
     if (!text.trim()) return json({ error: "The built-in AI returned an empty response. Try a shorter prompt." }, 502, origin);
     return json({ text, model: selectedModel, provider: "cloudflare", mode: nativeMode ? "native-android-source" : "web-html" }, 200, origin);
   } catch (error) {
