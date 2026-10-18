@@ -57,9 +57,10 @@ jobs:
             --data '{"prompt":"Create a tiny native Android app with a centered label that says Native AI smoke test. Use only Android SDK widgets, no network, no WebView, no external libraries. Return only the required JSON source files."}' \
             -o "$RUNNER_TEMP/native-ai-response.json"
           python3 - <<'PY'
-          import json, re, shutil
+          import json, os, re, shutil
           from pathlib import Path
-          response = json.loads(Path("$RUNNER_TEMP/native-ai-response.json").read_text(encoding="utf-8"))
+          response_path = Path(os.environ["RUNNER_TEMP"]) / "native-ai-response.json"
+          response = json.loads(response_path.read_text(encoding="utf-8"))
           text = response.get("text")
           if not isinstance(text, str) or not text.strip():
               raise SystemExit("Native AI endpoint returned no source text.")
