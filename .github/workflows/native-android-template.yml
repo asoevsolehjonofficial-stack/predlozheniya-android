@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "stage2/**"
+      - "feature/native-ai-codegen-2026-10-18"
     paths:
       - "native-builder/**"
       - ".github/workflows/native-android-template.yml"
@@ -23,9 +24,13 @@ concurrency:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [21, 35]
     steps:
-      - name: Checkout trusted source
+      - name: Checkout source
         uses: actions/checkout@v4
         with:
           persist-credentials: false
@@ -55,8 +60,8 @@ jobs:
       - name: Install and run instrumentation test on Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
-          target: google_apis
+          api-level: ${{ matrix.api-level }}
+          target: default
           arch: x86_64
           profile: pixel_2
           disable-animations: true
@@ -73,6 +78,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -q "package: name='tj.as.nativebuilder.notes'"
 
       - name: Upload native APK artifact
+        if: matrix.api-level == 35
         uses: actions/upload-artifact@v4
         with:
           name: as-native-notes-debug-apk
