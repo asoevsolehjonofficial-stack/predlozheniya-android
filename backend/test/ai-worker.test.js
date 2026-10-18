@@ -89,7 +89,7 @@ test("built-in AI returns generated HTML and rate-limits requests", async () => 
   assert.equal((await call("/api/ai/generate", options)).status, 200);
   const limited = await call("/api/ai/generate", options);
   assert.equal(limited.status, 429);
-  assert.match((await limited.json()).error, /5 генераций в час/);
+  assert.match((await limited.json()).error, /4 генераций в час/);
 });
 
 
@@ -107,9 +107,9 @@ test("Durable Object atomically limits concurrent AI requests", async () => {
     env
   }));
   const responses = await Promise.all(requests);
-  assert.equal(responses.filter(response => response.status === 200).length, 5);
-  assert.equal(responses.filter(response => response.status === 429).length, 15);
-  assert.equal(inferenceCalls, 5);
+  assert.equal(responses.filter(response => response.status === 200).length, 4);
+  assert.equal(responses.filter(response => response.status === 429).length, 16);
+  assert.equal(inferenceCalls, 4);
 });
 
 
