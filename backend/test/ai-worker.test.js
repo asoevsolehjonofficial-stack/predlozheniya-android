@@ -111,3 +111,24 @@ test("native Android source endpoint retains origin protection", async () => {
   });
   assert.equal(response.status, 403);
 });
+
+test("native AI has an independent daily quota when web AI capacity is exhausted", async () => {
+  const written = [];
+  const env = {
+    RATE_LIMITS: {
+      get: async key => key.startsWith("asai:global-day:") ? "30" : null,
+      put: async (key, value) => { written.push([key, value]); }
+    },
+    AI: { run: async () => ({ response: { files: [{ path: "app/src/main/java/tj/as/generated/MainActivity.java", content: "public class MainActivity extends Activity {}" }] } }) }
+  };
+  const response = await call("/api/ai/native-generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "CF-Connecting-IP": "192.0.2.99" },
+    body: JSON.stringify({ prompt: "Create a tiny native app" }),
+    env
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(JSON.parse(body.text).files.length, 1);
+  assert.ok(written.some(([key]) => key.startsWith("asai:global-native-day:")));
+});
