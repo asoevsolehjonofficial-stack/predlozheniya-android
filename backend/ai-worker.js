@@ -120,11 +120,89 @@ async function generateWithDeepSeek(env, model, systemPrompt, prompt, maxTokens)
   }
 }
 
+
+export class RateLimitCoordinator {
+  constructor(state, env) {
+    this.state = state;
+    this.env = env;
+  }
+
+  async fetch(request) {
+    if (request.method !== "POST") return Response.json({ error: "Method not allowed." }, { status: 405 });
+    let payload;
+    try { payload = await request.json(); } catch { payload = null; }
+    const counters = payload?.counters;
+    if (!Array.isArray(counters) || counters.length < 1 || counters.length > 3) {
+      return Response.json({ error: "Invalid rate-limit request." }, { status: 400 });
+    }
+    for (const item of counters) {
+      if (!item || typeof item.key !== "string" || item.key.length > 180 ||
+          !Number.isInteger(item.limit) || item.limit < 1 ||
+          !Number.isInteger(item.ttlSeconds) || item.ttlSeconds < 1 || item.ttlSeconds > 172800 ||
+          typeof item.window !== "string" || item.window.length > 16 ||
+          !["hour", "day", "global"].includes(item.scope)) {
+        return Response.json({ error: "Invalid rate-limit counter." }, { status: 400 });
+      }
+    }
+
+    const now = Date.now();
+    const result = await this.state.storage.transaction(async txn => {
+      const rows = [];
+      for (const item of counters) {
+        const stored = await txn.get(item.key);
+        const active = stored && stored.window === item.window && Number.isFinite(stored.expiresAt) && stored.expiresAt > now;
+        const current = active ? stored : { count: 0, expiresAt: 0 };
+        if (current.count >= item.limit) {
+          return {
+            allowed: false,
+            scope: item.scope,
+            count: current.count,
+            limit: item.limit,
+            retryAfterSeconds: Math.max(1, Math.ceil((current.expiresAt - now) / 1000))
+          };
+        }
+        rows.push({ item, current, active });
+      }
+      for (const row of rows) {
+        await txn.put(row.item.key, {
+          count: row.current.count + 1,
+          window: row.item.window,
+          expiresAt: row.active ? row.current.expiresAt : now + row.item.ttlSeconds * 1000
+        });
+      }
+      return { allowed: true };
+    });
+    return Response.json(result, { headers: { "cache-control": "no-store" } });
+  }
+}
+
+function safeSecretEqual(provided, expected) {
+  if (typeof provided !== "string" || typeof expected !== "string" || provided.length !== expected.length || !expected.length) return false;
+  let diff = 0;
+  for (let i = 0; i < provided.length; i++) diff |= provided.charCodeAt(i) ^ expected.charCodeAt(i);
+  return diff === 0;
+}
+
+function ciFixture(prompt, nativeMode) {
+  if (!nativeMode) {
+    return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>CI fixture</title></head><body><main><h1>CI fixture app</h1><button id=\"count\">Count: 0</button><script>let n=0;document.getElementById('count').onclick=()=>document.getElementById('count').textContent='Count: '+(++n)</script></main></body></html>";
+  }
+  let content;
+  if (/storage|persist|notes|save|данн|заметк/i.test(prompt)) {
+    content = 'package tj.as.generated;\nimport android.app.Activity;\nimport android.os.Bundle;\nimport android.view.View;\nimport android.widget.Button;\nimport android.widget.EditText;\nimport android.widget.LinearLayout;\nimport android.widget.TextView;\npublic class MainActivity extends Activity {\n  public void onCreate(Bundle state) { super.onCreate(state); LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(24,24,24,24); EditText input = new EditText(this); input.setHint("Write a note"); TextView saved = new TextView(this); Button save = new Button(this); save.setText("Save note"); root.addView(input); root.addView(save); root.addView(saved); setContentView(root); android.content.SharedPreferences prefs = getSharedPreferences("notes", MODE_PRIVATE); input.setText(prefs.getString("note", "")); saved.setText("Saved locally"); save.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { prefs.edit().putString("note", input.getText().toString()).apply(); saved.setText("Saved: " + input.getText().toString()); } }); }\n}';
+  } else if (/multi|multiple|screen|navigation|settings|нескольк|экран/i.test(prompt)) {
+    content = 'package tj.as.generated;\nimport android.app.Activity;\nimport android.os.Bundle;\nimport android.view.View;\nimport android.widget.Button;\nimport android.widget.LinearLayout;\nimport android.widget.TextView;\npublic class MainActivity extends Activity {\n  LinearLayout root; TextView title;\n  public void onCreate(Bundle state) { super.onCreate(state); showHome(); }\n  void base(String heading) { root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(24,24,24,24); title = new TextView(this); title.setTextSize(24); title.setText(heading); root.addView(title); }\n  void showHome() { base("Home screen"); Button settings = new Button(this); settings.setText("Open Settings"); settings.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { showSettings(); } }); root.addView(settings); setContentView(root); }\n  void showSettings() { base("Settings screen"); Button back = new Button(this); back.setText("Back to Home"); back.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { showHome(); } }); root.addView(back); setContentView(root); }\n}';
+  } else {
+    content = 'package tj.as.generated;\nimport android.app.Activity;\nimport android.os.Bundle;\nimport android.view.View;\nimport android.widget.Button;\nimport android.widget.LinearLayout;\nimport android.widget.TextView;\npublic class MainActivity extends Activity {\n  int count = 0; TextView label;\n  public void onCreate(Bundle state) { super.onCreate(state); LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(24,24,24,24); label = new TextView(this); label.setTextSize(24); label.setText("Count: 0"); Button add = new Button(this); add.setText("Add one"); add.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { label.setText("Count: " + (++count)); } }); root.addView(label); root.addView(add); setContentView(root); }\n}';
+  }
+  return JSON.stringify({ files: [{ path: "app/src/main/java/tj/as/generated/MainActivity.java", content }] });
+}
+
 async function generate(request, env) {
   const nativeMode = new URL(request.url).pathname === "/api/ai/native-generate";
   const origin = request.headers.get("Origin") || "";
   if (origin !== ALLOWED_ORIGIN) return json({ error: "Origin is not allowed." }, 403, "");
-  if (!env.RATE_LIMITS) return json({ error: "AI rate limiting is not configured." }, 503, origin);
+  if (!env.RATE_LIMITER) return json({ error: "AI rate limiting is not configured." }, 503, origin);
   if (!(request.headers.get("Content-Type") || "").toLowerCase().startsWith("application/json")) {
     return json({ error: "Content-Type must be application/json." }, 415, origin);
   }
@@ -136,17 +214,12 @@ async function generate(request, env) {
   const ip = request.headers.get("CF-Connecting-IP") || "unknown";
   const ipHash = await sha256(ip);
   const now = new Date();
-  const hourKey = "asai:ip-hour:" + ipHash + ":" + now.toISOString().slice(0, 13);
+  const hourKey = "asai:ip-hour:" + ipHash;
+  const dayKey = "asai:ip-day:" + ipHash;
+  const hourWindow = now.toISOString().slice(0, 13);
   const day = now.toISOString().slice(0, 10);
-  const dayKey = "asai:ip-day:" + ipHash + ":" + day;
-  const globalDayKey = (nativeMode ? "asai:global-native-day:" : "asai:global-day:") + day;
+  const globalDayKey = nativeMode ? "asai:global-native-day" : "asai:global-day";
   const globalLimit = nativeMode ? 30 : 100;
-  const hourCount = Number(await env.RATE_LIMITS.get(hourKey) || "0");
-  const dayCount = Number(await env.RATE_LIMITS.get(dayKey) || "0");
-  const globalCount = Number(await env.RATE_LIMITS.get(globalDayKey) || "0");
-  if (hourCount >= 5) return json({ error: "Лимит встроенного ИИ: не более 5 генераций в час с одной сети. Попробуй после начала следующего часа.", retryAfterSeconds: 3600 - (now.getUTCMinutes() * 60 + now.getUTCSeconds()) }, 429, origin);
-  if (dayCount >= 15) return json({ error: "Лимит встроенного ИИ: не более 15 генераций в день с одной сети. Попробуй завтра.", retryAfterSeconds: 86400 - (now.getUTCHours() * 3600 + now.getUTCMinutes() * 60 + now.getUTCSeconds()) }, 429, origin);
-  if (globalCount >= globalLimit) return json({ error: nativeMode ? "The shared daily native AI capacity is used up. Try tomorrow." : "The shared daily AI capacity is used up. Try tomorrow or connect your own API key." }, 429, origin);
 
   const declaredLength = Number(request.headers.get("Content-Length") || "0");
   if (declaredLength > 24 * 1024) return json({ error: "Prompt is too large. Keep it under 18,000 characters." }, 413, origin);
@@ -164,10 +237,44 @@ async function generate(request, env) {
     return json({ error: "The prompt appears to contain a secret. Remove API keys or private keys first." }, 400, origin);
   }
 
-  // Reserve quota before inference, including failed calls, to discourage abuse.
-  await env.RATE_LIMITS.put(hourKey, String(hourCount + 1), { expirationTtl: 2 * 60 * 60 });
-  await env.RATE_LIMITS.put(dayKey, String(dayCount + 1), { expirationTtl: 48 * 60 * 60 });
-  await env.RATE_LIMITS.put(globalDayKey, String(globalCount + 1), { expirationTtl: 48 * 60 * 60 });
+  const suppliedTestSecret = request.headers.get("x-ai-ci-test-secret");
+  const configuredTestSecret = env.AI_CI_TEST_SECRET;
+  const isCiTest = safeSecretEqual(suppliedTestSecret, configuredTestSecret);
+  if (suppliedTestSecret && !isCiTest) return json({ error: "Invalid CI test authorization." }, 403, origin);
+  if (isCiTest) {
+    return json({
+      text: ciFixture(prompt, nativeMode),
+      model: "ci-fixture-v1",
+      provider: "test-fixture",
+      mode: nativeMode ? "native-android-source" : "web-html"
+    }, 200, origin);
+  }
+
+  // A single Durable Object transaction checks and reserves all three counters atomically.
+  let quota;
+  try {
+    const limiter = env.RATE_LIMITER.get(env.RATE_LIMITER.idFromName("ai-rate-limits-v1"));
+    const response = await limiter.fetch("https://rate-limit.internal/consume", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        counters: [
+          { key: hourKey, limit: 5, ttlSeconds: 7200, window: hourWindow, scope: "hour" },
+          { key: dayKey, limit: 15, ttlSeconds: 172800, window: day, scope: "day" },
+          { key: globalDayKey, limit: globalLimit, ttlSeconds: 172800, window: day, scope: "global" }
+        ]
+      })
+    });
+    if (!response.ok) throw new Error("rate limiter rejected the request");
+    quota = await response.json();
+  } catch {
+    return json({ error: "AI rate limiting is temporarily unavailable. Try again later." }, 503, origin);
+  }
+  if (!quota.allowed) {
+    if (quota.scope === "hour") return json({ error: "Лимит встроенного ИИ: не более 5 генераций в час с одной сети. Попробуй после начала следующего часа.", retryAfterSeconds: 3600 - (now.getUTCMinutes() * 60 + now.getUTCSeconds()) }, 429, origin);
+    if (quota.scope === "day") return json({ error: "Лимит встроенного ИИ: не более 15 генераций в день с одной сети. Попробуй завтра.", retryAfterSeconds: 86400 - (now.getUTCHours() * 3600 + now.getUTCMinutes() * 60 + now.getUTCSeconds()) }, 429, origin);
+    return json({ error: nativeMode ? "The shared daily native AI capacity is used up. Try tomorrow." : "The shared daily AI capacity is used up. Try tomorrow or connect your own API key." }, 429, origin);
+  }
 
   try {
     const systemPrompt = nativeMode
@@ -224,7 +331,7 @@ export default {
     if (url.pathname === "/api/health" && request.method === "GET") {
       if (origin && origin !== ALLOWED_ORIGIN) return json({ error: "Origin is not allowed." }, 403, "");
       const providerConfig = getProvider(env, false);
-      const configured = Boolean(env.RATE_LIMITS && !providerConfig.error);
+      const configured = Boolean(env.RATE_LIMITER && !providerConfig.error);
       return json({
         ok: configured,
         service: "A.S. APP BUILDER AI",

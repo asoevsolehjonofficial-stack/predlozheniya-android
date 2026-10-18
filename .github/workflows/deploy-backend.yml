@@ -1,6 +1,11 @@
 name: Deploy A.S. APP BUILDER API
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-backend.yml"
   workflow_dispatch:
 
 permissions:

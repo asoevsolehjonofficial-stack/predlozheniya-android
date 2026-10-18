@@ -136,3 +136,23 @@ Pull request: #27 — https://github.com/asoevsolehjonofficial-stack/predlozheni
 - Stage 4 APK/emulator API 21 and API 35: workflow configuration contains both API levels, build, instrumentation, signature/integrity checks and artifact upload; successful emulator evidence is NOT YET VERIFIED for PR #27.
 - AI quotas/security: source-level protections and tests are present; concurrency/abuse load testing and live provider quota validation are NOT COMPLETE. Rate-limit counters use separate reads/writes, so simultaneous requests may race; this remains a documented hardening risk, not a demonstrated failure in current CI.
 - Release acceptance checklist: 0/11 fully certified end-to-end; successful targeted CI checks do not substitute for production generation, install/launch, screenshot, download, quota, and three scenario tests.
+
+
+## Stage 2 — Atomic AI quotas and protected CI fixture mode (2026-10-19)
+
+- Branch: `fix/durable-object-ai-limits`.
+- Replaced KV read-then-write AI quota counters with a single Durable Object `RateLimitCoordinator`; all three counters are checked and reserved inside one storage transaction.
+- Counter windows are explicit UTC hour/day identifiers so limits reset at the same boundaries as the user-facing retry messages; only the current hourly/daily key per IP is retained.
+- Added a parallel-request regression test: 20 simultaneous requests from one IP must yield exactly 5 successful inference calls and 15 HTTP 429 responses.
+- Added a secret-protected `x-ai-ci-test-secret` mode using the `AI_CI_TEST_SECRET` environment secret. Valid test requests return deterministic native Java fixtures or a simple web fixture without invoking the provider or consuming the production rate counters. An invalid supplied secret returns HTTP 403.
+- Updated `backend/wrangler-ai.toml` with a Durable Object binding and SQLite-class migration; no credential values are stored in source/config.
+- CI fixture mode requires the same non-empty secret to be configured as a Cloudflare Worker secret and a GitHub Actions secret before the full pipeline can use it. The connected GitHub tools do not expose secret-writing operations; the actual secret value has not been created or changed by this session.
+- Validation status: pending CI on this branch. No production deployment of the Durable Object migration has been performed yet.
+
+### Stage 1 closeout — PR #27
+
+- PR #27 merged into `main` as `2290a0f45a0194858af7318689585cd848b85e70`.
+- Latest-head validation before merge: [Quality/security](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39158244916), [Manual HTML import/browser smoke](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39158244815), [A.S. AUTO CHECK AI](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39158244807), and [Validate web app](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39158244884) succeeded on `05e23e892aba543a5977918d04da6db4906c84df`. The real AI inference step was intentionally skipped to protect production quota.
+- After merge, `main` checks are green for [Quality/security](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39158318443), [Manual browser smoke including deployed backend health](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39158318446), [Validate web app](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39158318467), [AUTO CHECK AI](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39158318444), and [Free APK queue worker](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39158318458).
+- Builder APK release run [39158318451](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39158318451) passed its quality gate but was still building at last inspection; final artifact status remains pending.
+- Production frontend/browser and deployed backend health were checked by the green post-merge browser workflow. The AI Worker’s new Durable Object and test-secret changes are a separate pending branch and are not yet deployed.

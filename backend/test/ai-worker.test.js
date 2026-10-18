@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import worker, { getProvider } from "../ai-worker.js";
+import worker, { getProvider, RateLimitCoordinator } from "../ai-worker.js";
 
 const ORIGIN = "https://as-app-builder.pages.dev";
 
@@ -11,10 +11,38 @@ async function call(path, { method = "GET", origin = ORIGIN, headers = {}, body,
   return worker.fetch(request, env);
 }
 
-function fakeEnv(aiRun = async () => ({ response: "<!doctype html><html><head></head><body>AI works</body></html>" })) {
-  const store = new Map();
+function fakeRateLimiter(seed = new Map()) {
+  const store = seed instanceof Map ? seed : new Map(Object.entries(seed));
+  let tail = Promise.resolve();
+  const storage = {
+    get: async key => store.get(key),
+    put: async (key, value) => { store.set(key, value); },
+    transaction: async callback => {
+      const previous = tail;
+      let release;
+      tail = new Promise(resolve => { release = resolve; });
+      await previous;
+      try {
+        return await callback({
+          get: async key => store.get(key),
+          put: async (key, value) => { store.set(key, value); }
+        });
+      } finally {
+        release();
+      }
+    }
+  };
+  const coordinator = new RateLimitCoordinator({ storage }, {});
   return {
-    RATE_LIMITS: { get: async key => store.get(key) ?? null, put: async (key, value) => { store.set(key, value); } },
+    store,
+    idFromName: name => ({ name }),
+    get: () => ({ fetch: (url, init) => coordinator.fetch(new Request(url, init)) })
+  };
+}
+
+function fakeEnv(aiRun = async () => ({ response: "<!doctype html><html><head></head><body>AI works</body></html>" }), seed = new Map()) {
+  return {
+    RATE_LIMITER: fakeRateLimiter(seed),
     AI: { run: aiRun }
   };
 }
@@ -62,6 +90,57 @@ test("built-in AI returns generated HTML and rate-limits requests", async () => 
   const limited = await call("/api/ai/generate", options);
   assert.equal(limited.status, 429);
   assert.match((await limited.json()).error, /5 генераций в час/);
+});
+
+
+test("Durable Object atomically limits concurrent AI requests", async () => {
+  let inferenceCalls = 0;
+  const env = fakeEnv(async () => {
+    inferenceCalls++;
+    await new Promise(resolve => setTimeout(resolve, 5));
+    return { response: "<!doctype html><html><head></head><body>Concurrent test</body></html>" };
+  });
+  const requests = Array.from({ length: 20 }, (_, index) => call("/api/ai/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "CF-Connecting-IP": "198.51.100.42" },
+    body: JSON.stringify({ prompt: "Concurrent app " + index }),
+    env
+  }));
+  const responses = await Promise.all(requests);
+  assert.equal(responses.filter(response => response.status === 200).length, 5);
+  assert.equal(responses.filter(response => response.status === 429).length, 15);
+  assert.equal(inferenceCalls, 5);
+});
+
+test("secret-protected CI fixture skips both rate limits and provider inference", async () => {
+  let inferenceCalls = 0;
+  const env = { ...fakeEnv(async () => { inferenceCalls++; return { response: "should not run" }; }), AI_CI_TEST_SECRET: "only-for-tests" };
+  const response = await call("/api/ai/native-generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "CF-Connecting-IP": "203.0.113.10", "x-ai-ci-test-secret": "only-for-tests" },
+    body: JSON.stringify({ prompt: "Build a notes app with persistent storage" }),
+    env
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.provider, "test-fixture");
+  assert.equal(body.model, "ci-fixture-v1");
+  assert.equal(body.mode, "native-android-source");
+  assert.match(JSON.parse(body.text).files[0].content, /SharedPreferences/);
+  assert.equal(inferenceCalls, 0);
+  assert.equal(env.RATE_LIMITER.store.size, 0);
+});
+
+test("incorrect CI fixture secret never bypasses the limiter", async () => {
+  const env = { ...fakeEnv(), AI_CI_TEST_SECRET: "correct-secret" };
+  const response = await call("/api/ai/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-ai-ci-test-secret": "wrong-secret" },
+    body: JSON.stringify({ prompt: "Create a test app" }),
+    env
+  });
+  assert.equal(response.status, 403);
+  assert.equal(env.RATE_LIMITER.store.size, 0);
 });
 
 test("built-in AI rejects empty, oversized, and secret-bearing prompts", async () => {
@@ -118,14 +197,10 @@ test("native Android source endpoint retains origin protection", async () => {
 });
 
 test("native AI has an independent daily quota when web AI capacity is exhausted", async () => {
-  const written = [];
-  const env = {
-    RATE_LIMITS: {
-      get: async key => key.startsWith("asai:global-day:") ? "30" : null,
-      put: async (key, value) => { written.push([key, value]); }
-    },
-    AI: { run: async () => ({ response: { files: [{ path: "app/src/main/java/tj/as/generated/MainActivity.java", content: "public class MainActivity extends Activity {}" }] } }) }
-  };
+  const day = new Date().toISOString().slice(0, 10);
+  const env = fakeEnv(async () => ({ response: { files: [{ path: "app/src/main/java/tj/as/generated/MainActivity.java", content: "public class MainActivity extends Activity {}" }] } }), new Map([
+    ["asai:global-day", { count: 100, window: new Date().toISOString().slice(0, 10), expiresAt: Date.now() + 86400000 }]
+  ]));
   const response = await call("/api/ai/native-generate", {
     method: "POST",
     headers: { "Content-Type": "application/json", "CF-Connecting-IP": "192.0.2.99" },
@@ -135,7 +210,7 @@ test("native AI has an independent daily quota when web AI capacity is exhausted
   assert.equal(response.status, 200);
   const body = await response.json();
   assert.equal(JSON.parse(body.text).files.length, 1);
-  assert.ok(written.some(([key]) => key.startsWith("asai:global-native-day:")));
+  assert.equal(env.RATE_LIMITER.store.get("asai:global-native-day").count, 1);
 });
 
 
@@ -143,7 +218,7 @@ function deepseekEnv(overrides = {}) {
   const values = new Map();
   return {
     DEEPSEEK_API_KEY: "test-secret-key",
-    RATE_LIMITS: { get: async key => values.get(key) ?? null, put: async (key, value) => { values.set(key, value); } },
+    RATE_LIMITER: fakeRateLimiter(values),
     ...overrides
   };
 }
@@ -160,8 +235,8 @@ test("DeepSeek provider is selected when its secret exists and native mode keeps
 
 test("invalid or unconfigured explicit AI provider fails closed", () => {
   assert.match(getProvider({ AI_PROVIDER: "unknown", AI: {} }).error, /AI_PROVIDER/);
-  assert.match(getProvider({ AI_PROVIDER: "deepseek", RATE_LIMITS: {} }).error, /DEEPSEEK_API_KEY/);
-  assert.match(getProvider({ AI_PROVIDER: "cloudflare", RATE_LIMITS: {} }).error, /AI binding/);
+  assert.match(getProvider({ AI_PROVIDER: "deepseek", RATE_LIMITER: {} }).error, /DEEPSEEK_API_KEY/);
+  assert.match(getProvider({ AI_PROVIDER: "cloudflare", RATE_LIMITER: {} }).error, /AI binding/);
 });
 
 test("DeepSeek generation preserves the web/native response shape without exposing the API key", async () => {
