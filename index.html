@@ -508,10 +508,20 @@ $('buildApk').addEventListener('click',async()=>{
  if(!turnstileToken){try{await prepareTurnstile(cfg);buildStatus('Пройди проверку Cloudflare Turnstile, затем снова нажми «Собрать APK проекта».');}catch(e){buildStatus('Ошибка проверки: '+e.message);}return;}
  const button=$('buildApk');button.disabled=true;
  try{
-  buildStatus('Отправляю проект на защищённую сборку…');
+  buildStatus($('appTarget')?.value==='native'?'Отправляю нативный Android-проект на защищённую сборку…':'Отправляю проект на защищённую сборку…');
   let start;
   try{
-   start=await fetch(cfg.url+'/api/build',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({html:generatedHTML,turnstileToken})});
+   const nativeMode=$('appTarget')?.value==='native';
+   let buildPayload;
+   if(nativeMode){
+    let nativeProject;
+    try{nativeProject=JSON.parse(generatedHTML)}catch(e){throw Error('Не удалось прочитать нативные исходники. Сначала заново сгенерируй Android-проект.');}
+    if(!Array.isArray(nativeProject.files))throw Error('В нативном проекте нет списка файлов.');
+    buildPayload={type:'native',files:nativeProject.files,turnstileToken};
+   }else{
+    buildPayload={type:'web',html:generatedHTML,turnstileToken};
+   }
+   start=await fetch(cfg.url+'/api/build',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(buildPayload)});
   }catch(e){
    turnstileToken='';
    if(turnstileWidgetId!==null)try{window.turnstile.reset(turnstileWidgetId)}catch(resetError){}
