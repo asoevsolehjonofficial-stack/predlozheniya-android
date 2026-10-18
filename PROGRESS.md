@@ -279,3 +279,10 @@ Pull request: #27 — https://github.com/asoevsolehjonofficial-stack/predlozheni
 - Native E2E [run #39163074448](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39163074448) confirmed native source OIDC, local API job creation, APK build, package/signature/checksum validation, and APK upload all passed for the `multi-screen / API 21` scenario.
 - The APK download-back request then returned HTTP 403 because the local Build API enforces its allowed Origin for public `/api/download` and `/api/preview` routes, while the CI curl requests omitted the `Origin: https://as-app-builder.pages.dev` header. Added that exact allowed Origin header to both download round-trips. The same run's local API fixture creation passed after fixing the OIDC verifier.
 - The latest workflow update is running a new native matrix; do not count the round-trip/screenshot criterion complete until all six jobs pass and artifacts are present.
+
+
+## Stage 5 continuation — emulator action shell isolation fix (2026-10-19)
+
+- Latest native matrix [#39163318356](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39163318356) verified the Origin-header fix: APK upload/download round-trip passed for all six jobs that reached it, and real APK build/signature/checksum validation passed.
+- The screenshot step then failed with `adb: need APK file on command line` even though the APK exists and its SHA-256/signature checks passed. The log showed the emulator action executing each script line as a separate `/usr/bin/sh -c` process; variables assigned on previous lines (`APK`, `PACKAGE`) were therefore empty in the `adb install` process.
+- Reworked the emulator script to execute as one `bash -euo pipefail -c` command and moved the normalized package ID to a matrix-derived job environment variable `PACKAGE_NAME`. This preserves the absolute APK path and package name in the same shell. Latest native rerun is pending; screenshot criteria remain unverified until all six jobs and artifacts pass.
