@@ -305,7 +305,7 @@ jobs:
             echo "Android emulator smoke test passed: APK installed, launcher activity started, and screenshot captured."
 
       - name: Install and launch generated native APK (smoke tests only)
-        if: env.PROJECT_TYPE == 'native' && startsWith(env.PROJECT_SLUG, 'smoke-')
+        if: env.PROJECT_TYPE == 'native' && startsWith(env.PROJECT_SLUG, 'smoke-emulator-')
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
