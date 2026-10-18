@@ -303,6 +303,6 @@ Pull request: #27 — https://github.com/asoevsolehjonofficial-stack/predlozheni
 - Production rollback record captured before any new deployment:
   - Active deployment: `e48a0955-f91e-4c40-bbe8-64a5d6155d4b`, active version `63b9c056-2402-42d0-913e-09529ff7381f` at 100%.
   - Previous deployment: `96d37ebf-e1e5-42c0-8f1c-623e5370508f`, previous version `b6678b0e-9ad0-46ba-8b1c-8718297127b4` at 100%.
-  - Rollback method: create a new Worker deployment referencing version `b6678b0e-9ad0-46ba-8b1c-623e5370508f` at 100%, then recheck production health and quota behavior. Do not delete either historical deployment/version.
+  - Rollback method: create a new Worker deployment referencing version `b6678b0e-9ad0-46ba-8b1c-8718297127b4` at 100%, then recheck production health and quota behavior. Do not delete either historical deployment/version.
 - Cloudflare access check: list/read Worker settings, deployments, KV namespaces, and Worker scripts succeeds. Durable Object namespace listing currently returns zero namespaces; production still has only the `RATE_LIMITS` KV binding, not `RATE_LIMITER`. R2 API returns error 10042 (R2 must be enabled in Dashboard). GitHub connector has no secret-management action, so Actions secrets cannot be created through the currently available GitHub tool.
 - No production deployment has been performed. The current PR changes remain subject to CI; do not claim production DO/quota acceptance until deployment and the 4-success/5th-429 live test are verified.
