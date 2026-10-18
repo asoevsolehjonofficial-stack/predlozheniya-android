@@ -1,22 +1,27 @@
 # A.S. APP BUILDER — PROGRESS
 
 Last updated: 2026-10-19
-Working branch: fix/ai-quota-native-preview
-Pull request: #27 — https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/pull/27
+Active engineering branch: `fix/native-e2e-package-id-sdk-emulator`
+Canonical progress branch: `fix/ai-quota-native-preview`
+PR #27: MERGED — https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/pull/27
+PR #34: OPEN — https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/pull/34
+Latest native E2E run: https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39177122772
 
 ## Release checklist (11 acceptance criteria)
 
-- [ ] 1. Production site works without console/network errors — NOT VERIFIED in this session.
-- [ ] 2. Required GitHub Actions are green with no cancelled/skipped required checks — recent run 39152068438 and 39152068311 failed; fix is pushed to branch but new CI results are pending.
-- [ ] 3. Real prompt → AI native Java/XML project → source validation — implementation path exists; real production generation and compiler validation NOT VERIFIED.
-- [ ] 4. APK builds and passes integrity checks — workflow contains build/signature/checksum steps; successful run NOT VERIFIED.
-- [ ] 5. APK installs and launches on Android 5/API 21 and Android 15/API 35 — API 35 workflow path exists; API 21 emulator run and successful run evidence NOT VERIFIED.
-- [ ] 6. Preview uses an actual screenshot from the running APK — workflow contains Android 15 screenshot capture/upload; production proof NOT VERIFIED.
-- [ ] 7. User can download APK and source from the site — authenticated download flow exists in code; production end-to-end proof NOT VERIFIED.
-- [ ] 8. Production AI quotas verified with real requests — unit test covers the fifth request returning 429; live quota test NOT RUN.
-- [ ] 9. Security audit of dependencies, secrets/history, input validation, rate limits, request size and CORS — partial static checks exist; full audit NOT COMPLETE.
-- [ ] 10. PR #24 merged and production updated — PR #24 was merged at 2026-10-18T18:01:00Z; production deployment and health verification are NOT CONFIRMED. Follow-up fix must go through a new PR because #24 is already merged.
-- [ ] 11. Three production end-to-end scenarios (simple, multi-screen, persistent data) — NOT RUN.
+- [ ] 1. Production site works without console/network errors — live UI smoke passed in run 39177122772; full browser console/network acceptance not yet certified.
+- [ ] 2. Required GitHub Actions are green with no cancelled/skipped required checks — quality/security, web validation, and A.S. AUTO CHECK AI passed on SHA `d89c1d5a`; native six-job matrix is still running on the same code revision.
+- [ ] 3. Real prompt → AI native Java/XML project → source validation — signed-OIDC deterministic native source fixture passed; real production-provider generation/compiler validation is not yet certified.
+- [ ] 4. APK builds and passes integrity checks — latest matrix has passed build/signature/checksum and local API round-trip for jobs that reached those steps; full six-job run pending.
+- [ ] 5. APK installs and launches on Android API 21 and API 35 — API 35 emulator launch/screenshot is running; complete six-job proof pending.
+- [ ] 6. Preview uses an actual screenshot from the running APK — screenshot step is running in the latest matrix; all screenshot artifacts must be verified before marking complete.
+- [ ] 7. User can download APK and source from the production site — local API APK round-trip has passed in CI; production website download is not yet verified.
+- [ ] 8. Production AI quotas verified with real requests — unit tests prove 4 successes then 429 and 20-way concurrency caps inference at 4; live production test is pending.
+- [ ] 9. Security audit of dependencies, secrets/history, input validation, rate limits, request size and CORS — static checks and 57 backend tests passed; full release security audit remains incomplete.
+- [ ] 10. PR #27 merged and production updated — PR #27 is merged; production AI Worker still lacks the `RATE_LIMITER` Durable Object binding, so production update is incomplete.
+- [ ] 11. Three production end-to-end scenarios (simple, multi-screen, persistent data) — not yet run against production.
+
+**Release certification: 0/11 fully certified.** This is intentionally strict: partial CI successes do not count as complete production acceptance.
 
 ## Failure-log automation (2026-10-18)
 
