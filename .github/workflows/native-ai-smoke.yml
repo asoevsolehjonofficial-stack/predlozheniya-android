@@ -1,0 +1,143 @@
+name: Native AI generated APK smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/ai-worker.js"
+      - "native-builder/**"
+      - ".github/workflows/native-ai-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-ai-generated-apk-smoke
+  cancel-in-progress: true
+
+jobs:
+  generated-app:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout trusted source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0"
+
+      - name: Install Gradle 8.9
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location https://services.gradle.org/distributions/gradle-8.9-bin.zip -o "$RUNNER_TEMP/gradle.zip"
+          unzip -q "$RUNNER_TEMP/gradle.zip" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/gradle-8.9/bin" >> "$GITHUB_PATH"
+
+      - name: Generate native source using the live built-in AI
+        shell: bash
+        run: |
+          set -euo pipefail
+          AI_URL="https://as-app-builder-ai.asoev-solehjon-official.workers.dev"
+          curl --fail --silent --show-error --max-time 20 "$AI_URL/api/health" | jq -e '.ok == true' >/dev/null
+          curl --fail --silent --show-error --max-time 180 -X POST "$AI_URL/api/ai/native-generate" \
+            -H "Origin: https://as-app-builder.pages.dev" \
+            -H "Content-Type: application/json" \
+            --data '{"prompt":"Create a tiny native Android app with a centered label that says Native AI smoke test. Use only Android SDK widgets, no network, no WebView, no external libraries. Return only the required JSON source files."}' \
+            -o "$RUNNER_TEMP/native-ai-response.json"
+          python3 - <<'PY'
+          import json, re, shutil
+          from pathlib import Path
+          response = json.loads(Path("$RUNNER_TEMP/native-ai-response.json").read_text(encoding="utf-8"))
+          text = response.get("text")
+          if not isinstance(text, str) or not text.strip():
+              raise SystemExit("Native AI endpoint returned no source text.")
+          text = re.sub(r"^\s*```(?:json)?\s*|\s*```\s*$", "", text.strip(), flags=re.I)
+          data = json.loads(text)
+          files = data.get("files")
+          if not isinstance(files, list) or not 1 <= len(files) <= 12:
+              raise SystemExit("Native AI returned an invalid file list.")
+          root = Path("native-builder/app/src/main")
+          java_root = root / "java/tj/as/generated"
+          template_root = root / "java/tj/as/nativebuilder/notes"
+          if java_root.exists(): shutil.rmtree(java_root)
+          if template_root.exists(): shutil.rmtree(template_root)
+          seen = set()
+          total = 0
+          main_found = False
+          for item in files:
+              if not isinstance(item, dict) or not isinstance(item.get("path"), str) or not isinstance(item.get("content"), str):
+                  raise SystemExit("Malformed native AI source file.")
+              rel, source = item["path"], item["content"]
+              if not re.fullmatch(r"app/src/main/(?:java/tj/as/generated/[A-Za-z0-9_$]+\.java|res/values/[A-Za-z0-9_.-]+\.xml)", rel) or ".." in rel:
+                  raise SystemExit("Disallowed native AI source path: " + rel)
+              if rel in seen: raise SystemExit("Duplicate native AI source path.")
+              seen.add(rel)
+              size = len(source.encode("utf-8"))
+              total += size
+              if size > 60000 or total > 500 * 1024: raise SystemExit("Native AI source exceeded the configured size limits.")
+              if rel.endswith(".java"):
+                  if re.search(r"java\.lang\.Runtime|ProcessBuilder|DexClassLoader|PathClassLoader|Class\.forName|System\.loadLibrary|WebView|java\.net\.(?:Socket|URL|URLConnection)", source):
+                      raise SystemExit("Restricted API found in native AI source.")
+                  if rel == "app/src/main/java/tj/as/generated/MainActivity.java":
+                      if not re.search(r"package\s+tj\.as\.generated\s*;", source) or not re.search(r"class\s+MainActivity\s+extends\s+Activity\b", source):
+                          raise SystemExit("Native AI MainActivity has an invalid package or superclass.")
+                      main_found = True
+              elif re.search(r"<!DOCTYPE|<!ENTITY", source, re.I):
+                  raise SystemExit("XML document types are forbidden.")
+              destination = root / rel.removeprefix("app/src/main/")
+              destination.parent.mkdir(parents=True, exist_ok=True)
+              destination.write_text(source, encoding="utf-8")
+          if not main_found: raise SystemExit("Native AI did not return the required MainActivity.java.")
+          print("Validated native AI source files:", ", ".join(sorted(seen)))
+          PY
+          sed -i "s/namespace 'tj.as.nativebuilder.notes'/namespace 'tj.as.generated'/" native-builder/app/build.gradle
+          sed -i "s/applicationId 'tj.as.nativebuilder.notes'/applicationId 'tj.as.generated.p_native_ai_smoke'/" native-builder/app/build.gradle
+          sed -i 's/android:label="A.S. Notes Native"/android:label="Native AI smoke"/' native-builder/app/src/main/AndroidManifest.xml
+
+      - name: Build AI-generated native APK
+        run: gradle --no-daemon -p native-builder clean assembleDebug
+
+      - name: Verify APK package, signature, and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="native-builder/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          unzip -t "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -q "package: name='tj.as.generated.p_native_ai_smoke'"
+          sha256sum "$APK"
+
+      - name: Install and launch AI-generated APK in Android 15 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            APK="native-builder/app/build/outputs/apk/debug/app-debug.apk"
+            PACKAGE="tj.as.generated.p_native_ai_smoke"
+            adb install "$APK"
+            adb shell monkey -p "$PACKAGE" -c android.intent.category.LAUNCHER 1
+            sleep 5
+            adb shell dumpsys activity activities | grep -F "$PACKAGE" >/dev/null
+            if adb logcat -d -t 1200 | grep -E "FATAL EXCEPTION.*$PACKAGE|Process: $PACKAGE.*died"; then
+              echo "::error::AI-generated native app crashed after launch."
+              exit 1
+            fi
+            echo "AI-generated native APK installed and launched successfully."
