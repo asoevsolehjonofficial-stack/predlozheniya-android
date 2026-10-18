@@ -125,6 +125,7 @@ jobs:
         env:
           SITE_URL: https://as-app-builder.pages.dev
           API_URL: https://as-app-builder-api.asoev-solehjon-official.workers.dev
+          RUN_LIVE_AI_TEST: ${{ github.event_name == 'workflow_dispatch' && inputs.test_live_ai == true }}
         shell: bash
         run: |
           set -euo pipefail
