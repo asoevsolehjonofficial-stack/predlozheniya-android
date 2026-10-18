@@ -217,3 +217,10 @@ Pull request: #27 — https://github.com/asoevsolehjonofficial-stack/predlozheni
 - CI fixture protection: the current main branch uses a dedicated GitHub OIDC-protected `/api/ci/native-fixture` endpoint for native matrix tests; the endpoint is not exposed to browser-origin requests and does not consume production quotas. This is safer than a public bypass, but it is distinct from the requested secret-header mode.
 - Current native matrix run #39160916274 is not green: the `multi-screen` builds failed on invalid package IDs, the API 21 SDK installation failed on a corrupt API 35 archive download, and the storage API 21 emulator step failed because of the wrong action input. The fixes above are awaiting CI on the new branch; do not mark any APK/emulator criterion complete until the rerun provides successful artifacts.
 - Acceptance checklist: 0/11 fully certified end-to-end. The asset sync/browser smoke and static/security test gates have successful evidence; production DO rollout, three successful APK+screenshots across both API levels, live download round-trip, live quota check, and the three production scenarios remain unverified.
+
+
+## Stage 4 retry 2 — CI trigger recovery (2026-10-19)
+
+- PR [#34 — Fix native E2E package IDs and emulator matrix setup](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/pull/34) contains the package suffix normalization, corrected `api-level` input, and API-specific SDK image selection.
+- Added `fix/**` to the native E2E workflow's push branches so the actual six-job matrix runs against the repair branch before merge. The workflow still runs on `main`; no checks were disabled.
+- Latest workflow-trigger commit: `d21df7f51d13f4039b17e8a135eb757dc2fea0fb`. Waiting for authoritative CI results on this head. Do not merge PR #34 until quality/security and the six native fixture jobs have completed successfully.
