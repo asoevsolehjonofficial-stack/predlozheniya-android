@@ -1,0 +1,87 @@
+name: Native Android template CI
+
+on:
+  push:
+    branches:
+      - "stage2/**"
+      - "feature/native-ai-codegen-2026-10-18"
+    paths:
+      - "native-builder/**"
+      - ".github/workflows/native-android-template.yml"
+  pull_request:
+    paths:
+      - "native-builder/**"
+      - ".github/workflows/native-android-template.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-android-template-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [21, 35]
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0"
+
+      - name: Install Gradle 8.9
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location https://services.gradle.org/distributions/gradle-8.9-bin.zip -o "$RUNNER_TEMP/gradle.zip"
+          unzip -q "$RUNNER_TEMP/gradle.zip" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/gradle-8.9/bin" >> "$GITHUB_PATH"
+
+      - name: Build native APK
+        run: gradle --no-daemon -p native-builder clean assembleDebug
+
+      - name: Install and run instrumentation test on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: gradle --no-daemon -p native-builder connectedDebugAndroidTest
+
+      - name: Verify APK package and signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="native-builder/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          unzip -t "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -q "package: name='tj.as.nativebuilder.notes'"
+
+      - name: Upload native APK artifact
+        if: matrix.api-level == 35
+        uses: actions/upload-artifact@v4
+        with:
+          name: as-native-notes-debug-apk
+          path: native-builder/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7

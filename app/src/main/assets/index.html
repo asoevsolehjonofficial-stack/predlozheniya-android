@@ -82,6 +82,7 @@ body:has(.studio-shell){overflow-x:hidden}
 <div class="field"><label>Что создаём?</label><div class="choices" role="group" aria-label="Тип проекта"><button class="choice" data-kind="app" aria-pressed="true">📱 Приложение</button><button class="choice" data-kind="game" aria-pressed="false">🎮 Игра</button><button class="choice" data-kind="site" aria-pressed="false">🌐 Сайт</button></div></div>
 <div class="row"><div class="field"><label for="appName">Название проекта</label><input id="appName" maxlength="45" value="Мой проект" placeholder="Например, Учись легко"></div><div class="field"><label for="style">Стиль</label><select id="style"><option value="clean">Современный</option><option value="education">Образовательный</option><option value="business">Деловой</option><option value="playful">Яркий и игровой</option></select></div></div>
 <div class="field"><label for="complexity">Уровень разработки</label><select id="complexity"><option value="standard">Стандартный прототип</option><option value="advanced">Сложное приложение: экраны, данные, поиск, отчёты и экспорт</option></select></div>
+<div class="field"><label for="appTarget">Тип приложения</label><select id="appTarget"><option value="web" selected>Веб-приложение / WebView APK</option><option value="native">Нативный Android APK (экспериментально)</option></select><p class="sub" id="appTargetNotice">Веб-режим генерирует HTML. Для нативного режима ИИ подготовит Java-файлы; автоматическая сборка APK ещё подключается.</p></div>
 <div class="field"><label for="prompt">Задание для ИИ</label><textarea id="prompt" maxlength="6000" placeholder="Создай приложение для изучения английского: карточки слов, тест из 10 вопросов, подсчёт баллов и сохранение результата на телефоне."></textarea></div>
 <div class="field"><label for="features">Дополнительные пожелания</label><input id="features" maxlength="500" placeholder="Русский язык, тёмная тема, офлайн-доступ"></div>
 <details class="ai-panel" open><summary style="cursor:pointer;font-weight:800;margin-bottom:14px">🤖 Подключение ИИ-модели</summary><p class="sub">По умолчанию доступен встроенный ИИ A.S. без личного ключа. Для внешних провайдеров можно подключить собственный API.</p>
@@ -197,6 +198,7 @@ function updateAIProviderFields(){
  }
 }
 $('aiProvider').addEventListener('change',updateAIProviderFields);
+$('appTarget')?.addEventListener('change',()=>{const native=$('appTarget').value==='native';$('appTargetNotice').textContent=native?'ИИ подготовит Java-исходники для отдельной нативной сборки APK.':'Веб-режим генерирует HTML; его APK использует WebView.';});
 updateAIProviderFields();
 function extractGeminiInteractionText(data){
  if(typeof data?.output_text==='string'&&data.output_text.trim())return data.output_text;
@@ -253,9 +255,10 @@ function inspectGeneratedHTML(code){
  return issues;
 }
 async function runAIBuild(editInstruction=''){
- const prompt=$('prompt').value.trim(),key=$('aiKey').value.trim(),provider=$('aiProvider').value,model=$('aiModel').value.trim(),endpoint=$('aiEndpoint').value.trim();
+ const prompt=$('prompt').value.trim(),key=$('aiKey').value.trim(),provider=$('aiProvider').value,model=$('aiModel').value.trim(),endpoint=$('aiEndpoint').value.trim(),nativeMode=$('appTarget')?.value==='native';
  if(!prompt){$('aiStatus').textContent='Сначала опиши идею приложения.';return}
  const builtIn=provider==='cloudflare';
+ if(nativeMode&&!builtIn){$('aiStatus').textContent='Экспериментальный нативный режим пока использует только встроенный ИИ A.S. Выбери встроенный ИИ без личного API-ключа.';return}
  if(!builtIn&&!key){$('aiStatus').textContent='Введи собственный API-ключ или выбери встроенный ИИ A.S.';return}
  if(!builtIn&&(!model||provider!=='gemini'&&!endpoint)){$('aiStatus').textContent='Укажи модель и API endpoint.';return}
  let host='';
@@ -270,13 +273,13 @@ async function runAIBuild(editInstruction=''){
  let streamBuffer='',received='',streamTruncated=false;
  try{
   const instruction=editInstruction
-   ? 'Измени существующее приложение по запросу пользователя. Сохрани работающие функции, исправь указанные места и не удаляй нужные возможности. Запрос на изменение:\n'+editInstruction+'\n\nТекущий полный HTML-код приложения:\n'+generatedHTML+'\n\nВерни обновлённый полный HTML-документ целиком.'
-   : buildAIPrompt();
-  const systemText='You are a senior application engineer and coding agent. Return only one complete self-contained HTML document, from <!doctype html> through </html>. No Markdown fences or explanations. Keep all CSS and JavaScript inline. Implement functional interactions and preserve existing functionality when editing.';
+   ? (nativeMode ? 'Измени нативный Android-проект по запросу пользователя. Сохрани рабочие функции. Запрос: '+editInstruction+'\nТекущие исходники: '+generatedHTML+'\nВерни JSON с files.' : 'Измени существующее приложение по запросу пользователя. Сохрани работающие функции, исправь указанные места и не удаляй нужные возможности. Запрос на изменение:\n'+editInstruction+'\n\nТекущий полный HTML-код приложения:\n'+generatedHTML+'\n\nВерни обновлённый полный HTML-документ целиком.')
+   : (nativeMode ? 'Создай нативное Android-приложение. Название: '+($('appName').value.trim()||'Моё приложение')+'. Тип проекта: '+$('kind').value+'. Идея и требования: '+prompt+'. Дополнительные требования: '+($('features').value.trim()||'мобильный доступный интерфейс')+'. Уровень: '+$('complexity').value+'. Реализуй работающие функции, а не заглушки. Сохраняй данные локально, если это уместно. Верни только JSON с files, только Java/XML исходники по разрешённым путям.' : buildAIPrompt());
+  const systemText=nativeMode?'You are a senior native Android engineer. Return only valid JSON with a files array containing Java source files for a real native Android app, no WebView, no external dependencies, no network permissions. Only paths under app/src/main/java/tj/as/generated/ or app/src/main/res/values/. Never generate build scripts, manifests, workflows, shell commands, or secrets. MainActivity extends android.app.Activity and targets Android SDK 35/minSdk 21. Implement real functionality, input validation, accessible UI, and local storage when appropriate.':'You are a senior application engineer and coding agent. Return only one complete self-contained HTML document, from <!doctype html> through </html>. No Markdown fences or explanations. Keep all CSS and JavaScript inline. Implement functional interactions and preserve existing functionality when editing.';
   if(provider==='cloudflare'){
    const apiUrl='https://as-app-builder-ai.asoev-solehjon-official.workers.dev';
    $('activityLive').textContent='Встроенный ИИ A.S. генерирует приложение';
-   const response=await fetch(apiUrl+'/api/ai/generate',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({prompt:instruction})});
+   const response=await fetch(apiUrl+(nativeMode?'/api/ai/native-generate':'/api/ai/generate'),{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({prompt:instruction})});
    const data=await response.json().catch(()=>({}));
    if(!response.ok)throw Error(data.error||'Встроенный ИИ: HTTP '+response.status);
    received=String(data.text||'');streamBuffer=received;codeNode.textContent=received||'ИИ вернул пустой ответ.';
@@ -322,6 +325,25 @@ async function runAIBuild(editInstruction=''){
    if(streamTruncated)throw Error('Ответ модели обрезан из-за лимита длины. Уменьши задание или раздели генерацию на этапы; частичный ответ доступен во вкладке «Код».');
    if(!received.trim())throw Error('Провайдер вернул пустой поток. Проверь endpoint, модель и формат совместимого API.');
   }
+  if(nativeMode){
+   let nativeProject;
+   try{nativeProject=JSON.parse(String(received||streamBuffer).trim().replace(/^\x60{3}(?:json)?\s*/i,'').replace(/\x60{3}$/,'').trim())}catch(e){throw Error('ИИ не вернул корректный JSON с Android-файлами. Ответ оставлен во вкладке «Код».')}
+   if(!Array.isArray(nativeProject.files)||nativeProject.files.length<1||nativeProject.files.length>12)throw Error('Нативный ответ должен содержать от 1 до 12 файлов.');
+   for(const file of nativeProject.files){
+    if(!file||typeof file.path!=='string'||typeof file.content!=='string'||file.content.length>60000)throw Error('Некорректная структура файла в ответе ИИ.');
+    if(!/^(app\/src\/main\/java\/tj\/as\/generated\/[A-Za-z0-9_$/.-]+\.java|app\/src\/main\/res\/values\/[A-Za-z0-9_.-]+\.xml)$/.test(file.path)||file.path.includes('..'))throw Error('ИИ вернул путь вне разрешённой папки исходников: '+file.path);
+   }
+   const pretty=JSON.stringify(nativeProject,null,2);
+   $('code').textContent=pretty;$('spec').textContent=instruction;generatedHTML=pretty;
+   $('copyCode').disabled=false;
+   $('download').disabled=true;$('downloadPwa').disabled=true;$('downloadAndroidProject').disabled=true;$('saveProject').disabled=true;if(editButton)editButton.disabled=true;
+   $('state').textContent='Нативный исходный код создан';
+   finishBuildActivity(pretty);addActivity('Получены Android-файлы',nativeProject.files.map(f=>f.path).join(', '),'done');
+   addActivity('APK ещё не собран','Нативные исходники готовы. Нажми «Собрать APK проекта», чтобы отправить их в защищённую очередь. Успех подтвердится только после сборки и проверки APK.','error');
+   $('activityLive').textContent='Исходники Android подготовлены';showTab('code');
+   $('aiStatus').textContent='ИИ подготовил '+nativeProject.files.length+' нативных исходных файлов. Нажми «Собрать APK проекта», чтобы запустить защищённую нативную сборку.';
+   return;
+  }
   let code=String(received||streamBuffer).trim().replace(/^\x60{3}(?:html)?\s*/i,'').replace(/\x60{3}$/,'').trim();
   const match=code.match(/<!doctype html[\s\S]*<\/html>/i);if(match)code=match[0];
   if(!/<html[\s>]/i.test(code)||!/<\/html>/i.test(code))throw Error('ИИ не вернул полный HTML-документ. Ответ показан во вкладке «Код». Попробуй уточнить задание и повторить.');
@@ -337,7 +359,7 @@ async function runAIBuild(editInstruction=''){
   $('activityLive').textContent='Предпросмотр обновлён';showTab('activity');
   $('aiStatus').textContent='Поток генерации завершён. Код обновлён, предпросмотр перезапущен. Это веб-версия; APK и нативные функции требуют отдельной сборки и проверки.';
  }catch(e){failBuildActivity(e.message);$('state').textContent='Ошибка генерации';$('aiStatus').textContent='Ошибка: '+e.message+' Проверь ключ, модель, лимиты и поддержку потоковых запросов/CORS. Частичный ответ остался во вкладке «Код».';addActivity('Генерация остановлена',e.message,'error');}
- finally{generateButton.disabled=false;if(editButton)editButton.disabled=!generatedHTML}
+ finally{generateButton.disabled=false;if(editButton)editButton.disabled=nativeMode||!generatedHTML}
 }
 $('aiGenerate').addEventListener('click',()=>runAIBuild());
 $('applyEdit').addEventListener('click',()=>{const change=$('editPrompt').value.trim();if(!generatedHTML){$('aiStatus').textContent='Сначала создай приложение.';return}if(!change){$('editPrompt').focus();$('aiStatus').textContent='Напиши, что именно изменить.';return}runAIBuild(change)});
@@ -384,7 +406,7 @@ $('downloadAndroidProject').addEventListener('click',()=>{if(!generatedHTML){$('
 'settings.gradle':'pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }\ndependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }\nrootProject.name = "ASGeneratedApp"\ninclude(":app")\n',
 'build.gradle':'plugins { id "com.android.application" version "8.7.3" apply false }\n',
 'gradle.properties':'org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8\nandroid.useAndroidX=true\n',
-'app/build.gradle':'plugins { id "com.android.application" }\n\nandroid { namespace "com.as.generatedapp"; compileSdk 35; defaultConfig { applicationId "com.as.generatedapp"; minSdk 23; targetSdk 35; versionCode 1; versionName "1.0" } }\n',
+'app/build.gradle':'plugins { id "com.android.application" }\n\nandroid { namespace "com.as.generatedapp"; compileSdk 35; defaultConfig { applicationId "com.as.generatedapp"; minSdk 21; targetSdk 35; versionCode 1; versionName "1.0" } }\n',
 'app/src/main/AndroidManifest.xml':'<?xml version="1.0" encoding="utf-8"?>\n<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:label="'+safeName.replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:usesCleartextTraffic="false"><activity android:name=".GeneratedAppActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application></manifest>\n',
 'app/src/main/java/com/as/generatedapp/GeneratedAppActivity.java':'package com.as.generatedapp;\nimport android.app.Activity;import android.os.Bundle;import android.webkit.WebView;import android.webkit.WebSettings;import android.webkit.WebChromeClient;import android.webkit.WebViewClient;\npublic class GeneratedAppActivity extends Activity { @Override public void onCreate(Bundle b){super.onCreate(b);WebView w=new WebView(this);WebSettings s=w.getSettings();s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);w.setWebChromeClient(new WebChromeClient());w.setWebViewClient(new WebViewClient());setContentView(w);w.loadUrl("file:///android_asset/index.html");} @Override public void onBackPressed(){setContentViewBack();} private void setContentViewBack(){super.onBackPressed();} }\n',
 'app/src/main/assets/index.html':generatedHTML
@@ -486,10 +508,20 @@ $('buildApk').addEventListener('click',async()=>{
  if(!turnstileToken){try{await prepareTurnstile(cfg);buildStatus('Пройди проверку Cloudflare Turnstile, затем снова нажми «Собрать APK проекта».');}catch(e){buildStatus('Ошибка проверки: '+e.message);}return;}
  const button=$('buildApk');button.disabled=true;
  try{
-  buildStatus('Отправляю проект на защищённую сборку…');
+  buildStatus($('appTarget')?.value==='native'?'Отправляю нативный Android-проект на защищённую сборку…':'Отправляю проект на защищённую сборку…');
   let start;
   try{
-   start=await fetch(cfg.url+'/api/build',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({html:generatedHTML,turnstileToken})});
+   const nativeMode=$('appTarget')?.value==='native';
+   let buildPayload;
+   if(nativeMode){
+    let nativeProject;
+    try{nativeProject=JSON.parse(generatedHTML)}catch(e){throw Error('Не удалось прочитать нативные исходники. Сначала заново сгенерируй Android-проект.');}
+    if(!Array.isArray(nativeProject.files))throw Error('В нативном проекте нет списка файлов.');
+    buildPayload={type:'native',files:nativeProject.files,turnstileToken};
+   }else{
+    buildPayload={type:'web',html:generatedHTML,turnstileToken};
+   }
+   start=await fetch(cfg.url+'/api/build',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(buildPayload)});
   }catch(e){
    turnstileToken='';
    if(turnstileWidgetId!==null)try{window.turnstile.reset(turnstileWidgetId)}catch(resetError){}

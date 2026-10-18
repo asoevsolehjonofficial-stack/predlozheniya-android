@@ -45,6 +45,7 @@ jobs:
       found: ${{ steps.claim.outputs.found }}
       request_id: ${{ steps.claim.outputs.request_id }}
       project_slug: ${{ steps.claim.outputs.project_slug }}
+      project_type: ${{ steps.claim.outputs.project_type }}
     steps:
       - name: Verify live backend health
         run: |
@@ -65,6 +66,8 @@ jobs:
           echo "found=$FOUND" >> "$GITHUB_OUTPUT"
           echo "request_id=$(jq -r '.requestId // empty' <<< "$RESPONSE")" >> "$GITHUB_OUTPUT"
           echo "project_slug=$(jq -r '.slug // empty' <<< "$RESPONSE")" >> "$GITHUB_OUTPUT"
+          PROJECT_TYPE="$(jq -r '.type // "web"' <<< "$RESPONSE")"
+          echo "project_type=$PROJECT_TYPE" >> "$GITHUB_OUTPUT"
           echo "Queue claim result: $FOUND"
 
   initialize-signing:
@@ -100,6 +103,7 @@ jobs:
       id-token: write
     env:
       PROJECT_SLUG: ${{ needs.claim.outputs.project_slug }}
+      PROJECT_TYPE: ${{ needs.claim.outputs.project_type }}
       REQUEST_ID: ${{ needs.claim.outputs.request_id }}
     steps:
       - name: Validate claimed request identifiers
@@ -120,13 +124,17 @@ jobs:
           OIDC_TOKEN="$(curl --fail --silent --show-error -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-worker" | jq -r '.value')"
           test -n "$OIDC_TOKEN" && test "$OIDC_TOKEN" != "null"
           mkdir -p "projects/$PROJECT_SLUG"
+          SOURCE_PATH="projects/$PROJECT_SLUG/index.html"
+          if [ "$PROJECT_TYPE" = "native" ]; then SOURCE_PATH="projects/$PROJECT_SLUG/source.json"; fi
+          [[ "$PROJECT_TYPE" == "web" || "$PROJECT_TYPE" == "native" ]] || { echo "Unknown project type"; exit 1; }
           curl --fail --silent --show-error --max-time 60 \
             -H "Authorization: Bearer $OIDC_TOKEN" \
             "$BUILD_API_URL/api/internal/source?requestId=$REQUEST_ID" \
-            -o "projects/$PROJECT_SLUG/index.html"
-          test -s "projects/$PROJECT_SLUG/index.html"
+            -o "$SOURCE_PATH"
+          test -s "$SOURCE_PATH"
 
       - name: Validate project HTML
+        if: env.PROJECT_TYPE != 'native'
         run: |
           set -euo pipefail
           FILE="projects/$PROJECT_SLUG/index.html"
@@ -142,6 +150,7 @@ jobs:
           fi
 
       - name: Apply restrictive WebView content policy
+        if: env.PROJECT_TYPE != 'native'
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -179,6 +188,7 @@ jobs:
           echo "/tmp/gradle-8.9/bin" >> "$GITHUB_PATH"
 
       - name: Prepare isolated project assets and identity
+        if: env.PROJECT_TYPE != 'native'
         run: |
           set -euo pipefail
           cp "projects/$PROJECT_SLUG/index.html" app/src/main/assets/index.html
@@ -186,23 +196,80 @@ jobs:
           sed -i "s/applicationId 'tj.as.predlozheniya'/applicationId 'tj.as.generated.$PACKAGE_SUFFIX'/" app/build.gradle
           sed -i "s/android:label=\"A.S. APP BUILDER\"/android:label=\"$PROJECT_SLUG\"/" app/src/main/AndroidManifest.xml
 
+      - name: Prepare generated native Android project
+        if: env.PROJECT_TYPE == 'native'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, re, shutil
+          from pathlib import Path
+          slug = os.environ["PROJECT_SLUG"]
+          source = Path("projects") / slug / "source.json"
+          data = json.loads(source.read_text(encoding="utf-8"))
+          files = data.get("files")
+          if not isinstance(files, list) or not 1 <= len(files) <= 12:
+              raise SystemExit("Native source JSON has an invalid file list.")
+          root = Path("native-builder/app/src/main")
+          java_root = root / "java/tj/as/generated"
+          if java_root.exists(): shutil.rmtree(java_root)
+          template_root = root / "java/tj/as/nativebuilder/notes"
+          if template_root.exists(): shutil.rmtree(template_root)
+          seen = set()
+          main_found = False
+          for item in files:
+              if not isinstance(item, dict) or not isinstance(item.get("path"), str) or not isinstance(item.get("content"), str):
+                  raise SystemExit("Malformed native source file.")
+              rel = item["path"]
+              if not re.fullmatch(r"app/src/main/(?:java/tj/as/generated/[A-Za-z0-9_$]+\.java|res/values/[A-Za-z0-9_.-]+\.xml)", rel) or ".." in rel:
+                  raise SystemExit("Disallowed native source path: " + rel)
+              if rel in seen: raise SystemExit("Duplicate native source path.")
+              seen.add(rel)
+              if len(item["content"].encode("utf-8")) > 60000: raise SystemExit("Native source file exceeds 60 KiB.")
+              if rel.endswith(".java"):
+                  if re.search(r"java\.lang\.Runtime|ProcessBuilder|DexClassLoader|PathClassLoader|Class\.forName|System\.loadLibrary|WebView|java\.net\.(?:Socket|URL|URLConnection)", item["content"]):
+                      raise SystemExit("Restricted API detected in generated Java source.")
+                  if rel.endswith("/MainActivity.java"):
+                      if not re.search(r"package\s+tj\.as\.generated\s*;", item["content"]) or not re.search(r"class\s+MainActivity\s+extends\s+Activity\b", item["content"]):
+                          raise SystemExit("MainActivity package or superclass is invalid.")
+                      main_found = True
+              else:
+                  if re.search(r"<!DOCTYPE|<!ENTITY", item["content"], re.I): raise SystemExit("XML document types are forbidden.")
+              dest = root / rel.removeprefix("app/src/main/")
+              dest.parent.mkdir(parents=True, exist_ok=True)
+              dest.write_text(item["content"], encoding="utf-8")
+          if not main_found: raise SystemExit("Required MainActivity.java was not provided.")
+          PY
+          PACKAGE_SUFFIX="p_$(echo "$PROJECT_SLUG" | tr '-' '_')"
+          sed -i "s/namespace 'tj.as.nativebuilder.notes'/namespace 'tj.as.generated'/" native-builder/app/build.gradle
+          sed -i "s/applicationId 'tj.as.nativebuilder.notes'/applicationId 'tj.as.generated.$PACKAGE_SUFFIX'/" native-builder/app/build.gradle
+          sed -i "s/android:label=\"A.S. Notes Native\"/android:label=\"$PROJECT_SLUG\"/" native-builder/app/src/main/AndroidManifest.xml
+
       - name: Load permanent APK signing key
+        if: env.PROJECT_TYPE != 'native'
         run: bash .github/scripts/ensure-signing-key.sh
 
-      - name: Build project APK
+      - name: Build web project APK
+        if: env.PROJECT_TYPE != 'native'
         run: gradle --no-daemon clean assembleDebug
+
+      - name: Build native Android APK
+        if: env.PROJECT_TYPE == 'native'
+        run: gradle --no-daemon -p native-builder clean assembleDebug
 
       - name: Verify APK signature, package, and checksum
         run: |
           set -euo pipefail
-          APK="app/build/outputs/apk/debug/app-debug.apk"
+          if [ "$PROJECT_TYPE" = "native" ]; then APK="native-builder/app/build/outputs/apk/debug/app-debug.apk"; else APK="app/build/outputs/apk/debug/app-debug.apk"; fi
           test -s "$APK"
           unzip -t "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
-          EXPECTED_CERT="$(keytool -list -v -keystore "$AS_BUILDER_KEYSTORE_PATH" -storetype PKCS12 -storepass "$AS_BUILDER_KEYSTORE_PASSWORD" -alias "$AS_BUILDER_KEY_ALIAS" | awk -F': ' '/SHA256:/{print $2; exit}' | tr -d ':' | tr '[:lower:]' '[:upper:]')"
-          ACTUAL_CERT="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" | awk -F': ' '/Signer #1 certificate SHA-256 digest:/{print $2; exit}' | tr -d ':' | tr '[:lower:]' '[:upper:]')"
-          test -n "$EXPECTED_CERT" && test -n "$ACTUAL_CERT" && test "$EXPECTED_CERT" = "$ACTUAL_CERT" || { echo "::error::APK signature does not match the permanent signing key."; exit 1; }
-          echo "APK signer certificate matches the permanent signing key."
+          if [ "$PROJECT_TYPE" != "native" ]; then
+            EXPECTED_CERT="$(keytool -list -v -keystore "$AS_BUILDER_KEYSTORE_PATH" -storetype PKCS12 -storepass "$AS_BUILDER_KEYSTORE_PASSWORD" -alias "$AS_BUILDER_KEY_ALIAS" | awk -F': ' '/SHA256:/{print $2; exit}' | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+            ACTUAL_CERT="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" | awk -F': ' '/Signer #1 certificate SHA-256 digest:/{print $2; exit}' | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+            test -n "$EXPECTED_CERT" && test -n "$ACTUAL_CERT" && test "$EXPECTED_CERT" = "$ACTUAL_CERT" || { echo "::error::APK signature does not match the permanent signing key."; exit 1; }
+            echo "APK signer certificate matches the permanent signing key."
+          fi
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -q "package: name='tj.as.generated."
           HASH="$(sha256sum "$APK" | cut -d ' ' -f1)"
           echo "Verified APK SHA-256: $HASH"
@@ -210,7 +277,7 @@ jobs:
           sha256sum -c "$APK.sha256"
 
       - name: Install and launch APK in Android emulator (smoke tests only)
-        if: startsWith(env.PROJECT_SLUG, 'smoke-')
+        if: env.PROJECT_TYPE != 'native' && startsWith(env.PROJECT_SLUG, 'smoke-')
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -236,12 +303,32 @@ jobs:
             test -s "$RUNNER_TEMP/as-builder-smoke.png"
             echo "Android emulator smoke test passed: APK installed, launcher activity started, and screenshot captured."
 
+      - name: Install and launch generated native APK
+        if: env.PROJECT_TYPE == 'native'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            APK="native-builder/app/build/outputs/apk/debug/app-debug.apk"
+            PACKAGE_SUFFIX="p_$(echo "$PROJECT_SLUG" | tr '-' '_')"
+            PACKAGE="tj.as.generated.$PACKAGE_SUFFIX"
+            adb install "$APK"
+            adb shell monkey -p "$PACKAGE" -c android.intent.category.LAUNCHER 1
+            sleep 5
+            adb shell dumpsys activity activities | grep -F "$PACKAGE" >/dev/null
+            if adb logcat -d -t 1200 | grep -E "FATAL EXCEPTION.*$PACKAGE|Process: $PACKAGE.*died"; then echo "::error::Generated native app crashed."; exit 1; fi
+
       - name: Upload APK using short-lived GitHub OIDC
         run: |
           set -euo pipefail
           OIDC_TOKEN="$(curl --fail --silent --show-error -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-worker" | jq -r '.value')"
           test -n "$OIDC_TOKEN" && test "$OIDC_TOKEN" != "null"
-          APK="app/build/outputs/apk/debug/app-debug.apk"
+          if [ "$PROJECT_TYPE" = "native" ]; then APK="native-builder/app/build/outputs/apk/debug/app-debug.apk"; else APK="app/build/outputs/apk/debug/app-debug.apk"; fi
           HASH="$(sha256sum "$APK" | cut -d ' ' -f1)"
           curl --fail --silent --show-error --max-time 120 \
             -X PUT "$BUILD_API_URL/api/internal/upload?requestId=$REQUEST_ID" \

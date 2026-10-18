@@ -36,6 +36,30 @@ function originAllowed(request, env) {
   return { origin, ok: Boolean(allowed && origin === allowed) };
 }
 
+function validNativeFiles(files) {
+  if (!Array.isArray(files) || files.length < 1 || files.length > 12) return "Provide between 1 and 12 native source files.";
+  let totalBytes = 0;
+  let hasMainActivity = false;
+  const seen = new Set();
+  for (const file of files) {
+    if (!file || typeof file.path !== "string" || typeof file.content !== "string") return "Each native file must have a path and text content.";
+    if (!/^app\/src\/main\/(java\/tj\/as\/generated\/[A-Za-z0-9_$]+\.java|res\/values\/[A-Za-z0-9_.-]+\.xml)$/.test(file.path) || file.path.includes("..")) return "Native file path is outside the allowed Java and values-resource folders.";
+    if (seen.has(file.path)) return "Duplicate native file paths are not allowed.";
+    seen.add(file.path);
+    if (file.content.length > 60000) return "A native source file exceeds the 60 KiB limit.";
+    totalBytes += new TextEncoder().encode(file.content).byteLength;
+    if (totalBytes > 500 * 1024) return "Native source files exceed the 500 KiB total limit.";
+    if (/\.java$/.test(file.path) && /(java\.lang\.Runtime|ProcessBuilder|DexClassLoader|PathClassLoader|Class\.forName|System\.loadLibrary|WebView|java\.net\.(Socket|URL|URLConnection)|android\.permission\.INTERNET)/.test(file.content)) return "Native source contains a restricted dynamic-loading, process, WebView, or network API.";
+    if (file.path === "app/src/main/java/tj/as/generated/MainActivity.java") {
+      hasMainActivity = true;
+      if (!/package\s+tj\.as\.generated\s*;/.test(file.content) || !/class\s+MainActivity\s+extends\s+Activity\b/.test(file.content)) return "MainActivity must use package tj.as.generated and extend android.app.Activity.";
+    }
+    if (/\.xml$/.test(file.path) && /<!DOCTYPE|<!ENTITY/i.test(file.content)) return "XML resources must not declare document types or entities.";
+  }
+  if (!hasMainActivity) return "A native project must include app/src/main/java/tj/as/generated/MainActivity.java.";
+  return "";
+}
+
 function validHtml(html) {
   if (typeof html !== "string") return "HTML must be text.";
   if (new TextEncoder().encode(html).byteLength > MAX_HTML_BYTES) return "HTML is over the 1 MiB limit.";
@@ -250,7 +274,8 @@ async function handleBuild(request, env, cors) {
   try { payload = JSON.parse(rawBody); } catch { payload = null; }
   if (!payload) return json({ error: "Invalid JSON request." }, 400, cors.origin);
   if (!(await verifyTurnstile(payload.turnstileToken, ip, env))) return json({ error: "Security check failed. Complete the anti-bot check and retry." }, 403, cors.origin);
-  const problem = validHtml(payload.html);
+  const type = payload.type === "native" ? "native" : "web";
+  const problem = type === "native" ? validNativeFiles(payload.files) : validHtml(payload.html);
   if (problem) return json({ error: problem }, 400, cors.origin);
 
   await env.RATE_LIMITS.put(limitKey, String(current + 1), { expirationTtl: 3600 });
@@ -258,7 +283,7 @@ async function handleBuild(request, env, cors) {
   const requestId = crypto.randomUUID().replace(/-/g, "");
   const slug = "build-" + requestId.slice(0, 12);
   const downloadToken = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
-  const job = { requestId, slug, createdAt: Date.now(), status: "queued", html: payload.html, tokenHash: await sha256(downloadToken) };
+  const job = { requestId, slug, type, createdAt: Date.now(), status: "queued", ...(type === "native" ? { nativeFiles: payload.files } : { html: payload.html }), tokenHash: await sha256(downloadToken) };
   await env.JOBS.put("job:" + requestId, JSON.stringify(job), { expirationTtl: 86400 });
   return json({ requestId, downloadToken, status: "queued", message: "Build queued. Keep this page open to check progress." }, 202, cors.origin);
 }
@@ -275,7 +300,7 @@ function recoverStaleJob(job, now = Date.now()) {
     : (job.claimedAt || job.createdAt));
   if (!Number.isFinite(startedAt) || now - startedAt < STALE_BUILD_MS) return false;
 
-  if (typeof job.html === "string" && Number(job.retryCount || 0) < MAX_AUTOMATIC_RETRIES) {
+  if ((typeof job.html === "string" || Array.isArray(job.nativeFiles)) && Number(job.retryCount || 0) < MAX_AUTOMATIC_RETRIES) {
     job.status = "queued";
     job.retryCount = Number(job.retryCount || 0) + 1;
     job.lastRecoveryAt = now;
@@ -289,6 +314,7 @@ function recoverStaleJob(job, now = Date.now()) {
   job.failedAt = now;
   job.lastError = "Build worker timed out after the automatic retry.";
   delete job.html;
+  delete job.nativeFiles;
   return true;
 }
 
@@ -302,29 +328,30 @@ async function handleClaim(request, env) {
     if (recoverStaleJob(job)) {
       await env.JOBS.put(item.name, JSON.stringify(job), { expirationTtl: 86400 });
     }
-    if (job.status !== "queued" || typeof job.html !== "string") continue;
+    if (job.status !== "queued" || (typeof job.html !== "string" && !Array.isArray(job.nativeFiles))) continue;
 
     job.status = "claimed";
     job.claimedAt = Date.now();
     await env.JOBS.put(item.name, JSON.stringify(job), { expirationTtl: 86400 });
-    return json({ found: true, requestId: job.requestId, slug: job.slug });
+    return json({ found: true, requestId: job.requestId, slug: job.slug, type: job.type === "native" ? "native" : "web" });
   }
   return json({ found: false });
 }
 async function handleSource(request, env, requestId) {
   if (!(await verifyGitHubOidc(request))) return json({ error: "Unauthorized." }, 401);
   const job = await getJob(env, requestId);
-  if (!job || typeof job.html !== "string" || !["claimed", "building"].includes(job.status)) return json({ error: "Source expired, already fetched, or not claimed." }, 404);
-  const html = job.html;
+  if (!job || (typeof job.html !== "string" && !Array.isArray(job.nativeFiles)) || !["claimed", "building"].includes(job.status)) return json({ error: "Source expired, already fetched, or not claimed." }, 404);
+  const isNative = job.type === "native";
+  const source = isNative ? JSON.stringify({ files: job.nativeFiles }) : job.html;
   // Retain the private source until APK upload succeeds, enabling recovery
   // if the GitHub runner exits unexpectedly after fetching the source.
   job.sourceFetchedAt = Date.now();
   job.status = "building";
   await env.JOBS.put("job:" + requestId, JSON.stringify(job), { expirationTtl: 86400 });
-  return new Response(html, {
+  return new Response(source, {
     status: 200,
     headers: {
-      "content-type": "text/html; charset=utf-8",
+      "content-type": isNative ? "application/json; charset=utf-8" : "text/html; charset=utf-8",
       "cache-control": "no-store",
       "x-content-type-options": "nosniff",
       "content-security-policy": "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
@@ -354,6 +381,7 @@ async function handleUpload(request, env, requestId) {
   job.apkUploadedAt = Date.now();
   job.status = "success";
   delete job.html;
+  delete job.nativeFiles;
   delete job.lastError;
   await env.JOBS.put("job:" + requestId, JSON.stringify(job), { expirationTtl: 86400 });
   return json({ ok: true, sha256: actual }, 201);
@@ -377,7 +405,7 @@ async function handleFail(request, requestId, env) {
 
   // A single automatic retry covers transient runner/network failures without
   // creating an unbounded loop. A second failure becomes terminal.
-  if (typeof job.html === "string" && Number(job.retryCount || 0) < MAX_AUTOMATIC_RETRIES) {
+  if ((typeof job.html === "string" || Array.isArray(job.nativeFiles)) && Number(job.retryCount || 0) < MAX_AUTOMATIC_RETRIES) {
     job.status = "queued";
     job.retryCount = Number(job.retryCount || 0) + 1;
     job.lastRecoveryAt = Date.now();
@@ -390,6 +418,7 @@ async function handleFail(request, requestId, env) {
 
   job.status = "failed";
   delete job.html;
+  delete job.nativeFiles;
   job.failedAt = Date.now();
   job.lastError = "Build failed after the automatic retry.";
   await env.JOBS.put("job:" + requestId, JSON.stringify(job), { expirationTtl: 86400 });
@@ -501,4 +530,4 @@ export default {
   }
 };
 
-export { validHtml, bytesToBase64, base64ToBytes, safeEqual, verifyGitHubOidc, readBodyLimited, recoverStaleJob, STALE_BUILD_MS };
+export { validHtml, validNativeFiles, bytesToBase64, base64ToBytes, safeEqual, verifyGitHubOidc, readBodyLimited, recoverStaleJob, STALE_BUILD_MS };
