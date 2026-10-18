@@ -1,9 +1,26 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validHtml, bytesToBase64, base64ToBytes, safeEqual, verifyGitHubOidc, readBodyLimited, recoverStaleJob, STALE_BUILD_MS } from "../src/index.js";
+import { validHtml, validNativeFiles, bytesToBase64, base64ToBytes, safeEqual, verifyGitHubOidc, readBodyLimited, recoverStaleJob, STALE_BUILD_MS } from "../src/index.js";
 
 test("accepts a complete self-contained HTML document", () => {
   assert.equal(validHtml("<!doctype html><html><head><title>Demo</title></head><body><h1>OK</h1></body></html>"), "");
+});
+
+test("accepts a minimal native Android project with an Activity entry point", () => {
+  const files = [{ path: "app/src/main/java/tj/as/generated/MainActivity.java", content: "package tj.as.generated; import android.app.Activity; public class MainActivity extends Activity {}" }];
+  assert.equal(validNativeFiles(files), "");
+});
+
+test("rejects unsafe native paths, duplicate files, and missing entry points", () => {
+  const main = { path: "app/src/main/java/tj/as/generated/MainActivity.java", content: "package tj.as.generated; import android.app.Activity; public class MainActivity extends Activity {}" };
+  assert.match(validNativeFiles([{ ...main, path: "app/src/main/java/tj/as/generated/../MainActivity.java" }]), /path/i);
+  assert.match(validNativeFiles([main, main]), /Duplicate/i);
+  assert.match(validNativeFiles([{ path: "app/src/main/java/tj/as/generated/Helper.java", content: "package tj.as.generated; class Helper {}" }]), /MainActivity/i);
+});
+
+test("rejects restricted runtime loading and network APIs in native source", () => {
+  const main = { path: "app/src/main/java/tj/as/generated/MainActivity.java", content: "package tj.as.generated; import android.app.Activity; public class MainActivity extends Activity { void x(){ new ProcessBuilder(\"id\"); } }" };
+  assert.match(validNativeFiles([main]), /restricted/i);
 });
 
 test("rejects incomplete HTML and remote executable content", () => {
