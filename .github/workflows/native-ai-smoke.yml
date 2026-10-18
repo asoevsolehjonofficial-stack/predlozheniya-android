@@ -237,6 +237,7 @@ jobs:
           arch: ${{ matrix.api_level == 21 && 'x86' || 'x86_64' }}
           profile: pixel_2
           disable-animations: true
+          # API 35 stability retry: software SwiftShader and direct adb exec-out screenshot.
           emulator-options: -no-window -gpu swiftshader -no-snapshot -noaudio -no-boot-anim -camera-back none
           emulator-boot-timeout: 600
           cores: 2
