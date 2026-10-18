@@ -50,7 +50,7 @@ jobs:
       fail-fast: false
       matrix:
         example: [simple, multi-screen, storage]
-        api-level: [21, 35]
+        api_level: [21, 35]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -134,8 +134,8 @@ jobs:
           print("Validated source files:", ", ".join(sorted(seen)))
           PY
           sed -i "s/namespace 'tj.as.nativebuilder.notes'/namespace 'tj.as.generated'/" native-builder/app/build.gradle
-          sed -i "s/applicationId 'tj.as.nativebuilder.notes'/applicationId 'tj.as.generated.p_native_${EXAMPLE}_api${{ matrix.api-level }}'/" native-builder/app/build.gradle
-          sed -i "s/android:label=\"A.S. Notes Native\"/android:label=\"Native $EXAMPLE API ${{ matrix.api-level }}\"/" native-builder/app/src/main/AndroidManifest.xml
+          sed -i "s/applicationId 'tj.as.nativebuilder.notes'/applicationId 'tj.as.generated.p_native_${EXAMPLE}_api${{ matrix.api_level }}'/" native-builder/app/build.gradle
+          sed -i "s/android:label=\"A.S. Notes Native\"/android:label=\"Native $EXAMPLE API ${{ matrix.api_level }}\"/" native-builder/app/src/main/AndroidManifest.xml
       - name: Build native APK
         run: gradle --no-daemon -p native-builder clean assembleDebug
       - name: Verify APK package, signature, and checksum
@@ -146,20 +146,20 @@ jobs:
           test -s "$APK"
           unzip -t "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -q "package: name='tj.as.generated.p_native_${{ matrix.example }}_api${{ matrix.api-level }}'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -q "package: name='tj.as.generated.p_native_${{ matrix.example }}_api${{ matrix.api_level }}'"
           sha256sum "$APK" | tee "$RUNNER_TEMP/apk-sha256.txt"
       - name: Install, launch, and capture a real emulator screenshot
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: ${{ matrix.api-level }}
-          target: ${{ matrix.api-level == 21 && 'default' || 'google_apis' }}
-          arch: ${{ matrix.api-level == 21 && 'x86' || 'x86_64' }}
+          api_level: ${{ matrix.api_level }}
+          target: ${{ matrix.api_level == 21 && 'default' || 'google_apis' }}
+          arch: ${{ matrix.api_level == 21 && 'x86' || 'x86_64' }}
           profile: pixel_2
           disable-animations: true
           script: |
             set -eu
             APK="native-builder/app/build/outputs/apk/debug/app-debug.apk"
-            PACKAGE="tj.as.generated.p_native_${{ matrix.example }}_api${{ matrix.api-level }}"
+            PACKAGE="tj.as.generated.p_native_${{ matrix.example }}_api${{ matrix.api_level }}"
             adb install "$APK"
             adb shell monkey -p "$PACKAGE" -c android.intent.category.LAUNCHER 1
             sleep 5
@@ -173,7 +173,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: native-e2e-${{ matrix.example }}-api-${{ matrix.api-level }}
+          name: native-e2e-${{ matrix.example }}-api-${{ matrix.api_level }}
           if-no-files-found: warn
           retention-days: 14
           path: |
