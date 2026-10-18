@@ -1,6 +1,6 @@
 name: Build APK for a user project
 run-name: "Free APK queue worker"
-# Smoke-* jobs exercise queue, build, permanent signing, emulator launch, and authenticated download.
+# smoke-* jobs exercise queue, build, signing, and authenticated download; smoke-emulator-* also tests emulator launch.
 
 on:
   push:
