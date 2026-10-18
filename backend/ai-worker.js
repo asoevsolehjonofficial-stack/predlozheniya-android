@@ -222,13 +222,6 @@ async function verifyCiOidc(request) {
   }
 }
 
-function safeSecretEqual(provided, expected) {
-  if (typeof provided !== "string" || typeof expected !== "string" || provided.length !== expected.length || !expected.length) return false;
-  let diff = 0;
-  for (let i = 0; i < provided.length; i++) diff |= provided.charCodeAt(i) ^ expected.charCodeAt(i);
-  return diff === 0;
-}
-
 function ciFixture(prompt, nativeMode) {
   if (!nativeMode) {
     return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>CI fixture</title></head><body><main><h1>CI fixture app</h1><button id=\"count\">Count: 0</button><script>let n=0;document.getElementById('count').onclick=()=>document.getElementById('count').textContent='Count: '+(++n)</script></main></body></html>";
@@ -281,19 +274,6 @@ async function generate(request, env) {
   if (prompt.length > MAX_PROMPT_CHARS) return json({ error: "Prompt is too large. Keep it under 18,000 characters." }, 413, origin);
   if (/(sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{30,}|BEGIN (RSA|OPENSSH|EC) PRIVATE KEY)/i.test(prompt)) {
     return json({ error: "The prompt appears to contain a secret. Remove API keys or private keys first." }, 400, origin);
-  }
-
-  const suppliedTestSecret = request.headers.get("x-ai-ci-test-secret");
-  const configuredTestSecret = env.AI_CI_TEST_SECRET;
-  const isCiTest = safeSecretEqual(suppliedTestSecret, configuredTestSecret);
-  if (suppliedTestSecret && !isCiTest) return json({ error: "Invalid CI test authorization." }, 403, origin);
-  if (isCiTest) {
-    return json({
-      text: ciFixture(prompt, nativeMode),
-      model: "ci-fixture-v1",
-      provider: "test-fixture",
-      mode: nativeMode ? "native-android-source" : "web-html"
-    }, 200, origin);
   }
 
   // A single Durable Object transaction checks and reserves all three counters atomically.
