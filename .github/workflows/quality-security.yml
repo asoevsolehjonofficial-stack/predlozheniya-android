@@ -1,9 +1,5 @@
 name: Quality and security checks
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 on:
   push:
     branches: [main, "fix/**"]
