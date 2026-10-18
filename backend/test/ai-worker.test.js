@@ -112,41 +112,10 @@ test("Durable Object atomically limits concurrent AI requests", async () => {
   assert.equal(inferenceCalls, 5);
 });
 
-test("secret-protected CI fixture skips both rate limits and provider inference", async () => {
-  let inferenceCalls = 0;
-  const env = { ...fakeEnv(async () => { inferenceCalls++; return { response: "should not run" }; }), AI_CI_TEST_SECRET: "only-for-tests" };
-  const response = await call("/api/ai/native-generate", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "CF-Connecting-IP": "203.0.113.10", "x-ai-ci-test-secret": "only-for-tests" },
-    body: JSON.stringify({ prompt: "Build a notes app with persistent storage" }),
-    env
-  });
-  assert.equal(response.status, 200);
-  const body = await response.json();
-  assert.equal(body.provider, "test-fixture");
-  assert.equal(body.model, "ci-fixture-v1");
-  assert.equal(body.mode, "native-android-source");
-  assert.match(JSON.parse(body.text).files[0].content, /SharedPreferences/);
-  assert.equal(inferenceCalls, 0);
-  assert.equal(env.RATE_LIMITER.store.size, 0);
-});
-
-test("incorrect CI fixture secret never bypasses the limiter", async () => {
-  const env = { ...fakeEnv(), AI_CI_TEST_SECRET: "correct-secret" };
-  const response = await call("/api/ai/generate", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-ai-ci-test-secret": "wrong-secret" },
-    body: JSON.stringify({ prompt: "Create a test app" }),
-    env
-  });
-  assert.equal(response.status, 403);
-  assert.equal(env.RATE_LIMITER.store.size, 0);
-});
-
 
 test("CI fixture endpoint rejects missing or invalid GitHub OIDC tokens without using production quota", async () => {
   let inferenceCalls = 0;
-  const env = { ...fakeEnv(async () => { inferenceCalls++; return { response: "must not run" }; }), AI_CI_TEST_SECRET: "not-used-by-this-endpoint" };
+  const env = { ...fakeEnv(async () => { inferenceCalls++; return { response: "must not run" }; }) };
   for (const headers of [
     { "Content-Type": "application/json" },
     { "Content-Type": "application/json", "Authorization": "Bearer invalid.jwt.token" }
