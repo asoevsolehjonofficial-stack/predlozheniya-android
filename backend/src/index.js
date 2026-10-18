@@ -147,7 +147,7 @@ async function verifyGitHubOidc(request, workflow = WORKFLOW) {
   const audienceValid = claims.aud === OIDC_AUDIENCE || (Array.isArray(claims.aud) && claims.aud.includes(OIDC_AUDIENCE));
   if (header.alg !== "RS256" || claims.iss !== OIDC_ISSUER || !audienceValid ||
       claims.repository !== OWNER + "/" + REPO ||
-      claims.workflow_ref !== OWNER + "/" + REPO + "/.github/workflows/" + workflow + "@refs/heads/main" ||
+      !(Array.isArray(workflow) ? workflow : [workflow]).some(name => claims.workflow_ref === OWNER + "/" + REPO + "/.github/workflows/" + name + "@refs/heads/main") ||
       claims.ref !== "refs/heads/main" || !Number.isFinite(claims.exp) || claims.exp <= now ||
       !Number.isFinite(claims.iat) || claims.iat > now + 60 ||
       (Number.isFinite(claims.nbf) && claims.nbf > now)) return false;
@@ -166,6 +166,15 @@ async function verifyGitHubOidc(request, workflow = WORKFLOW) {
     return false;
   }
 }
+
+function verifiedWorkflowRef(request) {
+  try {
+    const token = bearer(request);
+    const parts = token.split(".");
+    return parts.length === 3 ? decodeJwtPart(parts[1]).workflow_ref || "" : "";
+  } catch { return ""; }
+}
+
 async function getJob(env, requestId) {
   if (!UUID_RE.test(requestId)) return null;
   const raw = await env.JOBS.get("job:" + requestId);
@@ -392,11 +401,14 @@ async function handleCiRegister(request, env) {
 }
 
 async function handleUpload(request, env, requestId, allowNativeE2E = false) {
-  if (!(await verifyGitHubOidc(request, allowNativeE2E ? "native-ai-smoke.yml" : WORKFLOW))) return json({ error: "Unauthorized." }, 401);
+  if (!(await verifyGitHubOidc(request, allowNativeE2E ? [WORKFLOW, "native-ai-smoke.yml"] : WORKFLOW))) return json({ error: "Unauthorized." }, 401);
   if (!env.JOBS) return json({ error: "Free KV build storage is not configured." }, 503);
   const job = await getJob(env, requestId);
   if (!job || !job.sourceFetchedAt || job.status === "failed") return json({ error: "Build request not found or source was not fetched." }, 404);
-  if (allowNativeE2E && !job.ciFixture) return json({ error: "CI upload is restricted to a registered fixture job." }, 403);
+  if (allowNativeE2E) {
+    const nativeWorkflow = verifiedWorkflowRef(request).endsWith("/.github/workflows/native-ai-smoke.yml@refs/heads/main");
+    if (nativeWorkflow !== Boolean(job.ciFixture)) return json({ error: "Workflow is not authorized for this build request." }, 403);
+  }
   if (job.apkUploadedAt) return json({ error: "APK was already uploaded." }, 409);
   if (!(request.headers.get("Content-Type") || "").toLowerCase().startsWith("application/octet-stream")) return json({ error: "Content-Type must be application/octet-stream." }, 415);
   const declaredLength = Number(request.headers.get("Content-Length") || "0");
@@ -460,10 +472,13 @@ async function handleFail(request, requestId, env) {
 }
 
 async function handlePreviewUpload(request, env, requestId, allowNativeE2E = false) {
-  if (!(await verifyGitHubOidc(request, allowNativeE2E ? "native-ai-smoke.yml" : WORKFLOW))) return json({ error: "Unauthorized." }, 401);
+  if (!(await verifyGitHubOidc(request, allowNativeE2E ? [WORKFLOW, "native-ai-smoke.yml"] : WORKFLOW))) return json({ error: "Unauthorized." }, 401);
   const job = await getJob(env, requestId);
   if (!job || job.type !== "native" || !job.sourceFetchedAt || job.status === "failed") return json({ error: "Native build request not found." }, 404);
-  if (allowNativeE2E && !job.ciFixture) return json({ error: "CI preview upload is restricted to a registered fixture job." }, 403);
+  if (allowNativeE2E) {
+    const nativeWorkflow = verifiedWorkflowRef(request).endsWith("/.github/workflows/native-ai-smoke.yml@refs/heads/main");
+    if (nativeWorkflow !== Boolean(job.ciFixture)) return json({ error: "Workflow is not authorized for this preview." }, 403);
+  }
   if (!(request.headers.get("Content-Type") || "").toLowerCase().startsWith("image/png")) return json({ error: "Preview must be a PNG screenshot." }, 415);
   const declaredLength = Number(request.headers.get("Content-Length") || "0");
   if (declaredLength > 4 * 1024 * 1024) return json({ error: "Preview screenshot is too large." }, 413);
