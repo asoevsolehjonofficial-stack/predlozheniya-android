@@ -176,7 +176,7 @@ jobs:
           print("Validated source files:", ", ".join(sorted(seen)))
           PY
           sed -i "s/namespace 'tj.as.nativebuilder.notes'/namespace 'tj.as.generated'/" native-builder/app/build.gradle
-          sed -i "s/applicationId 'tj.as.nativebuilder.notes'/applicationId 'tj.as.generated.p_native_${EXAMPLE}_api${{ matrix.api_level }}'/" native-builder/app/build.gradle
+          sed -i "s/applicationId 'tj.as.nativebuilder.notes'/applicationId 'tj.as.generated.p_native_${APP_SLUG}_api${{ matrix.api_level }}'/" native-builder/app/build.gradle
           sed -i "s/android:label=\"A.S. Notes Native\"/android:label=\"Native $EXAMPLE API ${{ matrix.api_level }}\"/" native-builder/app/src/main/AndroidManifest.xml
       - name: Create quota-free local API build job
         shell: bash
