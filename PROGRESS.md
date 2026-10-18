@@ -54,11 +54,12 @@ Pull request: #24 — https://github.com/asoevsolehjonofficial-stack/predlozheni
 - Root cause in the failed run is proven by its diff: that PR merge checkout had the native screenshot-preview block in root `index.html` but not in the Android asset. The latest inspected branch version already had both files identical; the new script makes the source-of-truth and guard explicit.
 
 ### CI status and PR handling
+- Follow-up PR opened: [#27 — Prevent website and Android HTML asset drift](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/pull/27). PR #24 had already been merged before this repair was prepared, so GitHub does not permit adding commits to that closed/merged PR.
 - Confirmed failed run IDs: [39152068311](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39152068311) and [39152068438](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39152068438).
 - Failure evidence: manual import workflow's asset equality assertion failed; quality workflow's `cmp` failed and showed the missing native screenshot-preview block in the Android asset.
 - PR #24 is already merged (merge timestamp `2026-10-18T18:01:00Z`), so it cannot be updated as an open PR. The follow-up fix is committed to the same head branch; a new follow-up PR is required to run pull-request CI for these changes.
-- The new CI results are pending/not yet confirmed. Checks skipped after the early synchronization failure must be inspected after the new workflow run completes.
+- No workflow runs for PR #27's head commit `3075d876b9d63a075e590565fd3373aeed861a9b` were present in the Actions run list at the time of this update; only the Cloudflare Pages check reported success. Therefore CI is NOT YET VERIFIED on this follow-up commit. The connector-created commits did not produce new PR workflow runs, so I cannot truthfully report that the checks have completed. Earlier run `39152115773` (quality/security) and `39152115572` (manual HTML import) succeeded on the earlier PR #24 merge checkout, but they do not validate this new script/workflow revision. Checks skipped after the early synchronization failure still need a fresh run.
 
 ### Current status
-- Stage 2: IMPLEMENTED IN BRANCH; awaiting follow-up PR CI evidence.
+- Stage 2: IMPLEMENTED IN BRANCH and follow-up PR #27 opened; CI validation is blocked pending a new workflow run on the latest head.
 - No claim that all 11 release acceptance criteria are complete.
