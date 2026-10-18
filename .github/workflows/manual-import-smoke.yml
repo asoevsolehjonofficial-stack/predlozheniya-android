@@ -2,7 +2,7 @@ name: Manual HTML import smoke test
 
 on:
   push:
-    branches: [main]
+    branches: [main, "fix/**"]
     paths:
       - "index.html"
       - "app/src/main/assets/index.html"
@@ -10,6 +10,7 @@ on:
       - ".github/workflows/manual-import-smoke.yml"
       - ".github/scripts/manual-import-browser-test.mjs"
   pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
     paths:
       - "index.html"
       - "app/src/main/assets/index.html"
