@@ -311,3 +311,13 @@ Latest native E2E run: https://github.com/asoevsolehjonofficial-stack/predlozhen
   - Rollback method: create a new Worker deployment referencing version `b6678b0e-9ad0-46ba-8b1c-8718297127b4` at 100%, then recheck production health and quota behavior. Do not delete either historical deployment/version.
 - Cloudflare access check: list/read Worker settings, deployments, KV namespaces, and Worker scripts succeeds. Durable Object namespace listing currently returns zero namespaces; production still has only the `RATE_LIMITS` KV binding, not `RATE_LIMITER`. R2 API returns error 10042 (R2 must be enabled in Dashboard). GitHub connector has no secret-management action, so Actions secrets cannot be created through the currently available GitHub tool.
 - No production deployment has been performed. The current PR changes remain subject to CI; do not claim production DO/quota acceptance until deployment and the 4-success/5th-429 live test are verified.
+
+
+## Cloudflare deployment capability check (2026-10-19)
+
+- Read access is confirmed for Worker scripts/settings/deployments, KV namespace inventory, and DO namespace inventory.
+- Safe non-mutating upload probes against the Worker Script Upload API were rejected with Cloudflare error `10001: Content-Type must be one of: application/javascript, text/javascript, multipart/form-data` even when the request attempted to pass multipart data or JavaScript content. The connector request wrapper is not forwarding a supported upload Content-Type/body, so the Worker source plus DO migration cannot be uploaded through the current Cloudflare connection.
+- A safe POST probe was rejected with error `10405: Method not allowed for this authentication scheme`. No Worker settings, secrets, bindings, or production deployment were changed by these probes.
+- Consequently, direct production deployment, DO migration, binding updates, and Worker secret creation are not currently executable through this connection. Do not claim a deployment occurred. The recorded rollback target remains previous version `b6678b0e-9ad0-46ba-8b1c-8718297127b4`.
+- GitHub connector exposes no action for creating/updating repository Actions secrets, and there is no permitted way here to mint a least-privilege Cloudflare API token. Do not attempt to bypass this limitation or ask the user to paste a token into chat.
+- A production quota smoke workflow was added at `.github/workflows/production-ai-quota-smoke.yml`. After deployment access is restored, push a small progress-only commit to branch `ops/production-quota-smoke` to run the real production health + four-200/fifth-429 test. This workflow intentionally does not run on routine PRs.
