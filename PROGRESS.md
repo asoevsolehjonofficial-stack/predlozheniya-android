@@ -212,3 +212,10 @@ Pull request: #27 — https://github.com/asoevsolehjonofficial-stack/predlozheni
   2. Emulator action warning: `Unexpected input(s) 'api_level', valid inputs are ['api-level', ...]` — the matrix key was mistakenly used as an action input name.
   3. API 21 setup log: `Warning: An error occurred while preparing SDK package Google APIs Intel x86_64 Atom System Image: Error on ZipFile unknown archive`, followed by `sdkmanager failed with exit code 1` — each job was downloading both system images, including an irrelevant one.
 - Branch `fix/native-e2e-matrix-api-levels` sanitizes the package slug, restores the action input name `api-level`, installs only the selected API image per job, and retries SDK image installation up to three times. Awaiting CI before merge.
+
+
+## Stage 4 retry 2 complete — matrix corrections merged (2026-10-19)
+
+- PR [#35 — Fix native E2E API-level matrix and package names](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/pull/35) merged as `568ff4764206a4c9b05b010fc8b9c3db2782e368` after [Quality/security](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39161323306) and [AUTO CHECK AI](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39161323364) both passed on `86b1f3e24e48feb4c2b046b8a90a849675f194d3`.
+- Fixes: correct emulator input `api-level`, sanitize `multi-screen` package name to `multi_screen`, install only the API-specific system image and retry SDK download up to 3 times.
+- Previous main run [#39160916274](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39160916274) did not pass: it caught these exact defects. A new main E2E run must confirm the fixes; no screenshot/API-download success is claimed until that run is green.
