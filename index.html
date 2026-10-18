@@ -82,7 +82,7 @@ body:has(.studio-shell){overflow-x:hidden}
 <div class="field"><label>Что создаём?</label><div class="choices" role="group" aria-label="Тип проекта"><button class="choice" data-kind="app" aria-pressed="true">📱 Приложение</button><button class="choice" data-kind="game" aria-pressed="false">🎮 Игра</button><button class="choice" data-kind="site" aria-pressed="false">🌐 Сайт</button></div></div>
 <div class="row"><div class="field"><label for="appName">Название проекта</label><input id="appName" maxlength="45" value="Мой проект" placeholder="Например, Учись легко"></div><div class="field"><label for="style">Стиль</label><select id="style"><option value="clean">Современный</option><option value="education">Образовательный</option><option value="business">Деловой</option><option value="playful">Яркий и игровой</option></select></div></div>
 <div class="field"><label for="complexity">Уровень разработки</label><select id="complexity"><option value="standard">Стандартный прототип</option><option value="advanced">Сложное приложение: экраны, данные, поиск, отчёты и экспорт</option></select></div>
-<div class="field"><label for="appTarget">Тип приложения</label><select id="appTarget"><option value="web" selected>Веб-приложение / WebView APK</option><option value="native">Нативный Android (исходный код, экспериментально)</option></select><p class="sub" id="appTargetNotice">Веб-режим генерирует HTML. Для нативного режима ИИ подготовит Java-файлы; автоматическая сборка APK ещё подключается.</p></div>
+<div class="field"><label for="appTarget">Тип приложения</label><select id="appTarget"><option value="web" selected>Веб-приложение / WebView APK</option><option value="native">Нативный Android APK (экспериментально)</option></select><p class="sub" id="appTargetNotice">Веб-режим генерирует HTML. Для нативного режима ИИ подготовит Java-файлы; автоматическая сборка APK ещё подключается.</p></div>
 <div class="field"><label for="prompt">Задание для ИИ</label><textarea id="prompt" maxlength="6000" placeholder="Создай приложение для изучения английского: карточки слов, тест из 10 вопросов, подсчёт баллов и сохранение результата на телефоне."></textarea></div>
 <div class="field"><label for="features">Дополнительные пожелания</label><input id="features" maxlength="500" placeholder="Русский язык, тёмная тема, офлайн-доступ"></div>
 <details class="ai-panel" open><summary style="cursor:pointer;font-weight:800;margin-bottom:14px">🤖 Подключение ИИ-модели</summary><p class="sub">По умолчанию доступен встроенный ИИ A.S. без личного ключа. Для внешних провайдеров можно подключить собственный API.</p>
@@ -198,7 +198,7 @@ function updateAIProviderFields(){
  }
 }
 $('aiProvider').addEventListener('change',updateAIProviderFields);
-$('appTarget')?.addEventListener('change',()=>{const native=$('appTarget').value==='native';$('appTargetNotice').textContent=native?'ИИ подготовит исходный Java-код нативного Android-приложения. Автоматическая сборка и выдача APK пока не подключены.':'Веб-режим генерирует HTML; его APK использует WebView.';});
+$('appTarget')?.addEventListener('change',()=>{const native=$('appTarget').value==='native';$('appTargetNotice').textContent=native?'ИИ подготовит Java-исходники для отдельной нативной сборки APK.':'Веб-режим генерирует HTML; его APK использует WebView.';});
 updateAIProviderFields();
 function extractGeminiInteractionText(data){
  if(typeof data?.output_text==='string'&&data.output_text.trim())return data.output_text;
@@ -339,9 +339,9 @@ async function runAIBuild(editInstruction=''){
    $('download').disabled=true;$('downloadPwa').disabled=true;$('downloadAndroidProject').disabled=true;
    $('state').textContent='Нативный исходный код создан';
    finishBuildActivity(pretty);addActivity('Получены Android-файлы',nativeProject.files.map(f=>f.path).join(', '),'done');
-   addActivity('Важно: APK ещё не собран','Исходный код создан ИИ, но автоматический нативный сборщик и проверка APK пока не подключены. Этот результат нельзя считать установленным или протестированным приложением.','error');
+   addActivity('APK ещё не собран','Нативные исходники готовы. Нажми «Собрать APK проекта», чтобы отправить их в защищённую очередь. Успех подтвердится только после сборки и проверки APK.','error');
    $('activityLive').textContent='Исходники Android подготовлены';showTab('code');
-   $('aiStatus').textContent='ИИ подготовил '+nativeProject.files.length+' нативных исходных файлов. Это пока только исходный код: сайт ещё не собирает его в APK автоматически.';
+   $('aiStatus').textContent='ИИ подготовил '+nativeProject.files.length+' нативных исходных файлов. Нажми «Собрать APK проекта», чтобы запустить защищённую нативную сборку.';
    return;
   }
   let code=String(received||streamBuffer).trim().replace(/^\x60{3}(?:html)?\s*/i,'').replace(/\x60{3}$/,'').trim();
