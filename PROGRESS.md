@@ -383,3 +383,10 @@ Latest native E2E run: https://github.com/asoevsolehjonofficial-stack/predlozhen
 - GitHub Actions [Quality and security checks #39179974312](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39179974312) passed on commit `4f92f864`. The backend `node --test` suite reports **57 tests passed, 0 failed**, including secret-gated quota bypass and the Durable Object atomic-concurrency test (20 simultaneous requests: 4 accepted, 16 rate-limited).
 - Static checks verified the Worker includes `RATE_LIMITER`, `RateLimitCoordinator`, `storage.transaction`, and bounded prompts. This proves repository CI behavior, not live production migration/deployment.
 - Native E2E rerun [#39179998907](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39179998907) started on the screenshot-workflow fix. Its first job was still running at inspection time. Deployment and PR merge remain blocked until this matrix is green.
+
+
+## Cloudflare write-permission probe (2026-10-19)
+
+- A deliberately invalid multipart Worker upload was rejected with Cloudflare error `10021: No such module: probe.js`; a deliberately empty Worker-secret write was rejected with `10052: Binding must have a name.`. Both reached resource-level validation rather than authentication/method denial, indicating the connected Cloudflare API can reach Worker upload and secret-write endpoints. No valid script or secret was submitted.
+- Immediately re-read production deployments and settings after both negative probes. Production remained on version `63b9c056-2402-42d0-913e-09529ff7381f`, with only `AI`, `RATE_LIMITS` and `SITE_ORIGIN` bindings. No deployment, migration, binding or secret changed during the probe.
+- Direct Worker deployment appears technically available through this Cloudflare connection. It remains deliberately gated on the full native E2E matrix going green. R2 remains unavailable because it is not enabled for this account. GitHub Actions repository-secret write is not exposed by the connected GitHub tool set.
