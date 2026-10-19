@@ -152,8 +152,27 @@ jobs:
             storage) PROMPT="Create a native Android notes app with persistent local storage using SharedPreferences. No network." ;;
             *) echo "::error::Unknown fixture example"; exit 1 ;;
           esac
-          HTTP_CODE="$(curl --silent --show-error --max-time 30 -o "$RUNNER_TEMP/native-ai-response.json" -w '%{http_code}' -X POST http://127.0.0.1:8787/api/ci/native-fixture -H "Authorization: Bearer $OIDC_TOKEN" -H "Content-Type: application/json" --data "$(jq -n --arg prompt "$PROMPT" '{prompt:$prompt}')")"
-          test "$HTTP_CODE" = "200" || { cat "$RUNNER_TEMP/native-ai-response.json"; echo "::error::Protected fixture endpoint returned HTTP $HTTP_CODE"; exit 1; }
+          # Retry transient local Worker/runtime errors; authentication and the protected
+          # endpoint's HTTP 200 requirement remain mandatory.
+          HTTP_CODE=""
+          for attempt in 1 2 3; do
+            HTTP_CODE="$(curl --silent --show-error --max-time 30 -o "$RUNNER_TEMP/native-ai-response.json" -w '%{http_code}' -X POST http://127.0.0.1:8787/api/ci/native-fixture -H "Authorization: Bearer $OIDC_TOKEN" -H "Content-Type: application/json" --data "$(jq -n --arg prompt "$PROMPT" '{prompt:$prompt}')" || true)"
+            if [[ "$HTTP_CODE" == "200" ]]; then break; fi
+            if [[ "$HTTP_CODE" != "500" && "$HTTP_CODE" != "502" && "$HTTP_CODE" != "503" && "$HTTP_CODE" != "504" ]]; then
+              cat "$RUNNER_TEMP/native-ai-response.json" || true
+              echo "::error::Protected fixture endpoint returned non-retryable HTTP ${HTTP_CODE:-no-response} (attempt $attempt)."
+              exit 1
+            fi
+            echo "Protected fixture endpoint returned transient HTTP $HTTP_CODE (attempt $attempt/3); waiting 2 seconds."
+            sleep 2
+          done
+          if [[ "$HTTP_CODE" != "200" ]]; then
+            cat "$RUNNER_TEMP/native-ai-response.json" || true
+            echo "--- local fixture Worker log ---"
+            cat "$RUNNER_TEMP/fixture-worker.log"
+            echo "::error::Protected fixture endpoint did not return HTTP 200 after 3 attempts (last HTTP ${HTTP_CODE:-no-response})."
+            exit 1
+          fi
           jq -e '.provider == "test-fixture" and .mode == "native-android-source"' "$RUNNER_TEMP/native-ai-response.json" >/dev/null
           python3 - <<'PY'
           import json, os, re, shutil
