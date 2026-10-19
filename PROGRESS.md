@@ -143,6 +143,17 @@ Implementation fixes currently live on PR #34 branch `fix/native-e2e-package-id-
 - Release acceptance checklist: 0/11 fully certified end-to-end; successful targeted CI checks do not substitute for production generation, install/launch, screenshot, download, quota, and three scenario tests.
 
 
+## Cloudflare deployment attempt plan — 2026-10-19 (before upload)
+
+### Pre-deploy rollback snapshot
+- Current production Worker version: `63b9c056-2402-42d0-913e-09529ff7381f` (version 8; 100% of traffic), deployment `e48a0955-f91e-4c40-bbe8-64a5d6155d4b`.
+- Rollback target: `b6678b0e-9ad0-46ba-8b1c-8718297127b4` (version 7; prior deployment, 100% traffic before current).
+- Current production bindings observed: AI, KV RATE_LIMITS (`f2bef20d6ba142059d46b5eed0b3c3e9`), SITE_ORIGIN. No Durable Object namespace exists and no Worker secrets are listed. The candidate worker returns 503 from health until RATE_LIMITER is bound.
+- Planned upload: Worker module `ai-worker.js`; metadata compatibility date `2026-10-15`; preserve AI/KV/SITE_ORIGIN bindings; add same-script Durable Object binding `RATE_LIMITER` → `RateLimitCoordinator`; apply a forward-only SQLite-class migration tagged `ratelimit-coordinator-v1` with `new_sqlite_classes: ["RateLimitCoordinator"]`.
+- Post-deploy gate: health must be 200/ok; production endpoint must return 200 with nonempty generation text for calls 1–4 and 429 on call 5 from the same IP within one hour; then verify worker version/bindings and review logs. If any check fails, immediately restore 100% traffic to rollback version `b6678b0e-9ad0-46ba-8b1c-8718297127b4` and recheck health.
+- Rollback caveat: Cloudflare Durable Object class migrations are forward-only; rollback restores the previous Worker code/version but does not delete the newly created class or its storage. No destructive migration or data deletion is planned.
+- This is a plan only; no upload or production change has yet been performed as of this entry.
+
 ## Cloudflare deployment capability check (2026-10-19)
 
 - Read access is confirmed for Worker scripts/settings/deployments, KV namespace inventory, and DO namespace inventory.
