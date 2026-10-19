@@ -1,4 +1,5 @@
 name: Native AI generated APK smoke
+# Release gate: require all API 21/35 native E2E jobs green before production deployment.
 
 on:
   push:
