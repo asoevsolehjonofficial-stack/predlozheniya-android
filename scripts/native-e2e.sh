@@ -5,7 +5,7 @@ set -Eeuo pipefail
 : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
 : "${PACKAGE_NAME:?PACKAGE_NAME is required}"
 : "${API_LEVEL:?API_LEVEL is required}"
-: "${EXPECTED_SCREEN_TEXT:?EXPECTED_SCREEN_TEXT is required}"
+: "${SCENARIO:?SCENARIO is required}"
 
 APK="$GITHUB_WORKSPACE/native-builder/app/build/outputs/apk/debug/app-debug.apk"
 DIAG="$RUNNER_TEMP/native-e2e-diagnostics"
@@ -21,15 +21,15 @@ collect_diagnostics() {
   local rc=$?
   set +e
   { echo "exit_code=$rc"; echo "api_level=$API_LEVEL"; echo "package_name=$PACKAGE_NAME"; echo "timestamp_utc=$(date -u +%FT%TZ)"; } > "$DIAG/summary.txt"
-  { echo "$ pidof"; bounded 8 adb shell pidof "$PACKAGE_NAME"; echo "pidof_exit=$?"; } >> "$DIAG/process.txt" 2>&1
+  { echo "$ ps | grep package"; bounded 8 adb shell ps | grep -F "$PACKAGE_NAME"; echo "process_check_exit=$?"; } >> "$DIAG/process.txt" 2>&1
   { echo "$ getprop ro.build.version.release"; bounded 8 adb shell getprop ro.build.version.release; echo "$ getprop ro.build.fingerprint"; bounded 8 adb shell getprop ro.build.fingerprint; echo "$ getprop ro.hardware"; bounded 8 adb shell getprop ro.hardware; echo "$ getprop ro.kernel.qemu"; bounded 8 adb shell getprop ro.kernel.qemu; echo "$ getprop debug.hwui.renderer"; bounded 8 adb shell getprop debug.hwui.renderer; } > "$DIAG/emulator-properties.txt" 2>&1
   if bounded 8 adb shell dumpsys window windows > "$DIAG/window-dumpsys.txt" 2>&1; then
     echo "dumpsys_window=completed" >> "$DIAG/focus.txt"
     grep -E "mCurrentFocus|mFocusedApp|FocusedWindow|focusedWindow" "$DIAG/window-dumpsys.txt" >> "$DIAG/focus.txt" || true
   else
     echo "dumpsys_window=failed_or_timed_out; using uiautomator fallback" >> "$DIAG/focus.txt"
-    if bounded 10 adb shell uiautomator dump --compressed /sdcard/native-e2e-window.xml > "$DIAG/uiautomator-dump-command.txt" 2>&1; then
-      bounded 8 adb shell cat /sdcard/native-e2e-window.xml > "$DIAG/uiautomator-window.xml" 2>&1
+    if bounded 10 adb shell uiautomator dump --compressed /data/local/tmp/native-e2e-window.xml > "$DIAG/uiautomator-dump-command.txt" 2>&1; then
+      bounded 8 adb shell cat /data/local/tmp/native-e2e-window.xml > "$DIAG/uiautomator-window.xml" 2>&1
       grep -E "$PACKAGE_NAME|focused=\"true\"|hierarchy" "$DIAG/uiautomator-window.xml" >> "$DIAG/focus.txt" || true
     fi
   fi
@@ -38,14 +38,30 @@ collect_diagnostics() {
 }
 trap collect_diagnostics EXIT
 
-echo "Waiting for Android boot and package manager (API $API_LEVEL)."
+case "$SCENARIO" in
+  simple) EXPECTED_SCREEN_TEXT='Count|ADD ONE' ;;
+  multi-screen) EXPECTED_SCREEN_TEXT='Home screen|OPEN SETTINGS' ;;
+  storage) EXPECTED_SCREEN_TEXT='Write a note|SAVE NOTE' ;;
+  *) echo "::error::Unknown SCENARIO: $SCENARIO"; exit 2 ;;
+esac
+echo "Scenario=$SCENARIO; expected screen text regex=$EXPECTED_SCREEN_TEXT"
+echo "Waiting for adb device (API $API_LEVEL)."
+BOOT_START="$(date +%s)"
+bounded 30 adb wait-for-device
+echo "adb wait-for-device completed."
 BOOT_READY=0
 for attempt in $(seq 1 60); do
-  BOOT_STATE="$(bounded 8 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\\r' || true)"
-  if [[ "$BOOT_STATE" == "1" ]]; then BOOT_READY=1; echo "sys.boot_completed=1 after attempt $attempt"; break; fi
+  BOOT_STATE="$(bounded 8 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+  printf 'Boot readiness probe %s/60: getprop sys.boot_completed returned <%s>\n' "$attempt" "$BOOT_STATE"
+  if [[ "$BOOT_STATE" == "1" ]]; then
+    BOOT_READY=1
+    BOOT_ELAPSED="$(( $(date +%s) - BOOT_START ))"
+    echo "ANDROID_BOOT_READY api=$API_LEVEL sys.boot_completed=$BOOT_STATE attempt=$attempt elapsed_seconds=$BOOT_ELAPSED"
+    break
+  fi
   sleep 5
 done
-[[ "$BOOT_READY" -eq 1 ]] || { echo "::error::Emulator boot did not complete within 300 seconds."; exit 1; }
+[[ "$BOOT_READY" -eq 1 ]] || { echo "::error::Emulator boot did not complete within 300 seconds after adb wait-for-device."; exit 1; }
 PM_READY=0
 for attempt in $(seq 1 12); do
   if bounded 8 adb shell pm path android 2>&1 | grep -q '^package:'; then PM_READY=1; echo "Package Manager ready: pm path android"; break; fi
@@ -74,7 +90,7 @@ focus_check() {
       echo "attempt=$attempt focus=confirmed_by_dumpsys" | tee -a "$DIAG/focus.txt"; return 0
     fi
   else echo "attempt=$attempt dumpsys=failed_or_timed_out" >> "$DIAG/focus.txt"; fi
-  local xml="/sdcard/native-e2e-window-$attempt.xml"
+  local xml="/data/local/tmp/native-e2e-window-$attempt.xml"
   if bounded 10 adb shell uiautomator dump --compressed "$xml" > "$DIAG/uiautomator-attempt-$attempt.txt" 2>&1 && bounded 8 adb shell cat "$xml" > "$DIAG/uiautomator-attempt-$attempt.xml" 2>&1 && grep -F "$PACKAGE_NAME" "$DIAG/uiautomator-attempt-$attempt.xml" >/dev/null && grep -Eiq "$EXPECTED_SCREEN_TEXT" "$DIAG/uiautomator-attempt-$attempt.xml"; then
     echo "attempt=$attempt focus=confirmed_by_uiautomator_package_and_expected_text" | tee -a "$DIAG/focus.txt"; return 0
   fi
@@ -82,20 +98,35 @@ focus_check() {
 }
 
 ui_text_check() {
-  local attempt="$1" xml="/sdcard/native-e2e-screen-$1.xml"
+  local attempt="$1" xml="/data/local/tmp/native-e2e-screen-$1.xml"
   if ! bounded 10 adb shell uiautomator dump --compressed "$xml" > "$DIAG/uiautomator-screen-$attempt.txt" 2>&1; then
     echo "attempt=$attempt uiautomator_dump=failed" | tee -a "$DIAG/focus.txt"; return 1
   fi
   if ! bounded 8 adb shell cat "$xml" > "$DIAG/uiautomator-screen-$attempt.xml" 2>&1; then
     echo "attempt=$attempt uiautomator_read=failed" | tee -a "$DIAG/focus.txt"; return 1
   fi
+  echo "UI hierarchy text for attempt $attempt:"
+  python3 - "$DIAG/uiautomator-screen-$attempt.xml" <<'PY'
+import html, re, sys
+from pathlib import Path
+xml = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
+values = []
+for match in re.finditer(r'(?:text|content-desc)="([^"]*)"', xml):
+    value = html.unescape(match.group(1)).strip()
+    if value and value not in values:
+        values.append(value)
+for value in values:
+    print("UI_TEXT:", value)
+if not values:
+    print("UI_TEXT: <no text/content-desc attributes found>")
+PY
   if ! grep -F "$PACKAGE_NAME" "$DIAG/uiautomator-screen-$attempt.xml" >/dev/null; then
     echo "attempt=$attempt ui_package=missing" | tee -a "$DIAG/focus.txt"; return 1
   fi
   if ! grep -Eiq "$EXPECTED_SCREEN_TEXT" "$DIAG/uiautomator-screen-$attempt.xml"; then
     echo "attempt=$attempt ui_expected_text=missing expected=$EXPECTED_SCREEN_TEXT" | tee -a "$DIAG/focus.txt"; return 1
   fi
-  echo "attempt=$attempt ui_package=present expected_screen_text=present" | tee -a "$DIAG/focus.txt"
+  echo "attempt=$attempt ui_package=present expected_screen_text=present expected=$EXPECTED_SCREEN_TEXT" | tee -a "$DIAG/focus.txt"
   return 0
 }
 
@@ -121,17 +152,21 @@ PY
 for attempt in 1 2 3 4 5; do
   echo "Screenshot attempt $attempt/5."
   FOCUS_OK=0
-  if ! bounded 8 adb shell pidof "$PACKAGE_NAME" > "$DIAG/process-attempt-$attempt.txt" 2>&1; then
+  if ! bounded 8 adb shell ps | grep -F "$PACKAGE_NAME" > "$DIAG/process-attempt-$attempt.txt" 2>&1; then
     echo "App process missing; relaunching." | tee -a "$DIAG/process.txt"
     bounded 30 adb shell am start -W -n "$PACKAGE_NAME/tj.as.generated.MainActivity" || true
   fi
-  if focus_check "$attempt" && ui_text_check "$attempt"; then
+  if focus_check "$attempt"; then FOCUS_CHECK_OK=1; else FOCUS_CHECK_OK=0; fi
+  if ui_text_check "$attempt"; then UI_TEXT_OK=1; else UI_TEXT_OK=0; fi
+  if [[ "$FOCUS_CHECK_OK" -eq 1 && "$UI_TEXT_OK" -eq 1 ]]; then
     FOCUS_OK=1
   else
-    echo "Window focus not confirmed; requesting app launch again."
+    echo "Window focus/text not confirmed; requesting app launch again."
     bounded 30 adb shell am start -W -n "$PACKAGE_NAME/tj.as.generated.MainActivity" || true
     sleep 1
-    if focus_check "${attempt}b" && ui_text_check "${attempt}b"; then FOCUS_OK=1; fi
+    if focus_check "${attempt}b"; then FOCUS_CHECK_OK=1; else FOCUS_CHECK_OK=0; fi
+    if ui_text_check "${attempt}b"; then UI_TEXT_OK=1; else UI_TEXT_OK=0; fi
+    if [[ "$FOCUS_CHECK_OK" -eq 1 && "$UI_TEXT_OK" -eq 1 ]]; then FOCUS_OK=1; fi
   fi
   sleep 2
   if bounded 20 adb exec-out screencap -p > "$SHOT.tmp" 2> "$DIAG/screencap-attempt-$attempt.txt" && test -s "$SHOT.tmp" && file "$SHOT.tmp" | grep -qi "PNG image"; then
@@ -155,5 +190,5 @@ if [[ ! -s "$SHOT" ]] || [[ ! -s "$DIAG/pixel-stats.json" ]]; then echo "::error
 echo "Checking recent logs for an app crash."
 bounded 15 adb logcat -d -t 500 > "$DIAG/logcat-tail.txt"
 if grep -E "FATAL EXCEPTION.*$PACKAGE_NAME|Process: $PACKAGE_NAME.*died|ANR in $PACKAGE_NAME" "$DIAG/logcat-tail.txt"; then echo "::error::Generated app crashed or entered ANR."; exit 1; fi
-bounded 8 adb shell pidof "$PACKAGE_NAME" >/dev/null || { echo "::error::Generated app process is not alive after screenshot capture."; exit 1; }
+bounded 8 adb shell ps | grep -F "$PACKAGE_NAME" >/dev/null || { echo "::error::Generated app process is not alive after screenshot capture."; exit 1; }
 echo "Native E2E screenshot checks passed for API $API_LEVEL."

@@ -144,7 +144,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          OIDC_TOKEN="$(curl --fail --silent --show-error -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-ai-ci" | jq -er '.value')"
+          OIDC_TOKEN="$(curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 2 --retry-max-time 30 -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-ai-ci" | jq -er '.value')"
           echo "::add-mask::$OIDC_TOKEN"
           case "$EXAMPLE" in
             simple) PROMPT="Create a simple native Android app with a centered title and a counter button. No network." ;;
@@ -195,7 +195,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          OIDC_TOKEN="$(curl --fail --silent --show-error -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-native-e2e" | jq -er '.value')"
+          OIDC_TOKEN="$(curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 2 --retry-max-time 30 -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-native-e2e" | jq -er '.value')"
           echo "::add-mask::$OIDC_TOKEN"
           OIDC_TOKEN="$OIDC_TOKEN" python3 - <<'PY'
           import base64, json, os
@@ -230,7 +230,7 @@ jobs:
           DOWNLOAD_TOKEN="$(jq -er '.downloadToken' "$RUNNER_TEMP/api-job.json")"
           echo "::add-mask::$DOWNLOAD_TOKEN"
           APK_SHA="$(sha256sum "$APK" | awk '{print $1}')"
-          OIDC_TOKEN="$(curl --fail --silent --show-error -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-native-e2e" | jq -er '.value')"
+          OIDC_TOKEN="$(curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 2 --retry-max-time 30 -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-native-e2e" | jq -er '.value')"
           echo "::add-mask::$OIDC_TOKEN"
           CODE="$(curl --silent --show-error --max-time 60 -o "$RUNNER_TEMP/api-upload.json" -w '%{http_code}' -X PUT "http://127.0.0.1:8788/api/ci/upload?requestId=$REQUEST_ID" -H "Authorization: Bearer $OIDC_TOKEN" -H "Content-Type: application/octet-stream" -H "X-APK-SHA256: $APK_SHA" --data-binary @"$APK")"
           test "$CODE" = "201" || { cat "$RUNNER_TEMP/api-upload.json"; echo "::error::Local API APK upload returned HTTP $CODE"; exit 1; }
@@ -247,6 +247,8 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+          sudo chmod 0666 /dev/kvm
+          test -r /dev/kvm && test -w /dev/kvm
           ls -l /dev/kvm
       - name: Install, launch, and capture a real emulator screenshot
         uses: reactivecircus/android-emulator-runner@v2
@@ -261,9 +263,7 @@ jobs:
           cores: 2
           heap-size: 2048
           script: |
-            export API_LEVEL=${{ matrix.api_level }}
-            export EXPECTED_SCREEN_TEXT='${{ matrix.example == 'simple' && 'Counter|Count|Tap' || matrix.example == 'multi-screen' && 'Home|Settings' || 'Notes|Note|Add' }}'
-            bash scripts/native-e2e.sh
+            API_LEVEL=${{ matrix.api_level }} SCENARIO=${{ matrix.example }} bash scripts/native-e2e.sh
       - name: Upload emulator screenshot to local API and download it back
         shell: bash
         run: |
@@ -271,7 +271,7 @@ jobs:
           REQUEST_ID="$(jq -er '.requestId' "$RUNNER_TEMP/api-job.json")"
           DOWNLOAD_TOKEN="$(jq -er '.downloadToken' "$RUNNER_TEMP/api-job.json")"
           echo "::add-mask::$DOWNLOAD_TOKEN"
-          OIDC_TOKEN="$(curl --fail --silent --show-error -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-native-e2e" | jq -er '.value')"
+          OIDC_TOKEN="$(curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 2 --retry-max-time 30 -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-native-e2e" | jq -er '.value')"
           echo "::add-mask::$OIDC_TOKEN"
           CODE="$(curl --silent --show-error --max-time 30 -o "$RUNNER_TEMP/api-preview-upload.json" -w '%{http_code}' -X PUT "http://127.0.0.1:8788/api/ci/preview-upload?requestId=$REQUEST_ID" -H "Authorization: Bearer $OIDC_TOKEN" -H "Content-Type: image/png" --data-binary @"$RUNNER_TEMP/native-e2e.png")"
           test "$CODE" = "200" || { cat "$RUNNER_TEMP/api-preview-upload.json"; echo "::error::Local API preview upload returned HTTP $CODE"; exit 1; }
