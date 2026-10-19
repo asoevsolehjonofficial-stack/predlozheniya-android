@@ -376,3 +376,10 @@ Latest native E2E run: https://github.com/asoevsolehjonofficial-stack/predlozhen
 - The active native matrix run [#39178955125](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39178955125) showed API 35 multi-screen still spending time in the screenshot step; API 21 storage was still installing the emulator image with retries. The job-log endpoint returned 404 while the job was actively running, so no final error text was available yet.
 - Replaced the potentially hanging `adb exec-out screencap -p` pipe with bounded `adb shell screencap -p /data/local/tmp/native-e2e.png` plus bounded `adb pull`. The path is writable on Android emulators and the command checks that the resulting file is a PNG.
 - Workflow fix commit: `717fe3e26fc950feaed4edc26d327510c424088a`. A new native run must finish all six example/API combinations before PR #34 can be merged. The currently active run is evidence only for its own SHA and is not evidence for this newest screenshot change.
+
+
+## Backend test evidence on the release branch (2026-10-19)
+
+- GitHub Actions [Quality and security checks #39179974312](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39179974312) passed on commit `4f92f864`. The backend `node --test` suite reports **57 tests passed, 0 failed**, including secret-gated quota bypass and the Durable Object atomic-concurrency test (20 simultaneous requests: 4 accepted, 16 rate-limited).
+- Static checks verified the Worker includes `RATE_LIMITER`, `RateLimitCoordinator`, `storage.transaction`, and bounded prompts. This proves repository CI behavior, not live production migration/deployment.
+- Native E2E rerun [#39179998907](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39179998907) started on the screenshot-workflow fix. Its first job was still running at inspection time. Deployment and PR merge remain blocked until this matrix is green.
