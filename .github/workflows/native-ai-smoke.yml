@@ -250,9 +250,9 @@ jobs:
           emulator-boot-timeout: 600
           cores: 2
           heap-size: 2048
-          env:
-            API_LEVEL: ${{ matrix.api_level }}
-          script: bash scripts/native-e2e.sh
+          env: API_LEVEL=${{ matrix.api_level }}
+          script: |
+            bash scripts/native-e2e.sh
       - name: Upload emulator screenshot to local API and download it back
         shell: bash
         run: |
