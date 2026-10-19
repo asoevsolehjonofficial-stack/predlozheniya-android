@@ -180,3 +180,10 @@ Implementation fixes currently live on PR #34 branch `fix/native-e2e-package-id-
 
 - The experimental branch `fix/native-e2e-retry-api35` was correctly rejected by the protected fixture endpoint with HTTP 401 and body `{"error":"Unauthorized CI workflow."}`; its ref is not in the explicit OIDC allowlist.
 - This is expected fail-closed behavior. I will not widen the production/CI OIDC allowlist just to make a temporary branch pass. Only the native run on the established PR branch `fix/native-e2e-package-id-sdk-emulator` is valid release evidence.
+
+
+## API 35 emulator boot target mitigation (2026-10-19)
+
+- In run [#39178042422](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39178042422), both API 21 jobs completed successfully with the new direct PNG capture. API 35 simple and multi-screen reached the emulator action but remained in its screenshot step for several minutes; the job did not yet publish a final error log.
+- Changed the API 35 emulator image target from `google_apis` to the CI-oriented `google_atd` target, retaining `x86_64`, software rendering, and bounded ADB operations. API 21 continues to use its compatible `default` x86 image.
+- New PR-branch matrix run: [#39178955125](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39178955125). It is pending behind the prior run's cancellation; wait for its six jobs and do not merge before the result.
