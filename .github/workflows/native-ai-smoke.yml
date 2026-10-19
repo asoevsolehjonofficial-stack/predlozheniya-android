@@ -240,6 +240,14 @@ jobs:
           echo "Local API APK upload/download round-trip passed; SHA-256 $APK_SHA."
       - name: Install screenshot pixel-analysis dependency
         run: python3 -m pip install --user Pillow numpy
+      - name: Enable KVM for Android emulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
       - name: Install, launch, and capture a real emulator screenshot
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -253,7 +261,9 @@ jobs:
           cores: 2
           heap-size: 2048
           script: |
-            API_LEVEL=${{ matrix.api_level }} bash scripts/native-e2e.sh
+            export API_LEVEL=${{ matrix.api_level }}
+            export EXPECTED_SCREEN_TEXT='${{ matrix.example == 'simple' && 'Counter|Count|Tap' || matrix.example == 'multi-screen' && 'Home|Settings' || 'Notes|Note|Add' }}'
+            bash scripts/native-e2e.sh
       - name: Upload emulator screenshot to local API and download it back
         shell: bash
         run: |
