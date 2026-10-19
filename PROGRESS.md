@@ -396,3 +396,17 @@ Latest native E2E run: https://github.com/asoevsolehjonofficial-stack/predlozhen
 
 - Native run [#39179998907](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39179998907) was delayed during SDK image installation. Source inspection found a concrete configuration mismatch: `android-emulator-runner` targeted `google_atd` for API 35, but the preceding `sdkmanager` step installed `google_apis`. Updated the install step to `system-images;android-35;google_atd;x86_64` so it matches the runner target.
 - Workflow fix commit: `54c88591a54da6130f45964b1d4e2bd9ab5cc028`. This corrects the package/target mismatch; it is not yet proven green. The new native matrix must verify SDK install, app launch, screenshots, and download round-trips across all six combinations.
+
+
+## Production deployment and E2E repair — 2026-10-19 05:15 UTC
+
+### Cloudflare Worker v9
+- Correct multipart upload is confirmed: metadata and ai-worker.js parts, multipart/form-data with a boundary, and rawBody=true. The Worker Script API requires migrations to be an object, not an array; error 10021 identified that schema issue on the first valid multipart attempt. The corrected upload returned HTTP 200.
+- Production Worker version 3eb032df-18f8-45b9-9497-f39a4b459973 (version 9) is deployed at 100% traffic. Settings read-back verifies RATE_LIMITER bound to RateLimitCoordinator, plus AI, RATE_LIMITS and SITE_ORIGIN.
+- Production quota test PASSED: [run 39203447404](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39203447404) — health passed, generations 1–4 returned HTTP 200, generation 5 returned HTTP 429. No rollback was indicated by this test.
+- Rollback version remains b6678b0e-9ad0-46ba-8b1c-8718297127b4. Durable Object class creation is forward-only; rolling back Worker code does not remove the class/storage.
+
+### Native E2E failure diagnosis and fix
+- Run [39180256657](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39180256657) failed in the API 35 screenshot step after APK build/signature/checksum and local API upload/download had passed. Logs show emulator system-service ANRs and timeout exit code 124 while running adb shell dumpsys activity activities; this is an emulator/runtime diagnostic timeout, not a compilation or APK-integrity failure.
+- Updated .github/workflows/native-ai-smoke.yml on PR #34 branch at commit 0728bdc7bae34d8a4bc6dc63494d9bdf6aa36455: removed the expensive dumpsys activity dependency, launches the app explicitly with am start -W, checks the app process, captures PNG directly via adb exec-out screencap -p, and gives each step its own bounded timeout.
+- New validation runs on the repaired head: native E2E [39203542257](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39203542257), quality/security [39203546545](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39203546545), web validation [39203546550](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39203546550), and AUTO CHECK AI [39203546628](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39203546628). Results are pending; do not merge PR #34 until the required native matrix and CI checks are green.
