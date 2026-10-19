@@ -90,7 +90,7 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in 1 2 3; do
-            if sdkmanager --install "system-images;android-35;google_apis;x86_64"; then exit 0; fi
+            if sdkmanager --install "system-images;android-35;google_atd;x86_64"; then exit 0; fi
             echo "API 35 SDK install attempt $attempt failed; retrying."
             sleep $((attempt * 5))
           done
