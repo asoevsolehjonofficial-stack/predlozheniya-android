@@ -99,7 +99,7 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in 1 2 3; do
-            if sdkmanager --install "system-images;android-35;google_atd;x86_64"; then exit 0; fi
+            if sdkmanager --install "system-images;android-35;google_apis;x86_64"; then exit 0; fi
             echo "API 35 SDK install attempt $attempt failed; retrying."
             sleep $((attempt * 5))
           done
@@ -238,11 +238,13 @@ jobs:
           cmp "$APK" "$RUNNER_TEMP/downloaded.apk"
           test "$(sha256sum "$RUNNER_TEMP/downloaded.apk" | awk '{print $1}')" = "$APK_SHA"
           echo "Local API APK upload/download round-trip passed; SHA-256 $APK_SHA."
+      - name: Install screenshot pixel-analysis dependency
+        run: python3 -m pip install --user Pillow numpy
       - name: Install, launch, and capture a real emulator screenshot
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api_level }}
-          target: ${{ matrix.api_level == 35 && 'google_atd' || matrix.api_level == 21 && 'default' || 'google_apis' }}
+          target: ${{ matrix.api_level == 35 && 'google_apis' || matrix.api_level == 21 && 'default' || 'google_apis' }}
           arch: ${{ matrix.api_level == 21 && 'x86' || 'x86_64' }}
           profile: pixel_2
           disable-animations: true
@@ -278,6 +280,7 @@ jobs:
             native-builder/app/build/outputs/apk/debug/app-debug.apk
             native-builder/app/src/main/java/tj/as/generated/
             ${{ runner.temp }}/native-e2e.png
+            ${{ runner.temp }}/native-e2e-diagnostics/
             ${{ runner.temp }}/native-files.json
             ${{ runner.temp }}/api-job.json
             ${{ runner.temp }}/downloaded.apk
