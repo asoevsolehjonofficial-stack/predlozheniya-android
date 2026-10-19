@@ -396,3 +396,11 @@ Latest native E2E run: https://github.com/asoevsolehjonofficial-stack/predlozhen
 
 - Native run [#39179998907](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39179998907) was delayed during SDK image installation. Source inspection found a concrete configuration mismatch: `android-emulator-runner` targeted `google_atd` for API 35, but the preceding `sdkmanager` step installed `google_apis`. Updated the install step to `system-images;android-35;google_atd;x86_64` so it matches the runner target.
 - Workflow fix commit: `54c88591a54da6130f45964b1d4e2bd9ab5cc028`. This corrects the package/target mismatch; it is not yet proven green. The new native matrix must verify SDK install, app launch, screenshots, and download round-trips across all six combinations.
+
+
+## Cloudflare Worker deployment — 2026-10-19 (post-upload verification pending)
+
+- Corrected multipart upload framing: `multipart/form-data; boundary=...` with raw CRLF body, JSON `metadata` part, and JavaScript module part `ai-worker.js`. The first correctly framed request was rejected at metadata parsing with error `10021` because `migrations` was incorrectly an array. No deployment occurred from that rejected request.
+- Retried with `migrations` as the API-required object: Cloudflare returned HTTP 200 and created Worker version `3eb032df-18f8-45b9-9497-f39a4b459973` (version 9), deployment `91f6e21f-62e0-4cb7-92cb-7e19a5868ba2`, 100% traffic. Settings read-back confirms bindings AI, RATE_LIMITS, SITE_ORIGIN, and `RATE_LIMITER` to class `RateLimitCoordinator` with DO namespace ID `644e424020ca4763bbd23c73aa954c4a`; compatibility date `2026-10-15`. The DO migration was accepted by the Worker upload API.
+- Production request verification is not yet complete. Direct `fetch()` from the Cloudflare connector execution sandbox to the `workers.dev` hostname is blocked by its egress policy (`403 Forbidden: requests ... are not allowed`), so a dedicated GitHub Actions smoke workflow is being run from this isolated branch to test live health and four HTTP 200 generations followed by HTTP 429.
+- Rollback target remains version `b6678b0e-9ad0-46ba-8b1c-8718297127b4`. If production smoke fails, restore that version to 100% traffic immediately. DO class migration is forward-only; rollback will not delete the new class/storage.
