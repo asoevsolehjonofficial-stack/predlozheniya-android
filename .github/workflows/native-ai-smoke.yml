@@ -233,7 +233,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api_level }}
-          target: ${{ matrix.api_level == 21 && 'default' || 'google_apis' }}
+          target: ${{ matrix.api_level == 35 && 'google_atd' || matrix.api_level == 21 && 'default' || 'google_apis' }}
           arch: ${{ matrix.api_level == 21 && 'x86' || 'x86_64' }}
           profile: pixel_2
           disable-animations: true
