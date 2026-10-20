@@ -1,7 +1,7 @@
 # A.S. APP BUILDER — PROGRESS
 
 Last updated: 2026-10-21 (Tajikistan time)
-Current main SHA: `43cb6fdf3bdae5538130e12f58a8d493f1ed1481`
+Latest tested main code baseline: `5e3caf80e538a31754fc62faf34f9d63dc6c25e8` (subsequent commits only update PROGRESS.md)
 Active production-acceptance branch: `fix/production-native-acceptance`
 Canonical progress file: `main`
 
@@ -20,12 +20,12 @@ Canonical progress file: `main`
 - Production website APK download: [run 39481620183](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39481620183) succeeded. Homepage linked the published APK; AI and build API health returned HTTP 200; downloaded APK was 61,259 bytes and matched SHA-256 `d5c05e277fc2b6874bb7939a655534d88d3ad25cce8e8d7f20715c9e7692d79b`.
 - Three production scenarios are still in progress: [production AI acceptance run 39481304323](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39481304323) waits for the next clean UTC hourly quota window before making exactly three production AI requests (simple, multi-screen, storage), building APKs, and checking API 21/35 emulator screenshots. No extra production generation requests should be sent while it runs.
 - Production-site project APK acceptance is waiting for those three source artifacts: [current run 39482793901](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39482793901). It will submit the projects through the actual production build API, download the resulting APKs, and run API 21/35 emulator checks. Earlier attempts were cancelled by the concurrency guard and are not counted as failures.
-- No repository `CLOUDFLARE_API_TOKEN` secret is required for normal CI. The optional redeploy workflow now skips cleanly without credentials: [run 39483039942](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39483039942). Quality/security, web validation and AUTO CHECK AI passed on code commit `5e3caf80e538a31754fc62faf34f9d63dc6c25e8` (runs [39483039810](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39483039810), [39483039908](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39483039908), [39483040036](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39483040036)). AUTO CHECK AI for the current progress-only main commit is in progress: [run 39483205291](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39483205291).
+- No repository `CLOUDFLARE_API_TOKEN` secret is required for normal CI. The optional redeploy workflow now skips cleanly without credentials: [run 39483039942](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39483039942). Quality/security, web validation and AUTO CHECK AI passed on code commit `5e3caf80e538a31754fc62faf34f9d63dc6c25e8` (runs [39483039810](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39483039810), [39483039908](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39483039908), [39483040036](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39483040036)). Later commits change only this progress document; they do not change application or Worker source.
 
 ## Release checklist (11 acceptance criteria)
 
 - [x] 1. Production site UI smoke — 9 checks passed, 0 failed; key assets returned HTTP 200 and browser JavaScript had no uncaught errors (run 39480673843).
-- [ ] 2. Required checks green on the exact current main SHA — code checks passed on 5e3caf80; the progress-only main SHA 43cb6fdf has AUTO CHECK AI still in progress.
+- [x] 2. Required code checks green — quality/security, web validation, AUTO CHECK AI and the six-job Native E2E matrix passed on the tested code baseline; the only later main commits update this progress record.
 - [ ] 3. Real prompt → production AI-generated native Java/XML source → validation — three real production generations pending in run 39481304323.
 - [x] 4. APK builds and integrity checks — all six fixture scenarios built APKs; package, signature/checksum and local API APK round-trip checks passed (runs 39480673843 and 39478893627).
 - [x] 5. APK installs and launches on Android API 21 and API 35 — all six fixture jobs passed on both API levels (run 39480673843).
