@@ -1,4 +1,4 @@
-name: Retired duplicate production native acceptance workflow
+name: Retire duplicate production acceptance run
 
 on:
   push:
@@ -8,16 +8,20 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
-# This duplicate was superseded by fix/production-native-acceptance.
-# Reusing the same concurrency group with cancellation retires its waiting run.
+# Different group so this retirement job can start and cancel the duplicate run.
 concurrency:
-  group: production-native-acceptance
-  cancel-in-progress: true
+  group: retire-duplicate-production-native-acceptance
+  cancel-in-progress: false
 
 jobs:
-  retired:
-    if: false
+  retire-duplicate:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "Use the canonical production acceptance run on fix/production-native-acceptance."
+      - name: Cancel duplicate run; preserve canonical production acceptance
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh run cancel 39483118917 --repo asoevsolehjonofficial-stack/predlozheniya-android || true
+          echo "Retired duplicate. Canonical run: 39481304323 on fix/production-native-acceptance."
