@@ -47,7 +47,7 @@ jobs:
               console.log('PRODUCTION_TURNSTILE_PREFLIGHT=passed token_length='+token.length);
               console.log('No build request was submitted; no AI quota was consumed.');
             } catch(e) {
-              if(page) try { await page.screenshot({path:'/tmp/turnstile-preflight-failure.png',fullPage:true}); } catch {}
+              if(page) try { await page.screenshot({path:'turnstile-preflight-failure.png',fullPage:true}); await require('node:fs').writeFileSync('turnstile-preflight-failure.html', await page.content()); } catch {}
               console.error('PRODUCTION_TURNSTILE_PREFLIGHT=failed '+String(e));
               process.exitCode=1;
             } finally {
@@ -55,3 +55,12 @@ jobs:
             }
           })();
           JS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: turnstile-preflight-evidence
+          path: |
+            turnstile-preflight-failure.png
+            turnstile-preflight-failure.html
+          if-no-files-found: warn
+          retention-days: 7
