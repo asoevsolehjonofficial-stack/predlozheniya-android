@@ -20,7 +20,7 @@ Canonical progress file: `main`
 
 ## Release checklist (11 acceptance criteria)
 
-- [x] 1. Production site and service health endpoints — production website download check passed; AI Worker and build API health both returned HTTP 200. Full browser console/network acceptance still needs its dedicated evidence.
+- [ ] 1. Production site works without console/network errors — website download and service-health checks passed, but full browser console/network acceptance still needs dedicated evidence.
 - [ ] 2. Required checks green with no required failures/cancellations — main quality/security, web validation, AI auto-check and APK build runs passed; production acceptance is still running.
 - [ ] 3. Real prompt → production AI → validated native Java/XML project — three real production generations are pending in run 39481304323.
 - [ ] 4. APK builds and integrity checks — local Native E2E builds pass; production-generated APK build and checksum evidence pending.
@@ -32,7 +32,7 @@ Canonical progress file: `main`
 - [x] 10. Production Worker updated to main after PR #27 — current production v10 source exactly matches main; previous v9 and historical v7 rollback IDs are recorded above.
 - [ ] 11. Three production end-to-end scenarios (simple, multi-screen, persistent storage) — production generation/build/emulator acceptance is pending.
 
-**Strict release certification: 2/11 fully certified.** Items marked partial remain unchecked; do not claim release completion until production acceptance artifacts and remaining security/browser evidence are reviewed.
+**Strict release certification: 1/11 fully certified.** Items marked partial remain unchecked; do not claim release completion until production acceptance artifacts and remaining security/browser evidence are reviewed.
 
 ## Failure-log automation (2026-10-18)
 
