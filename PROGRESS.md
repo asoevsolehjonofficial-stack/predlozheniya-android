@@ -1,7 +1,7 @@
 # A.S. APP BUILDER — PROGRESS
 
 Last updated: 2026-10-21 (Tajikistan time)
-Latest tested main code baseline: `5e3caf80e538a31754fc62faf34f9d63dc6c25e8` (subsequent commits only update PROGRESS.md)
+Latest app/Worker code baseline with green six-job Native E2E: `e8b410dab5029e69b1a41c8217c607f307fa8c30` (run 39480673843). Current main SHA `92c31f69aee838f5c3c1fa3b1563f2a451d6dfef` additionally changes only the Native E2E workflow trigger to avoid running/cancelling the matrix for progress-only edits; its matrix run 39483952203 was cancelled, so a green matrix on this exact workflow SHA is still needed.
 Active production-acceptance branch: `fix/production-native-acceptance`
 Canonical progress file: `main`
 
@@ -19,13 +19,14 @@ Canonical progress file: `main`
 - Production UI smoke: the `live-ui-smoke` job in [run 39480673843](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39480673843) passed 9 checks and had 0 failures: key assets HTTP 200, expected page title/brand/input/controls, and no uncaught browser JavaScript errors.
 - Production website APK download: [run 39481620183](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39481620183) succeeded. Homepage linked the published APK; AI and build API health returned HTTP 200; downloaded APK was 61,259 bytes and matched SHA-256 `d5c05e277fc2b6874bb7939a655534d88d3ad25cce8e8d7f20715c9e7692d79b`.
 - Three production scenarios are still in progress: [production AI acceptance run 39481304323](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39481304323) waits for the next clean UTC hourly quota window before making exactly three production AI requests (simple, multi-screen, storage), building APKs, and checking API 21/35 emulator screenshots. No extra production generation requests should be sent while it runs.
-- Production-site project APK acceptance is waiting for those three source artifacts: [current run 39482793901](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39482793901). It will submit the projects through the actual production build API, download the resulting APKs, and run API 21/35 emulator checks. Earlier attempts were cancelled by the concurrency guard and are not counted as failures.
+- Production-site project APK acceptance is running as [run 39484129500](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39484129500), waiting for the source artifact from run 39481304323. It submits projects through the real production build API, downloads resulting APKs, and runs API 21/35 emulator checks. The workflow now respects the separate build API cap of two submissions per source IP/hour by waiting before the third project and retrying only the specific hourly-cap HTTP 429 after reset. Earlier attempts were cancelled while the workflow was being corrected.
+- Production Turnstile preflight [run 39483778205](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39483778205) failed with `TimeoutError: page.waitForFunction: Timeout 90000ms exceeded` while waiting for `cf-turnstile-response`; it did not submit a production build request or consume AI quota. A subsequent preflight run 39484049650 is still in progress. Site workflow commit `eb812d0fb2d420f63be6b0f00129c2ccb1efd06c` also fixes an undefined download-status variable and adds a storage-after-relaunch persistence assertion.
 - No repository `CLOUDFLARE_API_TOKEN` secret is required for normal CI. The optional redeploy workflow now skips cleanly without credentials: [run 39483039942](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39483039942). Quality/security, web validation and AUTO CHECK AI passed on code commit `5e3caf80e538a31754fc62faf34f9d63dc6c25e8` (runs [39483039810](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39483039810), [39483039908](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39483039908), [39483040036](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39483040036)). Later commits change only this progress document; they do not change application or Worker source.
 
 ## Release checklist (11 acceptance criteria)
 
 - [x] 1. Production site UI smoke — 9 checks passed, 0 failed; key assets returned HTTP 200 and browser JavaScript had no uncaught errors (run 39480673843).
-- [x] 2. Required code checks green — quality/security, web validation, AUTO CHECK AI and the six-job Native E2E matrix passed on the tested code baseline; the only later main commits update this progress record.
+- [ ] 2. Required code checks green with no cancelled required checks — quality/security, web validation and AUTO CHECK AI passed on the tested application/Worker baseline, but Native E2E run 39483952203 on the latest workflow-only main SHA was cancelled; rerun the matrix successfully before release certification.
 - [ ] 3. Real prompt → production AI-generated native Java/XML source → validation — three real production generations pending in run 39481304323.
 - [x] 4. APK builds and integrity checks — all six fixture scenarios built APKs; package, signature/checksum and local API APK round-trip checks passed (runs 39480673843 and 39478893627).
 - [x] 5. APK installs and launches on Android API 21 and API 35 — all six fixture jobs passed on both API levels (run 39480673843).
@@ -36,7 +37,7 @@ Canonical progress file: `main`
 - [x] 10. Production Worker updated to main — active v10 matches `backend/ai-worker.js` on main; v9 and historical v7 rollback IDs are recorded above; no rollback was performed.
 - [ ] 11. Three real production scenarios (simple, multi-screen, persistent storage), resulting APKs, API 21/35 installation/screenshots, and production-site downloads — acceptance runs 39481304323 and 39482793901 are still in progress.
 
-**Strict release certification: 7/11 criteria currently supported by evidence.** Criteria 3, 7, 9 and 11 remain release blockers. Fixture-based CI is not misrepresented as real production AI generation.
+**Strict release certification: 6/11 criteria currently supported by evidence.** Criteria 2, 3, 7, 9 and 11 remain release blockers. Fixture-based CI is not misrepresented as real production AI generation.
 
 ## Failure-log automation (2026-10-18)
 
