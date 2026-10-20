@@ -29,7 +29,7 @@ jobs:
           jq -e '.ok == true and .service == "A.S. APP BUILDER AI"' "$RUNNER_TEMP/health.json" >/dev/null
           echo "Production AI health: HTTP 200."
 
-      - name: Verify four successful requests and fifth request is rate-limited
+      - name: Verify five successful requests and sixth request is rate-limited
         shell: bash
         run: |
           set -euo pipefail
