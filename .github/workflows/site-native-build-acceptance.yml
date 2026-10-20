@@ -194,7 +194,7 @@ jobs:
               if (bytes.length < 10000 || bytes.readUInt32LE(0) !== 0x04034b50) throw new Error('Downloaded response is not a ZIP/APK: ' + scenario);
               const filename = path.join(root, 'site-apks', scenario + '.apk');
               fs.writeFileSync(filename, bytes);
-              const result = { scenario, requestId, status: state.status, bytes: bytes.length, sha256, advertisedSha256: advertised || null, downloadHttp: downloaded.response.status };
+              const result = { scenario, requestId, status: state.status, bytes: bytes.length, sha256, advertisedSha256: advertised || null, downloadHttp: downloadResponse.status };
               results.push(result);
               console.log('SITE_APK_DOWNLOADED ' + JSON.stringify(result));
             }
@@ -313,6 +313,15 @@ jobs:
               adb shell uiautomator dump /sdcard/site-ui-after.xml >/dev/null
               adb shell cat /sdcard/site-ui-after.xml > "production-site-acceptance/ui/api-${{ matrix.api_level }}/$scenario-after.xml"
               grep -Eiq "$secondary" "production-site-acceptance/ui/api-${{ matrix.api_level }}/$scenario-after.xml"
+              if [[ "$scenario" == "storage" ]]; then
+                adb shell am force-stop "$package"
+                adb shell monkey -p "$package" 1
+                sleep 2
+                adb shell uiautomator dump /sdcard/site-ui-relaunch.xml >/dev/null
+                adb shell cat /sdcard/site-ui-relaunch.xml > "production-site-acceptance/ui/api-${{ matrix.api_level }}/$scenario-relaunch.xml"
+                grep -F "Native test" "production-site-acceptance/ui/api-${{ matrix.api_level }}/$scenario-relaunch.xml"
+                echo "STORAGE_PERSISTENCE scenario=storage api=${{ matrix.api_level }} saved_note=Native test relaunch=passed"
+              fi
               adb exec-out screencap -p > "production-site-acceptance/screenshots/api-${{ matrix.api_level }}/$scenario.png"
               python3 - "production-site-acceptance/screenshots/api-${{ matrix.api_level }}/$scenario.png" <<'PY'
             import json, sys
