@@ -17,6 +17,9 @@ concurrency:
 
 jobs:
   build-through-production-site-api:
+    permissions:
+      contents: read
+      actions: write
     runs-on: ubuntu-latest
     timeout-minutes: 180
     permissions:
@@ -62,6 +65,7 @@ jobs:
         env:
           SITE_URL: https://as-app-builder.pages.dev
           API_URL: https://as-app-builder-api.asoev-solehjon-official.workers.dev
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
@@ -135,6 +139,13 @@ jobs:
                 throw new Error('Build API returned invalid request/download token for ' + scenario + ': ' + JSON.stringify(started.data));
               }
               console.log('Production build queued: ' + scenario + ', requestId=' + requestId);
+              const dispatch = await fetch('https://api.github.com/repos/' + process.env.GITHUB_REPOSITORY + '/actions/workflows/build-user-project-apk.yml/dispatches', {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + process.env.GH_TOKEN, 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ref: 'main' })
+              });
+              if (dispatch.status !== 204) throw new Error('Queue worker dispatch returned HTTP ' + dispatch.status + ': ' + (await dispatch.text()).slice(0, 1000));
+              console.log('Dispatched the trusted production APK queue worker for ' + scenario + '.');
               const deadline = Date.now() + 25 * 60 * 1000;
               let state;
               while (Date.now() < deadline) {
