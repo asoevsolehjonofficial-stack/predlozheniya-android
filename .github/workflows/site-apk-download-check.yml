@@ -1,0 +1,47 @@
+name: Verify website APK download
+
+on:
+  push:
+    branches: [fix/production-native-acceptance]
+    paths:
+      - ".github/workflows/site-apk-download-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Confirm the website exposes the APK download and fetch the real file
+        shell: bash
+        run: |
+          set -euo pipefail
+          SITE="https://as-app-builder.pages.dev"
+          APK_URL="https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/releases/download/latest-apk/app-debug.apk"
+          curl --fail --silent --show-error --location --max-time 30 "$SITE/" -o "$RUNNER_TEMP/site.html"
+          grep -F "$APK_URL" "$RUNNER_TEMP/site.html" >/dev/null
+          echo "Website homepage links to the published APK."
+          curl --fail --silent --show-error --location --max-time 60 "$APK_URL" -o "$RUNNER_TEMP/app-debug.apk"
+          curl --fail --silent --show-error --location --max-time 30 "$APK_URL.sha256" -o "$RUNNER_TEMP/app-debug.apk.sha256"
+          expected="$(awk 'NR==1 {print $1}' "$RUNNER_TEMP/app-debug.apk.sha256")"
+          actual="$(sha256sum "$RUNNER_TEMP/app-debug.apk" | awk '{print $1}')"
+          test -n "$expected" && test "$actual" = "$expected"
+          unzip -t "$RUNNER_TEMP/app-debug.apk" >/dev/null
+          echo "Website download URL: HTTP success."
+          echo "APK bytes: $(wc -c < "$RUNNER_TEMP/app-debug.apk")"
+          echo "APK SHA-256: $actual"
+          echo "Checksum verification: passed."
+      - uses: actions/upload-artifact@v4
+        with:
+          name: website-apk-download-verification
+          path: |
+            ${{ runner.temp }}/app-debug.apk
+            ${{ runner.temp }}/app-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 14
