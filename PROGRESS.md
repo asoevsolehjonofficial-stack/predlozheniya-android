@@ -506,3 +506,18 @@ Latest native E2E run: https://github.com/asoevsolehjonofficial-stack/predlozhen
 - Full six-job validation must complete on the new commit before merge or production tests. Do not infer success from commit creation alone.
 
 - Retry policy: the emulator action wrapper permits one full rerun of `scripts/native-e2e.sh` only when the first run log contains an explicit emulator/ADB service failure signature (for example, a system service broken pipe, emulator process death, boot timeout, or offline device). The retry is logged with its reason; ordinary assertion, app ANR, expected-text, pixel-content, APK integrity, and authorization failures do not trigger retry.
+
+
+## Native E2E wrapper shell fix — 2026-10-20
+
+- Run [39464715345](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39464715345) reached the application checks in all six matrix jobs. The jobs were marked failed only after `scripts/native-e2e.sh` reported success, because the emulator action's script ran `rc=${PIPESTATUS[0]}` under `sh` and emitted `/usr/bin/sh: 1: Bad substitution` (exit code 2).
+- Confirmed UIAutomator text and pixel metrics from the six jobs:
+  - simple/API 21: `Count: 0`, `Add one`; 1080×1920, 93.5785% pixels with luma >10, luminance standard deviation 61.5333, 385 unique RGB colors; pixel gate passed.
+  - simple/API 35: `Count: 0`, `ADD ONE`; pixel gate passed, 100% nonblack ratio, luminance standard deviation 11.9348, 287 unique RGB colors.
+  - multi-screen/API 21: `Home screen`, `Open Settings`; pixel gate passed, 93.58% nonblack ratio, luminance standard deviation 61.7836, 402 unique RGB colors.
+  - multi-screen/API 35: `Home screen`, `OPEN SETTINGS`; pixel gate passed, 100% nonblack ratio, luminance standard deviation 13.5296, 300 unique RGB colors.
+  - storage/API 21: `Write a note`, `Save note`, `Saved locally`; pixel gate passed, 93.58% nonblack ratio, luminance standard deviation 61.7652, 583 unique RGB colors.
+  - storage/API 35: `Write a note`, `SAVE NOTE`, `Saved locally`; pixel gate passed, 100% nonblack ratio, luminance standard deviation 13.7285, 310 unique RGB colors.
+- Added `scripts/run-native-e2e.sh` with Bash shebang and strict mode. It redirects each attempt to a log, captures the direct command exit status, then prints the log; no pipeline or `PIPESTATUS` is used. Exactly one full retry is permitted only when the first log matches explicit emulator/ADB failure signatures, and it records `EXPLICIT_EMULATOR_FAILURE_RETRY`. The final exit status is the native script's status from the final attempt.
+- In the emulator action, the script input is now a single invocation line. The matrix variable is `matrix.example` (not `matrix.scenario`), as defined in the workflow matrix. Application text, focus, ANR, screenshot and pixel assertions in `scripts/native-e2e.sh` are unchanged.
+- New full six-job Native E2E validation is required before PR #34 can be merged; no production scenarios are claimed by this fix.
