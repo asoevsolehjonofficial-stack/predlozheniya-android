@@ -182,7 +182,8 @@ const CI_OIDC_AUDIENCE = "as-app-builder-ai-ci";
 const CI_OIDC_REPOSITORY = "asoevsolehjonofficial-stack/predlozheniya-android";
 const CI_OIDC_WORKFLOWS = new Map([
   [CI_OIDC_REPOSITORY + "/.github/workflows/native-ai-smoke.yml@refs/heads/main", "refs/heads/main"],
-  [CI_OIDC_REPOSITORY + "/.github/workflows/native-ai-smoke.yml@refs/heads/fix/native-e2e-package-id-sdk-emulator", "refs/heads/fix/native-e2e-package-id-sdk-emulator"]
+  [CI_OIDC_REPOSITORY + "/.github/workflows/native-ai-smoke.yml@refs/heads/fix/native-e2e-package-id-sdk-emulator", "refs/heads/fix/native-e2e-package-id-sdk-emulator"],
+  [CI_OIDC_REPOSITORY + "/.github/workflows/native-ai-smoke.yml@refs/heads/fix/ai-quota-five-per-hour", "refs/heads/fix/ai-quota-five-per-hour"]
 ]);
 let ciJwksCache = null;
 let ciJwksExpiresAt = 0;
@@ -301,7 +302,7 @@ async function generate(request, env) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           counters: [
-            { key: hourKey, limit: 4, ttlSeconds: 7200, window: hourWindow, scope: "hour" },
+            { key: hourKey, limit: 5, ttlSeconds: 7200, window: hourWindow, scope: "hour" },
             { key: dayKey, limit: 15, ttlSeconds: 172800, window: day, scope: "day" },
             { key: globalDayKey, limit: globalLimit, ttlSeconds: 172800, window: day, scope: "global" }
           ]
@@ -313,7 +314,7 @@ async function generate(request, env) {
       return json({ error: "AI rate limiting is temporarily unavailable. Try again later." }, 503, origin);
     }
     if (!quota.allowed) {
-      if (quota.scope === "hour") return json({ error: "Лимит встроенного ИИ: не более 4 генераций в час с одной сети. Попробуй после начала следующего часа.", retryAfterSeconds: 3600 - (now.getUTCMinutes() * 60 + now.getUTCSeconds()) }, 429, origin);
+      if (quota.scope === "hour") return json({ error: "Лимит встроенного ИИ: не более 5 генераций в час с одной сети. Попробуй после начала следующего часа.", retryAfterSeconds: 3600 - (now.getUTCMinutes() * 60 + now.getUTCSeconds()) }, 429, origin);
       if (quota.scope === "day") return json({ error: "Лимит встроенного ИИ: не более 15 генераций в день с одной сети. Попробуй завтра.", retryAfterSeconds: 86400 - (now.getUTCHours() * 3600 + now.getUTCMinutes() * 60 + now.getUTCSeconds()) }, 429, origin);
       return json({ error: nativeMode ? "The shared daily native AI capacity is used up. Try tomorrow." : "The shared daily AI capacity is used up. Try tomorrow or connect your own API key." }, 429, origin);
     }
