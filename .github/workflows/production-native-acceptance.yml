@@ -1,0 +1,266 @@
+name: Production Native AI acceptance
+
+on:
+  push:
+    branches: [fix/production-native-acceptance]
+    paths:
+      - ".github/workflows/production-native-acceptance.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-native-ai-acceptance
+  cancel-in-progress: false
+
+jobs:
+  generate-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0"
+      - name: Wait for a fresh UTC hourly quota window
+        shell: bash
+        run: |
+          set -euo pipefail
+          minute="$(date -u +%M)"
+          second="$(date -u +%S)"
+          wait_seconds=$((3600 - 10#${minute} * 60 - 10#${second} + 2))
+          echo "Waiting ${wait_seconds}s until the next UTC hourly quota window."
+          sleep "$wait_seconds"
+          echo "Quota window start: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      - name: Generate exactly three apps through the production AI Worker and build APKs
+        shell: bash
+        env:
+          AI_API_URL: https://as-app-builder-ai.asoev-solehjon-official.workers.dev
+          SITE_ORIGIN: https://as-app-builder.pages.dev
+        run: |
+          set -euo pipefail
+          mkdir -p production-acceptance/apks production-acceptance/responses
+          for scenario in simple multi-screen storage; do
+            case "$scenario" in
+              simple)
+                prompt="Create a complete native Android counter app. On launch show the exact text Count: 0 and a button labeled exactly Add one. Tapping Add one increments the count to Count: 1, Count: 2, and so on. Use Android Java widgets only, no WebView, no network, and no permissions."
+                package_slug="simple"
+                ;;
+              multi-screen)
+                prompt="Create a complete native Android app with two screens. The first screen must show exact text Home screen and a button labeled exactly Open Settings. Tapping Open Settings opens a second screen showing exact text Settings screen and a button labeled Back that returns home. Use Java Android widgets only, no WebView, no network."
+                package_slug="multi_screen"
+                ;;
+              storage)
+                prompt="Create a complete native Android notes app using SharedPreferences for persistent local storage. On launch show an editable text field with hint or label Write a note and a button labeled exactly Save note. When Save note is tapped, persist the note and show exact status text Saved locally. Use Java Android widgets only, no WebView, no network."
+                package_slug="storage"
+                ;;
+            esac
+            echo "Production generation: $scenario (one request only)."
+            code="$(curl --silent --show-error --max-time 120 -o "$RUNNER_TEMP/production-$scenario.json" -w '%{http_code}' \
+              -X POST "$AI_API_URL/api/ai/native-generate" \
+              -H "Origin: $SITE_ORIGIN" \
+              -H "Content-Type: application/json" \
+              --data "$(jq -n --arg prompt "$prompt" '{prompt:$prompt}')")"
+            if [[ "$code" != "200" ]]; then
+              cat "$RUNNER_TEMP/production-$scenario.json"
+              echo "::error::Production AI generation for $scenario returned HTTP $code."
+              exit 1
+            fi
+            jq -e '.text | type == "string" and length > 0' "$RUNNER_TEMP/production-$scenario.json" >/dev/null
+            cp "$RUNNER_TEMP/production-$scenario.json" "production-acceptance/responses/$scenario.json"
+            rm -rf native-builder/app/src/main/java/tj/as/generated
+            SCENARIO="$scenario" RESPONSE_FILE="$RUNNER_TEMP/production-$scenario.json" python3 - <<'PY'
+          import json, os, re, shutil
+          from pathlib import Path
+          scenario = os.environ["SCENARIO"]
+          response = json.loads(Path(os.environ["RESPONSE_FILE"]).read_text(encoding="utf-8"))
+          text = response.get("text")
+          if not isinstance(text, str) or not text.strip():
+              raise SystemExit("Production AI response contained no source text.")
+          text = re.sub(r"^\s*`{3}(?:json)?\s*|\s*`{3}\s*$", "", text.strip(), flags=re.I)
+          data = json.loads(text)
+          files = data.get("files")
+          if not isinstance(files, list) or not 1 <= len(files) <= 12:
+              raise SystemExit("Invalid production native source file list.")
+          root = Path("native-builder/app/src/main")
+          seen, total, main_found = set(), 0, False
+          for item in files:
+              if not isinstance(item, dict) or not isinstance(item.get("path"), str) or not isinstance(item.get("content"), str):
+                  raise SystemExit("Malformed production source file.")
+              rel, source = item["path"], item["content"]
+              if not re.fullmatch(r"app/src/main/(?:java/tj/as/generated/[A-Za-z0-9_$]+\.java|res/values/[A-Za-z0-9_.-]+\.xml)", rel) or ".." in rel:
+                  raise SystemExit("Disallowed source path: " + rel)
+              if rel in seen:
+                  raise SystemExit("Duplicate source path: " + rel)
+              seen.add(rel)
+              size = len(source.encode("utf-8")); total += size
+              if size > 60000 or total > 500 * 1024:
+                  raise SystemExit("Production source size limit exceeded.")
+              if rel.endswith(".java"):
+                  if re.search(r"java\.lang\.Runtime|ProcessBuilder|DexClassLoader|PathClassLoader|Class\.forName|System\.loadLibrary|WebView|java\.net\.(?:Socket|URL|URLConnection)", source):
+                      raise SystemExit("Restricted API found in production source.")
+                  if rel == "app/src/main/java/tj/as/generated/MainActivity.java":
+                      if not re.search(r"package\s+tj\.as\.generated\s*;", source) or not re.search(r"class\s+MainActivity\s+extends\s+Activity\b", source):
+                          raise SystemExit("Invalid production MainActivity.")
+                      main_found = True
+              elif re.search(r"<!DOCTYPE|<!ENTITY", source, re.I):
+                  raise SystemExit("XML document types are forbidden.")
+              destination = root / rel.removeprefix("app/src/main/")
+              destination.parent.mkdir(parents=True, exist_ok=True)
+              destination.write_text(source, encoding="utf-8")
+          if not main_found:
+              raise SystemExit("Missing production MainActivity.java.")
+          print(f"Validated {len(seen)} source files for {scenario}: " + ", ".join(sorted(seen)))
+          PY
+            sed -i -E "s/namespace '[^']+'/namespace 'tj.as.generated'/" native-builder/app/build.gradle
+            sed -i -E "s/applicationId '[^']+'/applicationId 'tj.as.generated.p_prod_$package_slug'/" native-builder/app/build.gradle
+            sed -i -E "s/android:label=\"[^\"]*\"/android:label=\"Production $scenario\"/" native-builder/app/src/main/AndroidManifest.xml
+            gradle --no-daemon -p native-builder clean assembleDebug
+            apk="native-builder/app/build/outputs/apk/debug/app-debug.apk"
+            test -s "$apk"
+            unzip -t "$apk" >/dev/null
+            "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk"
+            "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | grep -F "package: name='tj.as.generated.p_prod_$package_slug'"
+            cp "$apk" "production-acceptance/apks/$scenario.apk"
+            sha256sum "production-acceptance/apks/$scenario.apk" | tee -a production-acceptance/apk-sha256.txt
+          done
+          echo "Exactly three production native AI requests were made."
+      - uses: actions/upload-artifact@v4
+        with:
+          name: production-native-apks-and-source
+          path: production-acceptance/
+          if-no-files-found: error
+          retention-days: 14
+
+  emulator-e2e:
+    needs: generate-and-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        api_level: [21, 35]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0 emulator"
+      - name: Install Android emulator image
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ matrix.api_level }}" == "21" ]]; then
+            sdkmanager --install "platforms;android-21" "system-images;android-21;default;x86"
+          else
+            sdkmanager --install "system-images;android-35;google_apis;x86_64"
+          fi
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: actions/download-artifact@v4
+        with:
+          name: production-native-apks-and-source
+          path: production-acceptance
+      - name: Install screenshot analysis dependencies
+        run: python3 -m pip install --user pillow numpy
+      - name: Install, interact with, and screenshot all three production-generated APKs
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api_level }}
+          target: ${{ matrix.api_level == 21 && 'default' || 'google_apis' }}
+          arch: ${{ matrix.api_level == 21 && 'x86' || 'x86_64' }}
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            mkdir -p "production-acceptance/screenshots/api-${{ matrix.api_level }}" "production-acceptance/ui/api-${{ matrix.api_level }}"
+            for scenario in simple multi-screen storage; do
+              case "$scenario" in
+                simple) slug="simple"; expected="Count: 0"; button="Add one"; secondary="Count: 1" ;;
+                multi-screen) slug="multi_screen"; expected="Home screen"; button="Open Settings"; secondary="Settings screen" ;;
+                storage) slug="storage"; expected="Write a note"; button="Save note"; secondary="Saved locally" ;;
+              esac
+              package="tj.as.generated.p_prod_$slug"
+              apk="production-acceptance/apks/$scenario.apk"
+              adb install -r "$apk"
+              adb shell am start -W -n "$package/tj.as.generated.MainActivity"
+              sleep 2
+              adb shell uiautomator dump /sdcard/production-ui.xml >/dev/null
+              adb shell cat /sdcard/production-ui.xml > "production-acceptance/ui/api-${{ matrix.api_level }}/$scenario-initial.xml"
+              grep -Eiq "$expected" "production-acceptance/ui/api-${{ matrix.api_level }}/$scenario-initial.xml"
+              python3 - "$RUNNER_TEMP" "production-acceptance/ui/api-${{ matrix.api_level }}/$scenario-initial.xml" "$button" <<'PY'
+            import re, sys
+            from pathlib import Path
+            root, filename, wanted = sys.argv[1:]
+            xml = Path(filename).read_text(encoding="utf-8", errors="replace")
+            for node in re.findall(r"<node\b[^>]*>", xml):
+                text = re.search(r'text="([^"]*)"', node)
+                desc = re.search(r'content-desc="([^"]*)"', node)
+                value = (text.group(1) if text else "") + " " + (desc.group(1) if desc else "")
+                if re.search(re.escape(wanted), value, re.I):
+                    bounds = re.search(r'bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]"', node)
+                    if bounds:
+                        x1,y1,x2,y2 = map(int, bounds.groups())
+                        print((x1+x2)//2, (y1+y2)//2)
+                        raise SystemExit(0)
+            raise SystemExit("Could not find actionable UI control: " + wanted)
+            PY
+              read -r x y < <(python3 - "production-acceptance/ui/api-${{ matrix.api_level }}/$scenario-initial.xml" "$button" <<'PY'
+            import re, sys
+            from pathlib import Path
+            xml=Path(sys.argv[1]).read_text(encoding="utf-8",errors="replace")
+            wanted=sys.argv[2]
+            for node in re.findall(r"<node\b[^>]*>",xml):
+                m=re.search(r'text="([^"]*)"',node)
+                d=re.search(r'content-desc="([^"]*)"',node)
+                value=(m.group(1) if m else "")+" "+(d.group(1) if d else "")
+                if re.search(re.escape(wanted),value,re.I):
+                    b=re.search(r'bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]"',node)
+                    if b:
+                        x1,y1,x2,y2=map(int,b.groups()); print((x1+x2)//2,(y1+y2)//2); sys.exit(0)
+            sys.exit("UI control not found: "+wanted)
+            PY
+              )
+              adb shell input tap "$x" "$y"
+              sleep 2
+              adb shell uiautomator dump /sdcard/production-ui-after.xml >/dev/null
+              adb shell cat /sdcard/production-ui-after.xml > "production-acceptance/ui/api-${{ matrix.api_level }}/$scenario-after.xml"
+              grep -Eiq "$secondary" "production-acceptance/ui/api-${{ matrix.api_level }}/$scenario-after.xml"
+              adb exec-out screencap -p > "production-acceptance/screenshots/api-${{ matrix.api_level }}/$scenario.png"
+              python3 - "production-acceptance/screenshots/api-${{ matrix.api_level }}/$scenario.png" <<'PY'
+            import json, sys
+            import numpy as np
+            from PIL import Image
+            im=Image.open(sys.argv[1]).convert("RGB")
+            arr=np.asarray(im,dtype=np.uint8)
+            lum=arr.mean(axis=2)
+            stats={"width":im.width,"height":im.height,"nonblack_ratio_luma_gt_10":round(float((lum>10).mean()),6),"luminance_stddev":round(float(lum.std()),4),"unique_rgb_colors":int(len(np.unique(arr.reshape(-1,3),axis=0)))}
+            stats["passed"]=stats["nonblack_ratio_luma_gt_10"]>=0.01 and stats["luminance_stddev"]>=5.0 and stats["unique_rgb_colors"]>=8
+            print(json.dumps(stats,sort_keys=True))
+            if not stats["passed"]: raise SystemExit("Blank or near-uniform screenshot.")
+            PY
+              echo "PRODUCTION_E2E scenario=$scenario api=${{ matrix.api_level }} initial=$expected action=$button after=$secondary screenshot=passed"
+              adb shell am force-stop "$package"
+            done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: production-native-e2e-api-${{ matrix.api_level }}
+          path: production-acceptance/
+          if-no-files-found: warn
+          retention-days: 14
