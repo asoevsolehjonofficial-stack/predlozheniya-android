@@ -149,7 +149,8 @@ async function verifyGitHubOidc(request, expectedWorkflowRef = OWNER + "/" + REP
   const allowedWorkflowRefs = expectedAudience === NATIVE_E2E_OIDC_AUDIENCE
     ? new Map([
         [OWNER + "/" + REPO + "/.github/workflows/native-ai-smoke.yml@refs/heads/main", "refs/heads/main"],
-        [OWNER + "/" + REPO + "/.github/workflows/native-ai-smoke.yml@refs/heads/fix/native-e2e-package-id-sdk-emulator", "refs/heads/fix/native-e2e-package-id-sdk-emulator"]
+        [OWNER + "/" + REPO + "/.github/workflows/native-ai-smoke.yml@refs/heads/fix/native-e2e-package-id-sdk-emulator", "refs/heads/fix/native-e2e-package-id-sdk-emulator"],
+        [OWNER + "/" + REPO + "/.github/workflows/native-ai-smoke.yml@refs/heads/fix/ai-quota-five-per-hour", "refs/heads/fix/ai-quota-five-per-hour"]
       ])
     : new Map([[expectedWorkflowRef, "refs/heads/main"]]);
   if (header.alg !== "RS256" || claims.iss !== OIDC_ISSUER || !audienceValid ||
