@@ -1,27 +1,38 @@
 # A.S. APP BUILDER — PROGRESS
 
-Last updated: 2026-10-19
-Active engineering branch: `fix/native-e2e-package-id-sdk-emulator`
-Canonical progress branch: `fix/ai-quota-native-preview`
-PR #27: MERGED — https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/pull/27
-PR #34: OPEN — https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/pull/34
-Latest native E2E run: https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39178042422
+Last updated: 2026-10-21 (Tajikistan time)
+Active production-acceptance branch: `fix/production-native-acceptance`
+Canonical progress file: `main`
+
+## Current verified state
+
+- PR #34 merged: https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/pull/34
+- PR #37 merged only after its six-job Native E2E matrix completed green: https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/pull/37
+- Native E2E matrix: [run 39478893627](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39478893627), all six scenarios succeeded (simple, multi-screen, storage on API 21 and API 35). Each reports expected UI text, screenshot pixel validation `passed: true`, and `diagnostics collected; exit=0`.
+- Main commit after PR #37 merge: `e8b410dab5029e69b1a41c8217c607f307fa8c30`.
+- Production AI Worker current version: v10, `5b4de884-e5bb-435c-8421-c7c9ebe9e166`, deployed 2026-10-20 19:08:42 UTC. Its deployed `ai-worker.js` matches `backend/ai-worker.js` on main exactly after normalizing line endings. Confirmed limits: 5 per network per UTC hour and 15 per network per UTC day. The immediately previous deployment was v9 (`3eb032df-18f8-45b9-9497-f39a4b459973`); historical version `b6678b0e-9ad0-46ba-8b1c-8718297127b4` is v7, not the immediately previous version.
+- Correction to the earlier report: v9 did **not** match current main; v9 was the four-per-hour version. The production quota smoke [run 39480673933](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39480673933) ran before v10 was deployed and therefore failed at request 5 (four 200s, then 429). It does not test the currently deployed v10.
+- Backend unit tests passed: 57 tests, 0 failures in [run 39478904188](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39478904188). The quota test contains no preliminary inference request: five successful requests then the sixth returns 429. The Durable Object concurrency test sends 20 requests and expects exactly 5 HTTP 200, 15 HTTP 429, and 5 inference calls.
+- Production website APK download verified: [run 39481620183](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39481620183). Homepage linked the published APK; AI and build API health returned HTTP 200; downloaded APK was 61,259 bytes and SHA-256 matched the published checksum (`d5c05e277fc2b6874bb7939a655534d88d3ad25cce8e8d7f20715c9e7692d79b`).
+- Production scenario acceptance is still running/waiting for a clean UTC quota window: [run 39481304323](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39481304323). It is designed to make exactly three production AI calls (simple, multi-screen, storage), build the resulting APKs, and run screenshots on API 21 and API 35. Do not send extra production generation requests while it is in progress.
+- Site build API acceptance is waiting for the three real production-AI source artifacts, then will submit the projects through the actual site API, download returned APKs, and run emulator checks: [run 39482364522](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39482364522).
+- No GitHub `CLOUDFLARE_API_TOKEN` secret is required for the current Cloudflare deployment; v10 is already deployed using the Cloudflare API/multipart upload path.
 
 ## Release checklist (11 acceptance criteria)
 
-- [ ] 1. Production site works without console/network errors — live UI smoke passed in run 39177122772; full browser console/network acceptance not yet certified.
-- [ ] 2. Required GitHub Actions are green with no cancelled/skipped required checks — quality/security, web validation, and A.S. AUTO CHECK AI passed on SHA `d89c1d5a`; native six-job matrix is still running on the same code revision.
-- [ ] 3. Real prompt → AI native Java/XML project → source validation — signed-OIDC deterministic native source fixture passed; real production-provider generation/compiler validation is not yet certified.
-- [ ] 4. APK builds and passes integrity checks — latest matrix has passed build/signature/checksum and local API round-trip for jobs that reached those steps; full six-job run pending.
-- [ ] 5. APK installs and launches on Android API 21 and API 35 — API 35 emulator launch/screenshot is running; complete six-job proof pending.
-- [ ] 6. Preview uses an actual screenshot from the running APK — screenshot step is running in the latest matrix; all screenshot artifacts must be verified before marking complete.
-- [ ] 7. User can download APK and source from the production site — local API APK round-trip has passed in CI; production website download is not yet verified.
-- [ ] 8. Production AI quotas verified with real requests — unit tests prove 4 successes then 429 and 20-way concurrency caps inference at 4; live production test is pending.
-- [ ] 9. Security audit of dependencies, secrets/history, input validation, rate limits, request size and CORS — static checks and 57 backend tests passed; full release security audit remains incomplete.
-- [ ] 10. PR #27 merged and production updated — PR #27 is merged; production AI Worker still lacks the `RATE_LIMITER` Durable Object binding, so production update is incomplete.
-- [ ] 11. Three production end-to-end scenarios (simple, multi-screen, persistent data) — not yet run against production.
+- [x] 1. Production site and service health endpoints — production website download check passed; AI Worker and build API health both returned HTTP 200. Full browser console/network acceptance still needs its dedicated evidence.
+- [ ] 2. Required checks green with no required failures/cancellations — main quality/security, web validation, AI auto-check and APK build runs passed; production acceptance is still running.
+- [ ] 3. Real prompt → production AI → validated native Java/XML project — three real production generations are pending in run 39481304323.
+- [ ] 4. APK builds and integrity checks — local Native E2E builds pass; production-generated APK build and checksum evidence pending.
+- [ ] 5. Production-generated APK installs and launches on API 21 and API 35 — local fixture matrix passed; production-generated APK emulator matrix pending.
+- [ ] 6. Preview uses a real screenshot from the running APK — native screenshot checks and local API round-trip passed, but production-site preview acceptance remains pending.
+- [ ] 7. User can download project APK/source from the production site — published constructor APK and checksum verified; the three project-specific APK downloads through the production site API are pending run 39482364522.
+- [ ] 8. Production quota verified with real requests — current v10 source has 5/hour and 15/day; unit tests verify five successes/sixth 429 and 20-way concurrency (5 successes). The live five/six acceptance run must be kept separate from the three-call production scenario test; the old live smoke failed before v10 deployment.
+- [ ] 9. Security audit — static quality/security checks and 57 backend tests passed; a complete release security audit remains incomplete.
+- [x] 10. Production Worker updated to main after PR #27 — current production v10 source exactly matches main; previous v9 and historical v7 rollback IDs are recorded above.
+- [ ] 11. Three production end-to-end scenarios (simple, multi-screen, persistent storage) — production generation/build/emulator acceptance is pending.
 
-**Release certification: 0/11 fully certified.** This is intentionally strict: partial CI successes do not count as complete production acceptance.
+**Strict release certification: 2/11 fully certified.** Items marked partial remain unchecked; do not claim release completion until production acceptance artifacts and remaining security/browser evidence are reviewed.
 
 ## Failure-log automation (2026-10-18)
 
