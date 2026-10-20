@@ -1,0 +1,300 @@
+name: Production site native APK acceptance
+
+on:
+  push:
+    branches: [fix/production-native-acceptance]
+    paths:
+      - ".github/workflows/site-native-build-acceptance.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: production-site-native-apk-acceptance
+  cancel-in-progress: false
+
+jobs:
+  build-through-production-site-api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      actions: read
+    env:
+      SITE_URL: https://as-app-builder.pages.dev
+      API_URL: https://as-app-builder-api.asoev-solehjon-official.workers.dev
+      SOURCE_RUN_ID: "39481304323"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Playwright and Chromium for the real Turnstile widget
+        run: |
+          npm install --no-save --no-package-lock playwright
+          npx playwright install --with-deps chromium
+      - name: Download the three production-AI source results from the completed acceptance job
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p production-site-acceptance
+          found=0
+          for attempt in $(seq 1 120); do
+            if gh run download "$SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY" --name production-native-apks-and-source --dir production-site-acceptance >/dev/null 2>&1; then
+              found=1
+              break
+            fi
+            echo "Production source artifact not ready yet (attempt $attempt/120)."
+            sleep 30
+          done
+          test "$found" = "1" || { echo "::error::Timed out waiting for production source artifact."; exit 1; }
+          test -s production-site-acceptance/responses/simple.json
+          test -s production-site-acceptance/responses/multi-screen.json
+          test -s production-site-acceptance/responses/storage.json
+          echo "Retrieved all three actual production AI responses."
+      - name: Submit each native project through the real website build API and download the returned APK
+        env:
+          SITE_URL: https://as-app-builder.pages.dev
+          API_URL: https://as-app-builder-api.asoev-solehjon-official.workers.dev
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p production-site-acceptance/site-apks
+          node <<'JS'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const crypto = require('node:crypto');
+          const { chromium } = require('playwright');
+          const site = process.env.SITE_URL;
+          const api = process.env.API_URL;
+          const root = 'production-site-acceptance';
+          const scenarios = ['simple', 'multi-screen', 'storage'];
+          const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+          async function getTurnstileToken() {
+            const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+            try {
+              const page = await browser.newPage();
+              await page.goto(site, { waitUntil: 'domcontentloaded', timeout: 60000 });
+              await page.locator('#checkBackend').click({ timeout: 15000 });
+              await page.waitForFunction(() => {
+                const el = document.querySelector('input[name="cf-turnstile-response"]');
+                return !!(el && el.value && el.value.length > 20);
+              }, { timeout: 90000 });
+              const token = await page.locator('input[name="cf-turnstile-response"]').first().inputValue();
+              if (!token || token.length < 20) throw new Error('Turnstile did not issue a token.');
+              return token;
+            } catch (error) {
+              try { await page?.screenshot({ path: '/tmp/turnstile-failure.png', fullPage: true }); } catch {}
+              throw error;
+            } finally {
+              await browser.close();
+            }
+          }
+
+          async function readFiles(scenario) {
+            const response = JSON.parse(fs.readFileSync(path.join(root, 'responses', scenario + '.json'), 'utf8'));
+            let text = response.text;
+            if (typeof text !== 'string' || !text.trim()) throw new Error('Production response has no source text: ' + scenario);
+            text = text.trim().replace(/^\s*`{3}(?:json)?\s*|\s*`{3}\s*$/gi, '');
+            const data = JSON.parse(text);
+            if (!Array.isArray(data.files) || data.files.length < 1) throw new Error('Missing source files for ' + scenario);
+            return data.files;
+          }
+
+          async function fetchJson(url, options = {}) {
+            const response = await fetch(url, options);
+            const raw = await response.text();
+            let data = {};
+            try { data = JSON.parse(raw); } catch {}
+            if (!response.ok) throw new Error(url + ' returned HTTP ' + response.status + ': ' + raw.slice(0, 1200));
+            return { response, data };
+          }
+
+          (async () => {
+            const results = [];
+            for (const scenario of scenarios) {
+              const files = await readFiles(scenario);
+              console.log('Requesting a fresh production Turnstile token for ' + scenario + '.');
+              const turnstileToken = await getTurnstileToken();
+              const started = await fetchJson(api + '/api/build', {
+                method: 'POST',
+                headers: { 'Origin': site, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({ type: 'native', files, turnstileToken })
+              });
+              const requestId = started.data.requestId;
+              const downloadToken = started.data.downloadToken;
+              if (!/^[a-f0-9]{32}$/.test(requestId || '') || !/^[a-f0-9]{64}$/.test(downloadToken || '')) {
+                throw new Error('Build API returned invalid request/download token for ' + scenario + ': ' + JSON.stringify(started.data));
+              }
+              console.log('Production build queued: ' + scenario + ', requestId=' + requestId);
+              const deadline = Date.now() + 25 * 60 * 1000;
+              let state;
+              while (Date.now() < deadline) {
+                await sleep(5000);
+                const status = await fetchJson(api + '/api/status?requestId=' + encodeURIComponent(requestId), {
+                  headers: { 'Origin': site, 'Accept': 'application/json', 'Authorization': 'Bearer ' + downloadToken }
+                });
+                state = status.data;
+                if (state.status === 'failed') throw new Error('Production build failed for ' + scenario + ': ' + JSON.stringify(state).slice(0, 2500));
+                if (state.status === 'success') break;
+                console.log('Build status ' + scenario + ': ' + (state.status || 'unknown'));
+              }
+              if (!state || state.status !== 'success' || !state.downloadUrl) throw new Error('Timed out waiting for production build: ' + scenario);
+              const downloaded = await fetchJson(new URL(state.downloadUrl, api).href, {
+                headers: { 'Origin': site, 'Authorization': 'Bearer ' + downloadToken }
+              }).catch(async error => { throw error; });
+              const bytes = Buffer.from(await downloaded.response.arrayBuffer());
+              const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
+              const advertised = downloaded.response.headers.get('x-apk-sha256') || state.sha256 || state.apkSha256 || '';
+              if (advertised && advertised.toLowerCase() !== sha256) throw new Error('APK SHA-256 mismatch for ' + scenario);
+              if (bytes.length < 10000 || bytes.readUInt32LE(0) !== 0x04034b50) throw new Error('Downloaded response is not a ZIP/APK: ' + scenario);
+              const filename = path.join(root, 'site-apks', scenario + '.apk');
+              fs.writeFileSync(filename, bytes);
+              const result = { scenario, requestId, status: state.status, bytes: bytes.length, sha256, advertisedSha256: advertised || null, downloadHttp: downloaded.response.status };
+              results.push(result);
+              console.log('SITE_APK_DOWNLOADED ' + JSON.stringify(result));
+            }
+            fs.writeFileSync(path.join(root, 'site-build-results.json'), JSON.stringify(results, null, 2));
+          })().catch(error => { console.error(error.stack || String(error)); process.exitCode = 1; });
+          JS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: production-site-native-apks
+          path: production-site-acceptance/
+          if-no-files-found: warn
+          retention-days: 14
+
+  site-apk-emulator-e2e:
+    needs: build-through-production-site-api
+    if: needs.build-through-production-site-api.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        api_level: [21, 35]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0 emulator"
+      - name: Install Android emulator image
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ matrix.api_level }}" == "21" ]]; then
+            sdkmanager --install "platforms;android-21" "system-images;android-21;default;x86"
+          else
+            sdkmanager --install "system-images;android-35;google_apis;x86_64"
+          fi
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: actions/download-artifact@v4
+        with:
+          name: production-site-native-apks
+          path: production-site-acceptance
+      - name: Install screenshot analysis dependencies
+        run: python3 -m pip install --user pillow numpy
+      - name: Install, launch, interact with, and screenshot APKs built by the production website API
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api_level }}
+          target: ${{ matrix.api_level == 21 && 'default' || 'google_apis' }}
+          arch: ${{ matrix.api_level == 21 && 'x86' || 'x86_64' }}
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            mkdir -p "production-site-acceptance/screenshots/api-${{ matrix.api_level }}" "production-site-acceptance/ui/api-${{ matrix.api_level }}"
+            for scenario in simple multi-screen storage; do
+              case "$scenario" in
+                simple) expected="Count: 0"; button="Add one"; secondary="Count: 1" ;;
+                multi-screen) expected="Home screen"; button="Open Settings"; secondary="Settings screen" ;;
+                storage) expected="Write a note"; button="Save note"; secondary="Saved locally" ;;
+              esac
+              apk="production-site-acceptance/site-apks/$scenario.apk"
+              test -s "$apk"
+              package="$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")"
+              test -n "$package"
+              adb install -r "$apk"
+              adb shell monkey -p "$package" 1
+              sleep 2
+              adb shell uiautomator dump /sdcard/site-ui.xml >/dev/null
+              xml="production-site-acceptance/ui/api-${{ matrix.api_level }}/$scenario-initial.xml"
+              adb shell cat /sdcard/site-ui.xml > "$xml"
+              grep -Eiq "$expected" "$xml"
+              if [[ "$scenario" == "storage" ]]; then
+                read -r tx ty < <(python3 - "$xml" <<'PY'
+            import re, sys
+            from pathlib import Path
+            xml=Path(sys.argv[1]).read_text(encoding="utf-8",errors="replace")
+            for node in re.findall(r"<node\b[^>]*>",xml):
+                cl=re.search(r'class="([^"]*)"',node)
+                hint=re.search(r'(?:text|content-desc)="([^"]*)"',node)
+                if (cl and "EditText" in cl.group(1)) or (hint and re.search("Write a note",hint.group(1),re.I)):
+                    b=re.search(r'bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]"',node)
+                    if b:
+                        x1,y1,x2,y2=map(int,b.groups()); print((x1+x2)//2,(y1+y2)//2); sys.exit(0)
+            sys.exit("Note input field not found")
+            PY
+                )
+                adb shell input tap "$tx" "$ty"
+                adb shell input text 'Native%stest'
+                adb shell input keyevent 4
+                sleep 1
+                adb shell uiautomator dump /sdcard/site-ui.xml >/dev/null
+                adb shell cat /sdcard/site-ui.xml > "$xml"
+              fi
+              read -r x y < <(python3 - "$xml" "$button" <<'PY'
+            import re, sys
+            from pathlib import Path
+            xml=Path(sys.argv[1]).read_text(encoding="utf-8",errors="replace")
+            wanted=sys.argv[2]
+            for node in re.findall(r"<node\b[^>]*>",xml):
+                m=re.search(r'text="([^"]*)"',node)
+                d=re.search(r'content-desc="([^"]*)"',node)
+                value=(m.group(1) if m else "")+" "+(d.group(1) if d else "")
+                if re.search(re.escape(wanted),value,re.I):
+                    b=re.search(r'bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]"',node)
+                    if b:
+                        x1,y1,x2,y2=map(int,b.groups()); print((x1+x2)//2,(y1+y2)//2); sys.exit(0)
+            sys.exit("UI control not found: "+wanted)
+            PY
+              )
+              adb shell input tap "$x" "$y"
+              sleep 2
+              adb shell uiautomator dump /sdcard/site-ui-after.xml >/dev/null
+              adb shell cat /sdcard/site-ui-after.xml > "production-site-acceptance/ui/api-${{ matrix.api_level }}/$scenario-after.xml"
+              grep -Eiq "$secondary" "production-site-acceptance/ui/api-${{ matrix.api_level }}/$scenario-after.xml"
+              adb exec-out screencap -p > "production-site-acceptance/screenshots/api-${{ matrix.api_level }}/$scenario.png"
+              python3 - "production-site-acceptance/screenshots/api-${{ matrix.api_level }}/$scenario.png" <<'PY'
+            import json, sys
+            import numpy as np
+            from PIL import Image
+            im=Image.open(sys.argv[1]).convert("RGB")
+            arr=np.asarray(im,dtype=np.uint8); lum=arr.mean(axis=2)
+            stats={"width":im.width,"height":im.height,"nonblack_ratio_luma_gt_10":round(float((lum>10).mean()),6),"luminance_stddev":round(float(lum.std()),4),"unique_rgb_colors":int(len(np.unique(arr.reshape(-1,3),axis=0)))}
+            stats["passed"]=stats["nonblack_ratio_luma_gt_10"]>=0.01 and stats["luminance_stddev"]>=5.0 and stats["unique_rgb_colors"]>=8
+            print(json.dumps(stats,sort_keys=True))
+            if not stats["passed"]: raise SystemExit("Blank or near-uniform screenshot.")
+            PY
+              echo "PRODUCTION_SITE_APK scenario=$scenario api=${{ matrix.api_level }} package=$package initial=$expected action=$button after=$secondary screenshot=passed"
+              adb shell am force-stop "$package"
+            done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: production-site-apk-e2e-api-${{ matrix.api_level }}
+          path: production-site-acceptance/
+          if-no-files-found: warn
+          retention-days: 14
