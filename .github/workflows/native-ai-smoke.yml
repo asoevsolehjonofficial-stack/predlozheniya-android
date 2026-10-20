@@ -11,7 +11,6 @@ on:
       - "backend/src/**"
       - "native-builder/**"
       - ".github/workflows/native-ai-smoke.yml"
-      - "PROGRESS.md"
   workflow_dispatch:
 
 permissions:
