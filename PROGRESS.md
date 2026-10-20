@@ -1,7 +1,7 @@
 # A.S. APP BUILDER — PROGRESS
 
 Last updated: 2026-10-21 (Tajikistan time)
-Latest app/Worker code baseline with green six-job Native E2E: `e8b410dab5029e69b1a41c8217c607f307fa8c30` (run 39480673843). Current main SHA `92c31f69aee838f5c3c1fa3b1563f2a451d6dfef` additionally changes only the Native E2E workflow trigger to avoid running/cancelling the matrix for progress-only edits; its matrix run 39483952203 was cancelled, so a green matrix on this exact workflow SHA is still needed.
+Latest app/Worker code baseline with green six-job Native E2E: `e8b410dab5029e69b1a41c8217c607f307fa8c30` (run 39480673843). Workflow-config SHA `92c31f69aee838f5c3c1fa3b1563f2a451d6dfef` changes only the Native E2E trigger to avoid running/cancelling the matrix for progress-only edits; its matrix run 39483952203 was cancelled, so a green matrix on that workflow SHA is still needed. Current main head `0422c03b9b137b46be751001207b3a5175f05350` is a progress-only follow-up.
 Active production-acceptance branch: `fix/production-native-acceptance`
 Canonical progress file: `main`
 
@@ -31,11 +31,11 @@ Canonical progress file: `main`
 - [x] 4. APK builds and integrity checks — all six fixture scenarios built APKs; package, signature/checksum and local API APK round-trip checks passed (runs 39480673843 and 39478893627).
 - [x] 5. APK installs and launches on Android API 21 and API 35 — all six fixture jobs passed on both API levels (run 39480673843).
 - [x] 6. Preview uses a real screenshot from a running APK — each fixture job captured 1080×1920 screenshots, checked package/focus/UI text and validated nonblank pixel content; local API screenshot round-trip passed.
-- [ ] 7. Production-site download of project-specific APKs and source — the published constructor APK and checksum are verified (run 39481620183); project-specific APK downloads through the production build API are pending run 39482793901.
+- [ ] 7. Production-site download of project-specific APKs and source — the published constructor APK and checksum are verified (run 39481620183); project-specific APK downloads through the production build API are pending run 39484129500.
 - [x] 8. Production quota — live v10 acceptance proves five HTTP 200 responses followed by HTTP 429 (run 39480673933, attempt 2); unit tests prove the 20-way atomic limit yields exactly 5 successes and 15 rate-limited responses.
 - [ ] 9. Complete release security audit — static protections and 57 backend tests passed, including OIDC fixture rejection and atomic quota tests; the full release audit remains incomplete.
 - [x] 10. Production Worker updated to main — active v10 matches `backend/ai-worker.js` on main; v9 and historical v7 rollback IDs are recorded above; no rollback was performed.
-- [ ] 11. Three real production scenarios (simple, multi-screen, persistent storage), resulting APKs, API 21/35 installation/screenshots, and production-site downloads — acceptance runs 39481304323 and 39482793901 are still in progress.
+- [ ] 11. Three real production scenarios (simple, multi-screen, persistent storage), resulting APKs, API 21/35 installation/screenshots, and production-site downloads — acceptance runs 39481304323 and 39484129500 are still in progress.
 
 **Strict release certification: 6/11 criteria currently supported by evidence.** Criteria 2, 3, 7, 9 and 11 remain release blockers. Fixture-based CI is not misrepresented as real production AI generation.
 
