@@ -277,12 +277,22 @@ jobs:
           arch: ${{ matrix.api_level == 21 && 'x86' || 'x86_64' }}
           profile: pixel_2
           disable-animations: true
+          ram-size: ${{ matrix.api_level == 35 && 4096 || 2048 }}
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           emulator-boot-timeout: 600
           cores: 2
-          heap-size: 2048
+          heap-size: ${{ matrix.api_level == 35 && 3072 || 2048 }}
           script: |
-            API_LEVEL=${{ matrix.api_level }} SCENARIO=${{ matrix.example }} bash scripts/native-e2e.sh
+            set +e
+            API_LEVEL=${{ matrix.api_level }} SCENARIO=${{ matrix.example }} bash scripts/native-e2e.sh 2>&1 | tee "$RUNNER_TEMP/native-e2e-attempt-1.log"
+            rc=${PIPESTATUS[0]}
+            if [[ "$rc" -ne 0 ]] && grep -Eiq 'Failure calling service .*Broken pipe|Broken pipe \(32\)|Emulator process .*killed|Emulator boot did not complete|adb.*device offline' "$RUNNER_TEMP/native-e2e-attempt-1.log"; then
+              echo "EXPLICIT_EMULATOR_FAILURE_RETRY reason=matched emulator/ADB service failure; retry=1/1; rerunning the entire native-e2e.sh scenario, not individual assertions."
+              rm -rf "$RUNNER_TEMP/native-e2e-diagnostics" "$RUNNER_TEMP/native-e2e.png" "$RUNNER_TEMP/native-e2e.png.tmp"
+              API_LEVEL=${{ matrix.api_level }} SCENARIO=${{ matrix.example }} bash scripts/native-e2e.sh 2>&1 | tee "$RUNNER_TEMP/native-e2e-attempt-2.log"
+              exit ${PIPESTATUS[0]}
+            fi
+            exit "$rc"
       - name: Upload emulator screenshot to local API and download it back
         shell: bash
         run: |

@@ -71,6 +71,21 @@ done
 bounded 8 adb shell settings put global window_animation_scale 0
 bounded 8 adb shell settings put global transition_animation_scale 0
 bounded 8 adb shell settings put global animator_duration_scale 0
+echo "Animations disabled; returning to HOME before launching test app."
+bounded 15 adb shell input keyevent KEYCODE_HOME
+LAUNCHER_SETTLED=0
+for attempt in $(seq 1 8); do
+  sleep 2
+  if bounded 8 adb shell dumpsys window windows > "$DIAG/launcher-settle.txt" 2>&1 &&
+     grep -Eiq 'mCurrentFocus|mFocusedApp|FocusedWindow' "$DIAG/launcher-settle.txt" &&
+     grep -Eiq 'com\\.google\\.android\\.apps\\.nexuslauncher|com\\.android\\.launcher|com\\.android\\.systemui' "$DIAG/launcher-settle.txt"; then
+    LAUNCHER_SETTLED=1
+    echo "Launcher settled after HOME (probe $attempt/8)."
+    break
+  fi
+  echo "Launcher settling probe $attempt/8; waiting."
+done
+[[ "$LAUNCHER_SETTLED" -eq 1 ]] || echo "::warning::Launcher focus not conclusively observed; continuing with strict app focus/text gates."
 echo "Installing generated APK on API $API_LEVEL."
 INSTALL_OK=0
 for attempt in 1 2 3; do
@@ -83,8 +98,66 @@ echo "Launching generated app."
 bounded 45 adb shell am start -W -n "$PACKAGE_NAME/tj.as.generated.MainActivity"
 sleep 2
 
+# Inspect ANR dialogs without ever dismissing the tested app's own dialog.
+handle_anr_dialog() {
+  local label="$1" remote="/data/local/tmp/native-e2e-anr-$1.xml"
+  if ! bounded 10 adb shell uiautomator dump --compressed "$remote" > "$DIAG/anr-dump-$label.txt" 2>&1; then
+    echo "ANR_DIALOG_CHECK label=$label dump=unavailable"
+    return 0
+  fi
+  if ! bounded 8 adb shell cat "$remote" > "$DIAG/anr-window-$label.xml" 2>&1; then
+    echo "ANR_DIALOG_CHECK label=$label read=unavailable"
+    return 0
+  fi
+  local xml="$DIAG/anr-window-$label.xml"
+  if ! grep -Eiq "isn.t responding|is not responding" "$xml"; then return 0; fi
+  local owner
+  owner="$(python3 - "$xml" <<'PY'
+import re, sys
+s=open(sys.argv[1], encoding="utf-8", errors="replace").read()
+m=re.search(r'<node[^>]*package="([^"]+)"[^>]*text="[^"]*(?:isn.t responding|is not responding)', s, re.I)
+if not m:
+    m=re.search(r'<node[^>]*text="[^"]*(?:isn.t responding|is not responding)[^"]*"[^>]*package="([^"]+)"', s, re.I)
+print(m.group(1) if m else "")
+PY
+)"
+  echo "ANR_DIALOG_DETECTED label=$label owner=${owner:-unknown}"
+  if [[ "$owner" == "$PACKAGE_NAME" ]]; then
+    echo "::error::Generated app ANR dialog detected for $PACKAGE_NAME; failing without dismissing it."
+    return 2
+  fi
+  case "$owner" in
+    com.google.android.apps.nexuslauncher|com.android.systemui|com.android.launcher*|com.google.android.launcher*|com.android.*launcher*|com.google.android.*systemui*)
+      local bounds
+      bounds="$(python3 - "$xml" <<'PY'
+import re, sys
+s=open(sys.argv[1], encoding="utf-8", errors="replace").read()
+for node in re.findall(r'<node\\b[^>]*>', s):
+    if re.search(r'text="\\s*Wait\\s*"', node, re.I) or re.search(r'content-desc="\\s*Wait\\s*"', node, re.I):
+        m=re.search(r'bounds="\\[([0-9]+),([0-9]+)\\]\\[([0-9]+),([0-9]+)\\]"', node)
+        if m:
+            x1,y1,x2,y2=map(int,m.groups()); print((x1+x2)//2,(y1+y2)//2); break
+PY
+)"
+      if [[ -z "$bounds" ]]; then
+        echo "::error::System-owned ANR dialog detected but Wait button bounds were not found; refusing to close dialog."
+        return 1
+      fi
+      echo "SYSTEM_ANR_WAIT owner=$owner bounds=$bounds"
+      bounded 8 adb shell input tap $bounds
+      sleep 3
+      return 0
+      ;;
+    *)
+      echo "::error::ANR dialog detected with non-system/unknown owner '${owner:-unknown}'; leaving it untouched and failing."
+      return 1
+      ;;
+  esac
+}
+
 focus_check() {
   local attempt="$1" out="$DIAG/focus-attempt-$1.txt"
+  handle_anr_dialog "$attempt" || return $?
   if bounded 8 adb shell dumpsys window windows > "$out" 2>&1; then
     if grep -E "mCurrentFocus|mFocusedApp|FocusedWindow|focusedWindow" "$out" | grep -F "$PACKAGE_NAME" >/dev/null; then
       echo "attempt=$attempt focus=confirmed_by_dumpsys" | tee -a "$DIAG/focus.txt"; return 0
@@ -99,6 +172,7 @@ focus_check() {
 
 ui_text_check() {
   local attempt="$1" xml="/data/local/tmp/native-e2e-screen-$1.xml"
+  handle_anr_dialog "screen-$attempt" || return $?
   if ! bounded 10 adb shell uiautomator dump --compressed "$xml" > "$DIAG/uiautomator-screen-$attempt.txt" 2>&1; then
     echo "attempt=$attempt uiautomator_dump=failed" | tee -a "$DIAG/focus.txt"; return 1
   fi

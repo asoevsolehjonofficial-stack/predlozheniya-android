@@ -494,3 +494,15 @@ Latest native E2E run: https://github.com/asoevsolehjonofficial-stack/predlozhen
 - The fixture Worker health poll already waits up to 80 seconds and OIDC-token acquisition already retries three times. The protected endpoint POST had no retry. Workflow updated to retry transient HTTP 500/502/503/504 up to three attempts with two-second pauses, print the Worker log if all attempts fail, and continue requiring HTTP 200 plus existing provider/mode assertions. OIDC and endpoint protections remain enabled; no production limits or checks were weakened.
 - The other five jobs passed source request, APK package/signature/checksum checks, authenticated local APK round-trip, emulator launch, screenshot capture and screenshot round-trip.
 - Screenshot text and API 35 boot timing still require reading artifacts/logs from the corrected full-matrix run. PR #34 remains unmerged until the entire matrix is green and remaining release gates are verified.
+
+
+## Native E2E system-dialog and API 35 resource update — 2026-10-20
+
+- Baseline retained: production AI Worker v9 quota evidence from [39203447404](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39203447404): four HTTP 200 generations followed by HTTP 429 on request five. PR #27 is merged.
+- Previous full matrix [39297707648](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39297707648) reported 5/6. The recorded failure was `simple/API 35`; inspect its job log for the exact failure before assigning a more specific cause. The earlier documented API 35 boot time after KVM was approximately 37 seconds versus the 912-second historical baseline.
+- Updated emulator setup to request 4096 MB RAM and a 3072 MB heap for API 35, retaining 2048 MB RAM/heap for API 21 and retaining animation-disable configuration.
+- Before app launch the script now disables all three animation scales, sends HOME, and polls for launcher/System UI focus to settle.
+- Added UIAutomator inspection for “isn't responding” dialogs. It only taps **Wait** for recognized system launcher/System UI owners; an ANR owned by the generated app is a hard failure, and unknown owners are left untouched. Existing screenshot pixel, app-focus, expected-screen-text, APK signature/checksum, authenticated download, crash and process gates are retained.
+- Full six-job validation must complete on the new commit before merge or production tests. Do not infer success from commit creation alone.
+
+- Retry policy: the emulator action wrapper permits one full rerun of `scripts/native-e2e.sh` only when the first run log contains an explicit emulator/ADB service failure signature (for example, a system service broken pipe, emulator process death, boot timeout, or offline device). The retry is logged with its reason; ordinary assertion, app ANR, expected-text, pixel-content, APK integrity, and authorization failures do not trigger retry.
