@@ -54,8 +54,8 @@ jobs:
             -o "$RUNNER_TEMP/ai-response-6.json" -w '%{http_code}')
           if [[ "$code" != "429" ]]; then
             echo "::error::Production generation 6 returned HTTP $code (expected 429)."
-            cat "$RUNNER_TEMP/ai-response-5.json" | jq -c '{error,ok}' 2>/dev/null || true
+            cat "$RUNNER_TEMP/ai-response-6.json" | jq -c '{error,ok}' 2>/dev/null || true
             exit 1
           fi
-          jq -e '(.error | type == "string" and length > 0)' "$RUNNER_TEMP/ai-response-5.json" >/dev/null
+          jq -e '(.error | type == "string" and length > 0)' "$RUNNER_TEMP/ai-response-6.json" >/dev/null
           echo "Production quota smoke passed: 5 HTTP 200 responses, then HTTP 429."
