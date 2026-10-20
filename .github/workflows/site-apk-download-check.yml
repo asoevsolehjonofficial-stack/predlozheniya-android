@@ -27,6 +27,14 @@ jobs:
           curl --fail --silent --show-error --location --max-time 30 "$SITE/" -o "$RUNNER_TEMP/site.html"
           grep -F "$APK_URL" "$RUNNER_TEMP/site.html" >/dev/null
           echo "Website homepage links to the published APK."
+          AI_URL="https://as-app-builder-ai.asoev-solehjon-official.workers.dev"
+          AI_CODE="$(curl --silent --show-error --max-time 20 -o "$RUNNER_TEMP/ai-health.json" -w '%{http_code}' "$AI_URL/api/health")"
+          echo "Production AI Worker health HTTP $AI_CODE."
+          if [[ "$AI_CODE" == "200" ]]; then jq -e '.ok == true' "$RUNNER_TEMP/ai-health.json" >/dev/null; else cat "$RUNNER_TEMP/ai-health.json"; exit 1; fi
+          API_URL="https://as-app-builder-api.asoev-solehjon-official.workers.dev"
+          API_CODE="$(curl --silent --show-error --max-time 20 -o "$RUNNER_TEMP/api-health.json" -w '%{http_code}' "$API_URL/api/health")"
+          echo "Production build API health HTTP $API_CODE."
+          if [[ "$API_CODE" == "200" ]]; then jq -e '.ok == true' "$RUNNER_TEMP/api-health.json" >/dev/null; else cat "$RUNNER_TEMP/api-health.json"; echo "::warning::Project-specific secure build API is not healthy; homepage constructor APK download is tested separately."; fi
           curl --fail --silent --show-error --location --max-time 60 "$APK_URL" -o "$RUNNER_TEMP/app-debug.apk"
           curl --fail --silent --show-error --location --max-time 30 "$APK_URL.sha256" -o "$RUNNER_TEMP/app-debug.apk.sha256"
           expected="$(awk 'NR==1 {print $1}' "$RUNNER_TEMP/app-debug.apk.sha256")"
