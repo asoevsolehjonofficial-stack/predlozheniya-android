@@ -1,0 +1,215 @@
+name: Production native AI acceptance
+
+on:
+  push:
+    branches: [ops/production-native-acceptance]
+    paths: [".github/workflows/production-native-acceptance.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-native-acceptance
+  cancel-in-progress: false
+
+jobs:
+  generate-production-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify production AI Worker health
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_URL="https://as-app-builder-ai.asoev-solehjon-official.workers.dev"
+          CODE="$(curl --silent --show-error --max-time 20 -o "$RUNNER_TEMP/health.json" -w '%{http_code}' "$BASE_URL/api/health")"
+          test "$CODE" = "200" || { echo "::error::Production AI health returned HTTP $CODE"; exit 1; }
+          jq -e '.ok == true and .service == "A.S. APP BUILDER AI"' "$RUNNER_TEMP/health.json" >/dev/null
+          echo "Production AI health: HTTP 200."
+      - name: Wait for a fresh hourly quota window
+        shell: bash
+        run: |
+          set -euo pipefail
+          NOW="$(date -u +%s)"
+          TARGET="$(( (NOW / 3600 + 1) * 3600 + 5 ))"
+          WAIT="$(( TARGET - NOW ))"
+          echo "Waiting ${WAIT}s for the next UTC hour plus 5s before any inference."
+          sleep "$WAIT"
+          echo "Fresh UTC hour started at $(date -u +%FT%TZ)."
+      - name: Generate exactly three real production native projects
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p generated
+          BASE_URL="https://as-app-builder-ai.asoev-solehjon-official.workers.dev"
+          for SCENARIO in simple multi-screen storage; do
+            case "$SCENARIO" in
+              simple) PROMPT='Create a native Android counter app. Show exact text "Count: 0" and button "Add one"; tapping increments the count. Center the UI. Android SDK widgets only, no network, no WebView.' ;;
+              multi-screen) PROMPT='Create a native Android app with Home and Settings screens. Home visibly shows exact text "Home screen" and button "Open Settings"; tapping navigates to a Settings screen with "Settings screen" and a "Back Home" button. Android SDK widgets only, no network, no WebView.' ;;
+              storage) PROMPT='Create a native Android notes app with persistent local SharedPreferences storage. Initial screen visibly shows EditText hint "Write a note", button "SAVE NOTE", and status "Saved locally". Saved note survives app restart. Android SDK widgets only, no network, no WebView.' ;;
+            esac
+            CODE="$(curl --silent --show-error --max-time 90 -o "$RUNNER_TEMP/response-$SCENARIO.json" -w '%{http_code}' \
+              -X POST "$BASE_URL/api/ai/native-generate" \
+              -H "Origin: https://as-app-builder.pages.dev" -H "Content-Type: application/json" \
+              --data "$(jq -n --arg prompt "$PROMPT" '{prompt:$prompt}')")"
+            test "$CODE" = "200" || { echo "::error::Real production generation $SCENARIO returned HTTP $CODE"; jq -c '{error,provider,mode}' "$RUNNER_TEMP/response-$SCENARIO.json" || true; exit 1; }
+            python3 - "$RUNNER_TEMP/response-$SCENARIO.json" "generated/$SCENARIO.json" "$SCENARIO" <<'PY'
+          import json, re, sys
+          from pathlib import Path
+          response_path, output_path, scenario = sys.argv[1:]
+          response = json.loads(Path(response_path).read_text())
+          if response.get("mode") != "native-android-source": raise SystemExit("Worker did not return native-android-source mode.")
+          if not isinstance(response.get("provider"), str) or not response["provider"]: raise SystemExit("Provider metadata missing.")
+          text = response.get("text")
+          if not isinstance(text, str) or not text.strip(): raise SystemExit("Production AI returned no source.")
+          text = re.sub(r"^\s*`{3}(?:json)?\s*|\s*`{3}\s*$", "", text.strip(), flags=re.I)
+          data = json.loads(text)
+          files = data.get("files")
+          if not isinstance(files, list) or not 1 <= len(files) <= 12: raise SystemExit("Invalid source file list.")
+          seen, total, main_found = set(), 0, False
+          for item in files:
+              if not isinstance(item, dict) or not isinstance(item.get("path"), str) or not isinstance(item.get("content"), str): raise SystemExit("Malformed source file.")
+              rel, source = item["path"], item["content"]
+              if not re.fullmatch(r"app/src/main/(?:java/tj/as/generated/[A-Za-z0-9_$]+\.java|res/values/[A-Za-z0-9_.-]+\.xml)", rel) or ".." in rel: raise SystemExit("Disallowed source path: " + rel)
+              if rel in seen: raise SystemExit("Duplicate source path.")
+              seen.add(rel); size = len(source.encode()); total += size
+              if size > 60000 or total > 500 * 1024: raise SystemExit("Source size limit exceeded.")
+              if rel.endswith(".java"):
+                  if re.search(r"java\.lang\.Runtime|ProcessBuilder|DexClassLoader|PathClassLoader|Class\.forName|System\.loadLibrary|WebView|java\.net\.(?:Socket|URL|URLConnection)", source): raise SystemExit("Restricted API found.")
+                  if rel == "app/src/main/java/tj/as/generated/MainActivity.java":
+                      if not re.search(r"package\s+tj\.as\.generated\s*;", source) or not re.search(r"class\s+MainActivity\s+extends\s+Activity\b", source): raise SystemExit("Invalid MainActivity.")
+                      main_found = True
+              elif re.search(r"<!DOCTYPE|<!ENTITY", source, re.I): raise SystemExit("XML document types are forbidden.")
+          if not main_found: raise SystemExit("Missing MainActivity.java.")
+          Path(output_path).write_text(json.dumps({"scenario":scenario,"provider":response["provider"],"model":response.get("model"),"files":files}, separators=(",",":")))
+          print(f"Production source validated: scenario={scenario}, provider={response['provider']}, files={len(files)}, bytes={total}.")
+          PY
+            echo "Production native request $SCENARIO: HTTP 200; source validated."
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: production-native-source
+          path: generated/*.json
+          if-no-files-found: error
+          retention-days: 14
+
+  build-and-emulator-test:
+    needs: generate-production-source
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      PACKAGE_NAME: tj.as.generated.p_native_${{ matrix.example == 'multi-screen' && 'multi_screen' || matrix.example }}_api${{ matrix.api_level }}
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        example: [simple, multi-screen, storage]
+        api_level: [21, 35]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: production-native-source
+          path: generated
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0"
+      - name: Install Android emulator image
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ matrix.api_level }}" == "21" ]]; then PLATFORM="platforms;android-21"; IMAGE="system-images;android-21;default;x86"; else PLATFORM="platforms;android-35"; IMAGE="system-images;android-35;google_apis;x86_64"; fi
+          for attempt in 1 2 3; do
+            if sdkmanager --install "$PLATFORM" "$IMAGE"; then exit 0; fi
+            echo "SDK install attempt $attempt failed; retrying."; sleep $((attempt * 5))
+          done
+          echo "::error::Android SDK image install failed after 3 attempts."; exit 1
+      - name: Install validated real production AI source
+        env:
+          EXAMPLE: ${{ matrix.example }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$EXAMPLE" <<'PY'
+          import json, os, re, shutil
+          from pathlib import Path
+          scenario = os.environ["EXAMPLE"]
+          data = json.loads(Path("generated", scenario + ".json").read_text())
+          if data.get("scenario") != scenario or not isinstance(data.get("files"), list): raise SystemExit("Scenario/source artifact mismatch.")
+          root = Path("native-builder/app/src/main")
+          for stale in (root / "java/tj/as/generated", root / "java/tj/as/nativebuilder/notes"):
+              if stale.exists(): shutil.rmtree(stale)
+          main_found = False
+          for item in data["files"]:
+              rel, source = item["path"], item["content"]
+              if not re.fullmatch(r"app/src/main/(?:java/tj/as/generated/[A-Za-z0-9_$]+\.java|res/values/[A-Za-z0-9_.-]+\.xml)", rel) or ".." in rel: raise SystemExit("Disallowed source path: " + rel)
+              dest = root / rel.removeprefix("app/src/main/")
+              dest.parent.mkdir(parents=True, exist_ok=True); dest.write_text(source)
+              if rel == "app/src/main/java/tj/as/generated/MainActivity.java": main_found = True
+          if not main_found: raise SystemExit("Missing MainActivity.java.")
+          PY
+          APP_SLUG="${{ matrix.example == 'multi-screen' && 'multi_screen' || matrix.example }}"
+          sed -i "s/namespace 'tj.as.nativebuilder.notes'/namespace 'tj.as.generated'/" native-builder/app/build.gradle
+          sed -i "s/applicationId 'tj.as.nativebuilder.notes'/applicationId 'tj.as.generated.p_native_${APP_SLUG}_api${{ matrix.api_level }}'/" native-builder/app/build.gradle
+          sed -i "s/android:label=\"A.S. Notes Native\"/android:label=\"Production ${{ matrix.example }} API ${{ matrix.api_level }}\"/" native-builder/app/src/main/AndroidManifest.xml
+      - name: Build APK
+        run: gradle --no-daemon -p native-builder clean assembleDebug
+      - name: Verify APK package, signature and SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="native-builder/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"; unzip -t "$APK" >/dev/null
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -q "package: name='$PACKAGE_NAME'"
+          sha256sum "$APK" | tee "$RUNNER_TEMP/apk-sha256.txt"
+      - name: Install screenshot pixel-analysis dependency
+        run: python3 -m pip install --user Pillow numpy
+      - name: Enable KVM
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all
+          sudo udevadm control --reload-rules; sudo udevadm trigger --name-match=kvm; sudo chmod 0666 /dev/kvm
+          test -r /dev/kvm && test -w /dev/kvm
+      - name: Install, launch and capture production APK screenshot
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api_level }}
+          target: ${{ matrix.api_level == 35 && 'google_apis' || 'default' }}
+          arch: ${{ matrix.api_level == 21 && 'x86' || 'x86_64' }}
+          profile: pixel_2
+          disable-animations: true
+          ram-size: ${{ matrix.api_level == 35 && 4096 || 2048 }}
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          emulator-boot-timeout: 600
+          cores: 2
+          heap-size: ${{ matrix.api_level == 35 && 3072 || 2048 }}
+          script: API_LEVEL=${{ matrix.api_level }} SCENARIO=${{ matrix.example }} bash scripts/run-native-e2e.sh
+      - name: Upload production AI APK and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-native-${{ matrix.example }}-api-${{ matrix.api_level }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            native-builder/app/build/outputs/apk/debug/app-debug.apk
+            native-builder/app/src/main/java/tj/as/generated/
+            generated/${{ matrix.example }}.json
+            ${{ runner.temp }}/native-e2e.png
+            ${{ runner.temp }}/native-e2e-diagnostics/
+            ${{ runner.temp }}/apk-sha256.txt
