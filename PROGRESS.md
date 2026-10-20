@@ -1,27 +1,30 @@
 # A.S. APP BUILDER — PROGRESS
 
-Last updated: 2026-10-21 (Tajikistan time)
-Active production-acceptance branch: `fix/production-native-acceptance`
-Canonical progress file: `main`
-
-## Current verified state
-
-- PR #34 merged: https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/pull/34
-- PR #37 merged only after its six-job Native E2E matrix completed green: https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/pull/37
-- Native E2E matrix: [run 39478893627](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39478893627), all six scenarios succeeded (simple, multi-screen, storage on API 21 and API 35). Each reports expected UI text, screenshot pixel validation `passed: true`, and `diagnostics collected; exit=0`.
-- Main commit after PR #37 merge: `e8b410dab5029e69b1a41c8217c607f307fa8c30`.
-- Production AI Worker current version: v10, `5b4de884-e5bb-435c-8421-c7c9ebe9e166`, deployed 2026-10-20 19:08:42 UTC. Its deployed `ai-worker.js` matches `backend/ai-worker.js` on main exactly after normalizing line endings. Confirmed limits: 5 per network per UTC hour and 15 per network per UTC day. The immediately previous deployment was v9 (`3eb032df-18f8-45b9-9497-f39a4b459973`); historical version `b6678b0e-9ad0-46ba-8b1c-8718297127b4` is v7, not the immediately previous version.
-- Correction to the earlier report: v9 did **not** match current main; v9 was the four-per-hour version. The production quota smoke [run 39480673933](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39480673933) ran before v10 was deployed and therefore failed at request 5 (four 200s, then 429). It does not test the currently deployed v10.
-- Backend unit tests passed: 57 tests, 0 failures in [run 39478904188](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39478904188). The quota test contains no preliminary inference request: five successful requests then the sixth returns 429. The Durable Object concurrency test sends 20 requests and expects exactly 5 HTTP 200, 15 HTTP 429, and 5 inference calls.
-- Production website APK download verified: [run 39481620183](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39481620183). Homepage linked the published APK; AI and build API health returned HTTP 200; downloaded APK was 61,259 bytes and SHA-256 matched the published checksum (`d5c05e277fc2b6874bb7939a655534d88d3ad25cce8e8d7f20715c9e7692d79b`).
-- Production scenario acceptance is still running/waiting for a clean UTC quota window: [run 39481304323](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39481304323). It is designed to make exactly three production AI calls (simple, multi-screen, storage), build the resulting APKs, and run screenshots on API 21 and API 35. Do not send extra production generation requests while it is in progress.
-- Site build API acceptance is waiting for the three real production-AI source artifacts, then will submit the projects through the actual site API, download returned APKs, and run emulator checks: [run 39482364522](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39482364522).
-- No GitHub `CLOUDFLARE_API_TOKEN` secret is required for the current Cloudflare deployment; v10 is already deployed using the Cloudflare API/multipart upload path.
+Last updated: 2026-10-21
+Active engineering branch: `main` (current SHA `e8b410dab5029e69b1a41c8217c607f307fa8c30`)
+Canonical progress branch: `main`
+PR #27: MERGED — https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/pull/27
+PR #34: MERGED — https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/pull/34
+PR #37: MERGED — https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/pull/37
+Latest full six-job Native E2E on main: https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39480673843
+Production quota acceptance after Worker v10 deployment: https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39480673933 (run attempt 2)
 
 ## Release checklist (11 acceptance criteria)
 
-- [ ] 1. Production site works without console/network errors — website download and service-health checks passed, but full browser console/network acceptance still needs dedicated evidence.
-- [ ] 2. Required checks green with no required failures/cancellations — main quality/security, web validation, AI auto-check and APK build runs passed; production acceptance is still running.
+- [x] 1. Production site UI smoke — run 39480673843 passed: site assets HTTP 200, title/brand/prompt input/controls present, no uncaught browser JavaScript errors (9 checks passed, 0 failed). Backend health is tracked separately.
+- [x] 2. Required code and native E2E checks — quality/security, web validation, AUTO CHECK AI, and the six-job Native E2E run passed on main SHA `e8b410dab5029e69b1a41c8217c607f307fa8c30`. The optional API redeploy workflow failed only because `CLOUDFLARE_API_TOKEN` is unset; it is not required for the direct Cloudflare upload path.
+- [ ] 3. Real production prompt → AI-generated native Java/XML source → validation — the six-job run uses a protected deterministic fixture; real production-provider native generation has not yet been validated end-to-end.
+- [x] 4. APK builds and integrity checks — all six fixture scenarios built APKs; package ID, APK structure, signature and SHA-256 checks passed. The local API APK upload/download round-trip matched byte-for-byte.
+- [x] 5. APK installation and launch on Android API 21 and API 35 — all six fixture jobs passed on both API levels.
+- [x] 6. Preview is an actual screenshot from the running APK — all six fixture jobs captured 1080×1920 screenshots; app package/focus and expected UI text checks passed, pixel-content checks passed, and screenshots round-tripped through the local API.
+- [ ] 7. Production website download of a generated project APK and source — only the local CI API download round-trip is proven; production-site Turnstile/build/download flow has not been completed.
+- [x] 8. Production AI quota — after Worker v10 deployment, run 39480673933 attempt 2 returned health HTTP 200, five consecutive generation requests HTTP 200, and request 6 HTTP 429. Backend tests also verify 20 concurrent requests yield exactly 5 successes, 15 HTTP 429 responses, and 5 inference calls.
+- [ ] 9. Full release security audit — source protections and 57 backend tests passed, including OIDC/fixture rejection and atomic quota tests; the complete release security audit is still outstanding.
+- [x] 10. Production AI Worker updated — PR #27 and quota fix PR #37 are merged; production Worker version `5b4de884-e5bb-435c-8421-c7c9ebe9e166` (v10) is active with `RATE_LIMITER` Durable Object binding. Version v9 was replaced after comparison showed it still enforced 4/hour. Rollback record for v9 and historical v7 is retained; no rollback was performed.
+- [ ] 11. Three real production scenarios (simple, multi-screen, persistent storage), resulting APKs, API 21/35 installs/screenshots, and production-site downloads — not yet certified.
+
+**Release certification: 7/11 criteria currently supported by evidence.** Criteria 3, 7, 9 and 11 remain release blockers. Fixture-based CI is not misrepresented as real production AI generation.
+
 - [ ] 3. Real prompt → production AI → validated native Java/XML project — three real production generations are pending in run 39481304323.
 - [ ] 4. APK builds and integrity checks — local Native E2E builds pass; production-generated APK build and checksum evidence pending.
 - [ ] 5. Production-generated APK installs and launches on API 21 and API 35 — local fixture matrix passed; production-generated APK emulator matrix pending.
@@ -532,3 +535,21 @@ Canonical progress file: `main`
 - Added `scripts/run-native-e2e.sh` with Bash shebang and strict mode. It redirects each attempt to a log, captures the direct command exit status, then prints the log; no pipeline or `PIPESTATUS` is used. Exactly one full retry is permitted only when the first log matches explicit emulator/ADB failure signatures, and it records `EXPLICIT_EMULATOR_FAILURE_RETRY`. The final exit status is the native script's status from the final attempt.
 - In the emulator action, the script input is now a single invocation line. The matrix variable is `matrix.example` (not `matrix.scenario`), as defined in the workflow matrix. Application text, focus, ANR, screenshot and pixel assertions in `scripts/native-e2e.sh` are unchanged.
 - New full six-job Native E2E validation is required before PR #34 can be merged; no production scenarios are claimed by this fix.
+
+
+## Production quota and main Native E2E evidence — 2026-10-21
+
+- Main merge commit: `e8b410dab5029e69b1a41c8217c607f307fa8c30`. PR #37 merged at 2026-10-20T19:06:58Z after its six-job Native E2E run succeeded on exact PR head `df226cb75ddbc331b06aaf1ac1c07805d10940d9`; main run [39480673843](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39480673843) then passed all six jobs.
+- Production Worker v10 was uploaded/deployed directly through Cloudflare multipart API at 2026-10-20T19:08:42Z; active version `5b4de884-e5bb-435c-8421-c7c9ebe9e166`, 100% traffic. Settings readback confirms `RATE_LIMITER` → `RateLimitCoordinator` namespace `644e424020ca4763bbd23c73aa954c4a`, plus existing AI, KV, and SITE_ORIGIN bindings. v9 `3eb032df-18f8-45b9-9497-f39a4b459973` was the old four-per-hour version. Historical v7 `b6678b0e-9ad0-46ba-8b1c-8718297127b4` remains available as the user-requested historical rollback reference; it lacks the Durable Object binding and must not be used as a blind rollback.
+- Production quota run [39480673933](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39480673933) attempt 1 ran before v10 was deployed and correctly exposed the old behavior: requests 1–4 were HTTP 200, request 5 was HTTP 429. Attempt 2 ran after v10 deployment and passed: health HTTP 200, requests 1–5 HTTP 200, request 6 HTTP 429.
+- Quota test inspection: `backend/test/ai-worker.test.js` first makes request 1, then four further successful calls, then the sixth call expects 429; it does not spend an extra hidden inference before the loop. The 20-way Durable Object test expects exactly 5 HTTP 200, 15 HTTP 429 and `inferenceCalls === 5`. Production code limits are 5/hour and 15/day per source network; global daily caps remain 100 web and 30 native generations.
+- Main Native E2E run [39480673843](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39480673843) passed all six jobs. Evidence from job logs:
+  - simple/API 21: `Count: 0`, `Add one`; nonblack ratio 0.935785, luminance stddev 61.5396, 385 unique RGB colors; `passed: true`; wrapper exit 0.
+  - simple/API 35: `Count: 0`, `ADD ONE`; nonblack ratio 1.0, stddev 11.9348, 287 unique colors; `passed: true`; wrapper exit 0.
+  - multi-screen/API 21: `Home screen`, `Open Settings`; nonblack ratio 0.935785, stddev 61.7902, 402 unique colors; `passed: true`; wrapper exit 0.
+  - multi-screen/API 35: `Home screen`, `OPEN SETTINGS`; nonblack ratio 1.0, stddev 13.5293, 300 unique colors; `passed: true`; wrapper exit 0.
+  - storage/API 21: `Write a note`, `Save note`, `Saved locally`; nonblack ratio 0.935785, stddev 61.7686, 583 unique colors; `passed: true`; wrapper exit 0.
+  - storage/API 35: `Write a note`, `SAVE NOTE`, `Saved locally`; nonblack ratio 1.0, stddev 13.7283, 310 unique colors; `passed: true`; wrapper exit 0.
+- Artifacts from main run: [simple API 21](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39480673843/artifacts/12290528247), [simple API 35](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39480673843/artifacts/12290494811), [multi-screen API 21](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39480673843/artifacts/12290714263), [multi-screen API 35](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39480673843/artifacts/12291682031), [storage API 21](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39480673843/artifacts/12291906724), [storage API 35](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39480673843/artifacts/12292046021).
+- The optional GitHub deploy workflow [39480673895](https://github.com/asoevsolehjonofficial-stack/predlozheniya-android/actions/runs/39480673895) failed because the optional repository secret `CLOUDFLARE_API_TOKEN` is empty. This did not prevent the direct Cloudflare multipart deployment of the AI Worker. It does mean the separate production build API Worker was not redeployed by that workflow; do not claim its code was updated.
+- The production quota smoke was intentionally rerun only after checking the active Worker version/binding. It did not run the three scenario tests. No production native scenario, production APK download, or real production-generated APK emulator install is claimed yet.
