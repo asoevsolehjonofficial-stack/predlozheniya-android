@@ -28,11 +28,11 @@ jobs:
           jq -e '.ok == true and .service == "A.S. APP BUILDER AI"' "$RUNNER_TEMP/ai-health.json" >/dev/null
           echo "Production health passed; AI Worker reports configured."
 
-      - name: Verify four real generations succeed and fifth is rate-limited
+      - name: Verify five real generations succeed and sixth is rate-limited
         shell: bash
         run: |
           set -euo pipefail
-          for n in 1 2 3 4; do
+          for n in 1 2 3 4 5; do
             code=$(curl --silent --show-error --max-time 90 \
               -H "Origin: $SITE_ORIGIN" \
               -H "Content-Type: application/json" \
@@ -50,12 +50,12 @@ jobs:
             -H "Origin: $SITE_ORIGIN" \
             -H "Content-Type: application/json" \
             -X POST "$AI_WORKER_URL/api/ai/generate" \
-            --data '{"prompt":"Create a concise responsive HTML app for quota smoke test request five."}' \
-            -o "$RUNNER_TEMP/ai-response-5.json" -w '%{http_code}')
+            --data '{"prompt":"Create a concise responsive HTML app for quota smoke test request six."}' \
+            -o "$RUNNER_TEMP/ai-response-6.json" -w '%{http_code}')
           if [[ "$code" != "429" ]]; then
-            echo "::error::Production generation 5 returned HTTP $code (expected 429)."
+            echo "::error::Production generation 6 returned HTTP $code (expected 429)."
             cat "$RUNNER_TEMP/ai-response-5.json" | jq -c '{error,ok}' 2>/dev/null || true
             exit 1
           fi
           jq -e '(.error | type == "string" and length > 0)' "$RUNNER_TEMP/ai-response-5.json" >/dev/null
-          echo "Production quota smoke passed: 4 HTTP 200 responses, then HTTP 429."
+          echo "Production quota smoke passed: 5 HTTP 200 responses, then HTTP 429."
