@@ -36,7 +36,7 @@ Canonical progress file: `main`
 - [x] 10. Production Worker updated to main — active v10 matches `backend/ai-worker.js` on main; v9 and historical v7 rollback IDs are recorded above; no rollback was performed.
 - [ ] 11. Three real production scenarios (simple, multi-screen, persistent storage), resulting APKs, API 21/35 installation/screenshots, and production-site downloads — acceptance runs 39481304323 and 39482793901 are still in progress.
 
-**Strict release certification: 7/11 criteria currently supported by evidence.** Criteria 2, 3, 7, 9 and 11 remain release blockers. Fixture-based CI is not misrepresented as real production AI generation.
+**Strict release certification: 7/11 criteria currently supported by evidence.** Criteria 3, 7, 9 and 11 remain release blockers. Fixture-based CI is not misrepresented as real production AI generation.
 
 ## Failure-log automation (2026-10-18)
 
