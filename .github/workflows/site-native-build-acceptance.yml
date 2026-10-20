@@ -13,7 +13,7 @@ permissions:
 
 concurrency:
   group: production-site-native-apk-acceptance
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build-through-production-site-api:
