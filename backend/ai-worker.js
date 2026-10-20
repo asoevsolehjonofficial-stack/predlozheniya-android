@@ -182,7 +182,8 @@ const CI_OIDC_AUDIENCE = "as-app-builder-ai-ci";
 const CI_OIDC_REPOSITORY = "asoevsolehjonofficial-stack/predlozheniya-android";
 const CI_OIDC_WORKFLOWS = new Map([
   [CI_OIDC_REPOSITORY + "/.github/workflows/native-ai-smoke.yml@refs/heads/main", "refs/heads/main"],
-  [CI_OIDC_REPOSITORY + "/.github/workflows/native-ai-smoke.yml@refs/heads/fix/native-e2e-package-id-sdk-emulator", "refs/heads/fix/native-e2e-package-id-sdk-emulator"]
+  [CI_OIDC_REPOSITORY + "/.github/workflows/native-ai-smoke.yml@refs/heads/fix/native-e2e-package-id-sdk-emulator", "refs/heads/fix/native-e2e-package-id-sdk-emulator"],
+  [CI_OIDC_REPOSITORY + "/.github/workflows/native-ai-smoke.yml@refs/heads/fix/ai-quota-five-per-hour", "refs/heads/fix/ai-quota-five-per-hour"]
 ]);
 let ciJwksCache = null;
 let ciJwksExpiresAt = 0;
