@@ -1,0 +1,56 @@
+name: Production AI quota smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/ai-worker.js"
+      - "backend/wrangler-ai.toml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-ai-quota-smoke
+  cancel-in-progress: false
+
+jobs:
+  live-quota:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check production AI Worker health
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_URL="https://as-app-builder-ai.asoev-solehjon-official.workers.dev"
+          CODE="$(curl --silent --show-error --max-time 20 -o "$RUNNER_TEMP/health.json" -w '%{http_code}' "$BASE_URL/api/health")"
+          test "$CODE" = "200" || { echo "::error::Production AI health returned HTTP $CODE"; exit 1; }
+          jq -e '.ok == true and .service == "A.S. APP BUILDER AI"' "$RUNNER_TEMP/health.json" >/dev/null
+          echo "Production AI health: HTTP 200."
+
+      - name: Verify four successful requests and fifth request is rate-limited
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_URL="https://as-app-builder-ai.asoev-solehjon-official.workers.dev"
+          for n in 1 2 3 4; do
+            PROMPT="Production quota acceptance check $n: return a minimal complete HTML page with a button that increments a counter. Keep it short."
+            CODE="$(curl --silent --show-error --max-time 45 -o "$RUNNER_TEMP/quota-$n.json" -w '%{http_code}' \
+              -X POST "$BASE_URL/api/ai/generate" \
+              -H "Origin: https://as-app-builder.pages.dev" \
+              -H "Content-Type: application/json" \
+              --data "$(jq -n --arg prompt "$PROMPT" '{prompt:$prompt}')")"
+            test "$CODE" = "200" || { echo "::error::Quota request $n returned HTTP $CODE; expected 200."; exit 1; }
+            jq -e '.text | type == "string" and length > 0' "$RUNNER_TEMP/quota-$n.json" >/dev/null
+            echo "Quota request $n: HTTP 200."
+          done
+          PROMPT="Production quota acceptance check 5: return a minimal HTML page."
+          CODE="$(curl --silent --show-error --max-time 20 -o "$RUNNER_TEMP/quota-5.json" -w '%{http_code}' \
+            -X POST "$BASE_URL/api/ai/generate" \
+            -H "Origin: https://as-app-builder.pages.dev" \
+            -H "Content-Type: application/json" \
+            --data "$(jq -n --arg prompt "$PROMPT" '{prompt:$prompt}')")"
+          test "$CODE" = "429" || { echo "::error::Fifth hourly request returned HTTP $CODE; expected 429."; exit 1; }
+          jq -e '.error | test("4 генераций в час")' "$RUNNER_TEMP/quota-5.json" >/dev/null
+          echo "Quota request 5: HTTP 429 as expected."

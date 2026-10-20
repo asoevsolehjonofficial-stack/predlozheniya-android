@@ -1,14 +1,17 @@
 name: Native AI generated APK smoke
+# Release gate: require all API 21/35 native E2E jobs green before production deployment.
 
 on:
   push:
-    branches: [main]
+    branches: [main, "fix/**"]
     paths:
       - "backend/ai-worker.js"
       - "backend/wrangler-ai.toml"
       - "backend/test/ai-worker.test.js"
+      - "backend/src/**"
       - "native-builder/**"
       - ".github/workflows/native-ai-smoke.yml"
+      - "PROGRESS.md"
   workflow_dispatch:
 
 permissions:
@@ -16,8 +19,8 @@ permissions:
   id-token: write
 
 concurrency:
-  group: native-ai-generated-apk-smoke-v4
-  cancel-in-progress: false
+  group: native-ai-generated-apk-smoke-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   live-ui-smoke:
@@ -30,6 +33,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Cache npm download artifacts
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-playwright-${{ hashFiles('.github/scripts/auto-check.mjs') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-playwright-
       - name: Install browser smoke dependencies
         run: |
           npm install --no-save playwright
@@ -47,8 +57,11 @@ jobs:
     needs: live-ui-smoke
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    env:
+      PACKAGE_NAME: tj.as.generated.p_native_${{ matrix.example == 'multi-screen' && 'multi_screen' || matrix.example }}_api${{ matrix.api_level }}
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         example: [simple, multi-screen, storage]
         api_level: [21, 35]
@@ -56,7 +69,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -131,7 +144,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          OIDC_TOKEN="$(curl --fail --silent --show-error -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-ai-ci" | jq -er '.value')"
+          OIDC_TOKEN="$(curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 2 --retry-max-time 30 -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-ai-ci" | jq -er '.value')"
           echo "::add-mask::$OIDC_TOKEN"
           case "$EXAMPLE" in
             simple) PROMPT="Create a simple native Android app with a centered title and a counter button. No network." ;;
@@ -139,8 +152,27 @@ jobs:
             storage) PROMPT="Create a native Android notes app with persistent local storage using SharedPreferences. No network." ;;
             *) echo "::error::Unknown fixture example"; exit 1 ;;
           esac
-          HTTP_CODE="$(curl --silent --show-error --max-time 30 -o "$RUNNER_TEMP/native-ai-response.json" -w '%{http_code}' -X POST http://127.0.0.1:8787/api/ci/native-fixture -H "Authorization: Bearer $OIDC_TOKEN" -H "Content-Type: application/json" --data "$(jq -n --arg prompt "$PROMPT" '{prompt:$prompt}')")"
-          test "$HTTP_CODE" = "200" || { cat "$RUNNER_TEMP/native-ai-response.json"; echo "::error::Protected fixture endpoint returned HTTP $HTTP_CODE"; exit 1; }
+          # Retry transient local Worker/runtime errors; authentication and the protected
+          # endpoint's HTTP 200 requirement remain mandatory.
+          HTTP_CODE=""
+          for attempt in 1 2 3; do
+            HTTP_CODE="$(curl --silent --show-error --max-time 30 -o "$RUNNER_TEMP/native-ai-response.json" -w '%{http_code}' -X POST http://127.0.0.1:8787/api/ci/native-fixture -H "Authorization: Bearer $OIDC_TOKEN" -H "Content-Type: application/json" --data "$(jq -n --arg prompt "$PROMPT" '{prompt:$prompt}')" || true)"
+            if [[ "$HTTP_CODE" == "200" ]]; then break; fi
+            if [[ "$HTTP_CODE" != "500" && "$HTTP_CODE" != "502" && "$HTTP_CODE" != "503" && "$HTTP_CODE" != "504" ]]; then
+              cat "$RUNNER_TEMP/native-ai-response.json" || true
+              echo "::error::Protected fixture endpoint returned non-retryable HTTP ${HTTP_CODE:-no-response} (attempt $attempt)."
+              exit 1
+            fi
+            echo "Protected fixture endpoint returned transient HTTP $HTTP_CODE (attempt $attempt/3); waiting 2 seconds."
+            sleep 2
+          done
+          if [[ "$HTTP_CODE" != "200" ]]; then
+            cat "$RUNNER_TEMP/native-ai-response.json" || true
+            echo "--- local fixture Worker log ---"
+            cat "$RUNNER_TEMP/fixture-worker.log"
+            echo "::error::Protected fixture endpoint did not return HTTP 200 after 3 attempts (last HTTP ${HTTP_CODE:-no-response})."
+            exit 1
+          fi
           jq -e '.provider == "test-fixture" and .mode == "native-android-source"' "$RUNNER_TEMP/native-ai-response.json" >/dev/null
           python3 - <<'PY'
           import json, os, re, shutil
@@ -182,8 +214,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          OIDC_TOKEN="$(curl --fail --silent --show-error -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-native-e2e" | jq -er '.value')"
+          OIDC_TOKEN="$(curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 2 --retry-max-time 30 -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-native-e2e" | jq -er '.value')"
           echo "::add-mask::$OIDC_TOKEN"
+          OIDC_TOKEN="$OIDC_TOKEN" python3 - <<'PY'
+          import base64, json, os
+          token = os.environ["OIDC_TOKEN"]
+          payload = token.split(".")[1]
+          claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+          keys = ("iss", "aud", "repository", "ref", "workflow_ref", "exp", "iat", "nbf")
+          print("OIDC non-secret claims:", json.dumps({key: claims.get(key) for key in keys}, sort_keys=True))
+          PY
           CODE="$(curl --silent --show-error --max-time 30 -o "$RUNNER_TEMP/api-job.json" -w '%{http_code}' -X POST http://127.0.0.1:8788/api/ci/build-fixture -H "Authorization: Bearer $OIDC_TOKEN" -H "Content-Type: application/json" --data-binary @"$RUNNER_TEMP/native-files.json")"
           test "$CODE" = "201" || { cat "$RUNNER_TEMP/api-job.json"; echo "::error::Local API fixture creation returned HTTP $CODE"; exit 1; }
           jq -e '.requestId and .downloadToken and .status == "building"' "$RUNNER_TEMP/api-job.json" >/dev/null
@@ -209,35 +249,40 @@ jobs:
           DOWNLOAD_TOKEN="$(jq -er '.downloadToken' "$RUNNER_TEMP/api-job.json")"
           echo "::add-mask::$DOWNLOAD_TOKEN"
           APK_SHA="$(sha256sum "$APK" | awk '{print $1}')"
-          OIDC_TOKEN="$(curl --fail --silent --show-error -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-native-e2e" | jq -er '.value')"
+          OIDC_TOKEN="$(curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 2 --retry-max-time 30 -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-native-e2e" | jq -er '.value')"
           echo "::add-mask::$OIDC_TOKEN"
           CODE="$(curl --silent --show-error --max-time 60 -o "$RUNNER_TEMP/api-upload.json" -w '%{http_code}' -X PUT "http://127.0.0.1:8788/api/ci/upload?requestId=$REQUEST_ID" -H "Authorization: Bearer $OIDC_TOKEN" -H "Content-Type: application/octet-stream" -H "X-APK-SHA256: $APK_SHA" --data-binary @"$APK")"
           test "$CODE" = "201" || { cat "$RUNNER_TEMP/api-upload.json"; echo "::error::Local API APK upload returned HTTP $CODE"; exit 1; }
-          curl --fail --silent --show-error --max-time 60 -H "Authorization: Bearer $DOWNLOAD_TOKEN" "http://127.0.0.1:8788/api/download?requestId=$REQUEST_ID" -o "$RUNNER_TEMP/downloaded.apk"
+          curl --fail --silent --show-error --max-time 60 -H "Authorization: Bearer $DOWNLOAD_TOKEN" -H "Origin: https://as-app-builder.pages.dev" "http://127.0.0.1:8788/api/download?requestId=$REQUEST_ID" -o "$RUNNER_TEMP/downloaded.apk"
           cmp "$APK" "$RUNNER_TEMP/downloaded.apk"
           test "$(sha256sum "$RUNNER_TEMP/downloaded.apk" | awk '{print $1}')" = "$APK_SHA"
           echo "Local API APK upload/download round-trip passed; SHA-256 $APK_SHA."
+      - name: Install screenshot pixel-analysis dependency
+        run: python3 -m pip install --user Pillow numpy
+      - name: Enable KVM for Android emulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo chmod 0666 /dev/kvm
+          test -r /dev/kvm && test -w /dev/kvm
+          ls -l /dev/kvm
       - name: Install, launch, and capture a real emulator screenshot
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api_level }}
-          target: ${{ matrix.api_level == 21 && 'default' || 'google_apis' }}
+          target: ${{ matrix.api_level == 35 && 'google_apis' || matrix.api_level == 21 && 'default' || 'google_apis' }}
           arch: ${{ matrix.api_level == 21 && 'x86' || 'x86_64' }}
           profile: pixel_2
           disable-animations: true
-          script: |
-            set -eu
-            APK="native-builder/app/build/outputs/apk/debug/app-debug.apk"
-            PACKAGE="tj.as.generated.p_native_${{ matrix.example == 'multi-screen' && 'multi_screen' || matrix.example }}_api${{ matrix.api_level }}"
-            adb install "$APK"
-            adb shell monkey -p "$PACKAGE" -c android.intent.category.LAUNCHER 1
-            sleep 5
-            adb shell dumpsys activity activities | grep -F "$PACKAGE" >/dev/null
-            if adb logcat -d -t 1800 | grep -E "FATAL EXCEPTION.*$PACKAGE|Process: $PACKAGE.*died"; then echo "::error::Generated app crashed."; exit 1; fi
-            adb shell screencap -p /sdcard/native-e2e.png
-            adb pull /sdcard/native-e2e.png "$RUNNER_TEMP/native-e2e.png"
-            test -s "$RUNNER_TEMP/native-e2e.png"
-            file "$RUNNER_TEMP/native-e2e.png" | grep -qi 'PNG image'
+          ram-size: ${{ matrix.api_level == 35 && 4096 || 2048 }}
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          emulator-boot-timeout: 600
+          cores: 2
+          heap-size: ${{ matrix.api_level == 35 && 3072 || 2048 }}
+          script: API_LEVEL=${{ matrix.api_level }} SCENARIO=${{ matrix.example }} bash scripts/run-native-e2e.sh
       - name: Upload emulator screenshot to local API and download it back
         shell: bash
         run: |
@@ -245,11 +290,11 @@ jobs:
           REQUEST_ID="$(jq -er '.requestId' "$RUNNER_TEMP/api-job.json")"
           DOWNLOAD_TOKEN="$(jq -er '.downloadToken' "$RUNNER_TEMP/api-job.json")"
           echo "::add-mask::$DOWNLOAD_TOKEN"
-          OIDC_TOKEN="$(curl --fail --silent --show-error -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-native-e2e" | jq -er '.value')"
+          OIDC_TOKEN="$(curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 2 --retry-max-time 30 -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=as-app-builder-native-e2e" | jq -er '.value')"
           echo "::add-mask::$OIDC_TOKEN"
           CODE="$(curl --silent --show-error --max-time 30 -o "$RUNNER_TEMP/api-preview-upload.json" -w '%{http_code}' -X PUT "http://127.0.0.1:8788/api/ci/preview-upload?requestId=$REQUEST_ID" -H "Authorization: Bearer $OIDC_TOKEN" -H "Content-Type: image/png" --data-binary @"$RUNNER_TEMP/native-e2e.png")"
           test "$CODE" = "200" || { cat "$RUNNER_TEMP/api-preview-upload.json"; echo "::error::Local API preview upload returned HTTP $CODE"; exit 1; }
-          curl --fail --silent --show-error --max-time 30 -H "Authorization: Bearer $DOWNLOAD_TOKEN" "http://127.0.0.1:8788/api/preview?requestId=$REQUEST_ID" -o "$RUNNER_TEMP/downloaded-preview.png"
+          curl --fail --silent --show-error --max-time 30 -H "Authorization: Bearer $DOWNLOAD_TOKEN" -H "Origin: https://as-app-builder.pages.dev" "http://127.0.0.1:8788/api/preview?requestId=$REQUEST_ID" -o "$RUNNER_TEMP/downloaded-preview.png"
           cmp "$RUNNER_TEMP/native-e2e.png" "$RUNNER_TEMP/downloaded-preview.png"
           file "$RUNNER_TEMP/downloaded-preview.png" | grep -qi 'PNG image'
           echo "Local API screenshot upload/download round-trip passed."
@@ -264,6 +309,7 @@ jobs:
             native-builder/app/build/outputs/apk/debug/app-debug.apk
             native-builder/app/src/main/java/tj/as/generated/
             ${{ runner.temp }}/native-e2e.png
+            ${{ runner.temp }}/native-e2e-diagnostics/
             ${{ runner.temp }}/native-files.json
             ${{ runner.temp }}/api-job.json
             ${{ runner.temp }}/downloaded.apk

@@ -146,10 +146,15 @@ async function verifyGitHubOidc(request, expectedWorkflowRef = OWNER + "/" + REP
   } catch { return false; }
   const now = Math.floor(Date.now() / 1000);
   const audienceValid = claims.aud === expectedAudience || (Array.isArray(claims.aud) && claims.aud.includes(expectedAudience));
+  const allowedWorkflowRefs = expectedAudience === NATIVE_E2E_OIDC_AUDIENCE
+    ? new Map([
+        [OWNER + "/" + REPO + "/.github/workflows/native-ai-smoke.yml@refs/heads/main", "refs/heads/main"],
+        [OWNER + "/" + REPO + "/.github/workflows/native-ai-smoke.yml@refs/heads/fix/native-e2e-package-id-sdk-emulator", "refs/heads/fix/native-e2e-package-id-sdk-emulator"]
+      ])
+    : new Map([[expectedWorkflowRef, "refs/heads/main"]]);
   if (header.alg !== "RS256" || claims.iss !== OIDC_ISSUER || !audienceValid ||
       claims.repository !== OWNER + "/" + REPO ||
-      claims.workflow_ref !== OWNER + "/" + REPO + "/.github/workflows/build-user-project-apk.yml@refs/heads/main" ||
-      claims.ref !== "refs/heads/main" || !Number.isFinite(claims.exp) || claims.exp <= now ||
+      allowedWorkflowRefs.get(claims.workflow_ref) !== claims.ref || !Number.isFinite(claims.exp) || claims.exp <= now ||
       !Number.isFinite(claims.iat) || claims.iat > now + 60 ||
       (Number.isFinite(claims.nbf) && claims.nbf > now)) return false;
   try {
